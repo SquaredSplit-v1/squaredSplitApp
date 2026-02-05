@@ -1,7 +1,11 @@
 import { BoxIcon, TickIcon } from "@/components/svg";
+import { supabase } from "@/lib/supabase";
 import { Asset } from "expo-asset";
+import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -98,7 +102,9 @@ function Marquee() {
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   const formatPhoneNumber = (text: string) => {
     // Remove all non-numeric characters
@@ -127,9 +133,37 @@ export default function LoginScreen() {
     setPhoneNumber(formatPhoneNumber(text));
   };
 
-  const handleGetStarted = () => {
-    // TODO: Implement phone authentication
-    console.log("Phone number:", phoneNumber);
+  const handleGetStarted = async () => {
+    // Format phone number for Supabase (remove spaces)
+    const formattedPhone = phoneNumber.replace(/\s/g, "");
+
+    if (formattedPhone.length < 10) {
+      Alert.alert("Invalid Phone Number", "Please enter a valid phone number");
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        phone: formattedPhone,
+      });
+
+      if (error) {
+        Alert.alert("Error", error.message);
+        return;
+      }
+
+      // Navigate to OTP verification screen
+      router.push({
+        pathname: "/(auth)/verify-otp",
+        params: { phone: formattedPhone },
+      });
+    } catch {
+      Alert.alert("Error", "Something went wrong. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -179,8 +213,16 @@ export default function LoginScreen() {
         </View>
 
         {/* Get Started Button */}
-        <TouchableOpacity style={styles.button} onPress={handleGetStarted}>
-          <Text style={styles.buttonText}>Get Started</Text>
+        <TouchableOpacity
+          style={[styles.button, isLoading && styles.buttonDisabled]}
+          onPress={handleGetStarted}
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={styles.buttonText}>Get Started</Text>
+          )}
         </TouchableOpacity>
 
         {/* Footer links */}
@@ -283,6 +325,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 24,
+  },
+  buttonDisabled: {
+    backgroundColor: "#9CA3AF",
   },
   buttonText: {
     fontSize: 16,

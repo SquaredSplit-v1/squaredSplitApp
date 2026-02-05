@@ -1,4 +1,5 @@
 import { BiggerEllipseBlob, EllipseBlob } from "@/components/svg";
+import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { Dimensions, StyleSheet, Text, View } from "react-native";
@@ -131,6 +132,7 @@ function AnimatedLogo({ slashProgress }: LogoProps) {
 
 export default function AuthLoadingScreen() {
   const router = useRouter();
+  const { user, isLoading } = useAuth();
   const [showBiggerBlob, setShowBiggerBlob] = useState(false);
 
   // Animation values
@@ -138,8 +140,13 @@ export default function AuthLoadingScreen() {
   const slashProgress = useSharedValue(0);
   const contentOpacity = useSharedValue(1);
 
-  const navigateToLogin = () => {
-    router.replace("/(auth)/login");
+  const navigateToDestination = () => {
+    // If user is authenticated, go to tabs, otherwise go to login
+    if (user) {
+      router.replace("/(tabs)");
+    } else {
+      router.replace("/(auth)/login");
+    }
   };
 
   const switchToLargerBlob = () => {
@@ -147,10 +154,13 @@ export default function AuthLoadingScreen() {
   };
 
   useEffect(() => {
+    // Wait for auth to load before starting animation
+    if (isLoading) return;
+
     // Animation sequence:
     // 1. Wait a moment, then animate "l" to "/"
     // 2. Animate blob down (switch to BiggerEllipse)
-    // 3. Navigate to login
+    // 3. Navigate to login or tabs
 
     const startAnimation = () => {
       // Start slash animation after 1 second
@@ -177,7 +187,7 @@ export default function AuthLoadingScreen() {
         2800,
         withTiming(0, { duration: 400 }, (finished) => {
           if (finished) {
-            runOnJS(navigateToLogin)();
+            runOnJS(navigateToDestination)();
           }
         }),
       );
@@ -185,7 +195,7 @@ export default function AuthLoadingScreen() {
 
     startAnimation();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isLoading]);
 
   const blobAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: blobTranslateY.value }],
