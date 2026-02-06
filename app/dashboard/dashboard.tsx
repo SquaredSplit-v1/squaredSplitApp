@@ -99,13 +99,10 @@ export default function DashboardScreen() {
 
         {/* Add expense button */}
         <View style={styles.addExpenseContainer}>
-          <TouchableOpacity
-            style={styles.addExpenseButton}
-            onPress={handleAddExpense}
-          >
-            <SvgUri width={56} height={56} uri={addExpenseUri} />
+          <TouchableOpacity onPress={handleAddExpense}>
+            <SvgUri width={70} height={70} uri={addExpenseUri} />
           </TouchableOpacity>
-          <Text style={styles.addExpenseText}>Add expense</Text>
+          <Text style={styles.addExpenseText}>Add Expense</Text>
         </View>
       </View>
 
@@ -122,8 +119,8 @@ export default function DashboardScreen() {
               onPress={() => setActiveTab(tab.name)}
             >
               {isQR ? (
-                <View style={styles.qrButton}>
-                  <SvgUri width={32} height={32} uri={tab.icon!} />
+                <View>
+                  <SvgUri width={42} height={42} uri={tab.icon!} />
                 </View>
               ) : tab.name === "account" ? (
                 <View
@@ -217,27 +214,13 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     paddingRight: 8,
   },
-  addExpenseButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "#141414",
-    justifyContent: "center",
-    alignItems: "center",
-    // Shadow
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 8,
-  },
   addExpenseText: {
     color: "#141414",
     textAlign: "center",
     fontSize: 10,
     fontWeight: "600",
     lineHeight: 10,
-    marginTop: 6,
+    marginTop: 0,
   },
   tabBar: {
     flexDirection: "row",
@@ -259,7 +242,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   qrTabItem: {
-    marginTop: -20,
+    marginTop: -1,
   },
   tabIcon: {
     width: 28,
