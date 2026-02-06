@@ -92,7 +92,8 @@ export default function OtpScreen() {
     if (!allFilled) return;
     const code = otp.join("");
     console.log("OTP submitted:", code);
-    // TODO: Verify OTP and navigate
+    // Navigate to onboarding after OTP verification
+    router.replace("/(auth)/onboarding");
   };
 
   return (
