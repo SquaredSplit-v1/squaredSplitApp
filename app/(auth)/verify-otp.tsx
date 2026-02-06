@@ -101,8 +101,8 @@ export default function VerifyOTPScreen() {
       }
 
       if (data.session) {
-        // Successfully verified - navigation will be handled by auth state change
-        router.replace("/(tabs)");
+        // Successfully verified - navigate to dashboard
+        router.replace("/dashboard/dashboard");
       }
     } catch {
       Alert.alert("Error", "Something went wrong. Please try again.");

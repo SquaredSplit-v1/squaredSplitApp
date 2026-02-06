@@ -141,9 +141,9 @@ export default function AuthLoadingScreen() {
   const contentOpacity = useSharedValue(1);
 
   const navigateToDestination = () => {
-    // If user is authenticated, go to tabs, otherwise go to login
+    // If user is authenticated, go to dashboard, otherwise go to login
     if (user) {
-      router.replace("/(tabs)");
+      router.replace("/dashboard/dashboard");
     } else {
       router.replace("/(auth)/login");
     }
