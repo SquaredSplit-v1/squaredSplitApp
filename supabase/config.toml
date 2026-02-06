@@ -243,9 +243,9 @@ max_frequency = "5s"
 
 # Use pre-defined map of phone number to OTP for testing.
 [auth.sms.test_otp]
-"+15551112222" = "123456"
-"+15559999999" = "123456"
-"+11234567890" = "123456"
+15551112222 = "123456"
+15559999999 = "123456"
+11234567890 = "123456"
 
 # Configure logged in session timeouts.
 # [auth.sessions]
@@ -267,8 +267,8 @@ max_frequency = "5s"
 # Configure one of the supported SMS providers: `twilio`, `twilio_verify`, `messagebird`, `textlocal`, `vonage`.
 [auth.sms.twilio]
 enabled = true
-account_sid = "test_account_sid"
-message_service_sid = "test_message_service_sid"
+account_sid = "AC86b6aca751b5597a6c12e8c6baff38ef"
+message_service_sid = "VA67d037f0ab9a11fecc33427ef1eb192c"
 # DO NOT commit your Twilio auth token to git. Use environment variable substitution instead:
 auth_token = "env(SUPABASE_AUTH_SMS_TWILIO_AUTH_TOKEN)"
 
