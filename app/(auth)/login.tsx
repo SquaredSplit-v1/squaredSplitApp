@@ -1,6 +1,7 @@
 import { BoxIcon, TickIcon } from "@/components/svg";
 import { Asset } from "expo-asset";
-import React, { useEffect, useState } from "react";
+import { useRouter } from "expo-router";
+import React, { useEffect, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -98,28 +99,33 @@ function Marquee() {
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const [countryCode, setCountryCode] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
+  const phoneInputRef = useRef<TextInput>(null);
+
+  const handleCountryCodeChange = (text: string) => {
+    // Only allow digits, max 3
+    const cleaned = text.replace(/\D/g, "").substring(0, 3);
+    setCountryCode(cleaned);
+    // Auto-focus phone input when country code is filled
+    if (cleaned.length === 3) {
+      phoneInputRef.current?.focus();
+    }
+  };
 
   const formatPhoneNumber = (text: string) => {
-    // Remove all non-numeric characters
-    const cleaned = text.replace(/\D/g, "");
-
-    // Format as +XXX XXX XXX XXXX (supports 3-digit country code and up to 12-digit phone)
+    const cleaned = text.replace(/\D/g, "").substring(0, 12);
     let formatted = "";
     if (cleaned.length > 0) {
-      // Country code: up to 3 digits
-      formatted = "+" + cleaned.substring(0, Math.min(3, cleaned.length));
+      formatted = cleaned.substring(0, 3);
     }
     if (cleaned.length > 3) {
       formatted += " " + cleaned.substring(3, 6);
     }
     if (cleaned.length > 6) {
-      formatted += " " + cleaned.substring(6, 9);
+      formatted += " " + cleaned.substring(6, 12);
     }
-    if (cleaned.length > 9) {
-      formatted += " " + cleaned.substring(9, 15);
-    }
-
     return formatted;
   };
 
@@ -127,9 +133,19 @@ export default function LoginScreen() {
     setPhoneNumber(formatPhoneNumber(text));
   };
 
+  const getFullPhoneNumber = () => {
+    const code = countryCode || "1";
+    const phone = phoneNumber.replace(/\s/g, "");
+    return `+${code} ${formatPhoneNumber(phone)}`;
+  };
+
   const handleGetStarted = () => {
-    // TODO: Implement phone authentication
-    console.log("Phone number:", phoneNumber);
+    const fullNumber = getFullPhoneNumber();
+    console.log("Phone number:", fullNumber);
+    router.push({
+      pathname: "/(auth)/otp",
+      params: { phoneNumber: fullNumber },
+    });
   };
 
   return (
@@ -167,15 +183,30 @@ export default function LoginScreen() {
           <Text style={styles.inputLabel}>
             Enter your mobile number to continue
           </Text>
-          <TextInput
-            style={styles.input}
-            placeholder="+1 XXX XXX XXXX"
-            placeholderTextColor="#9CA3AF"
-            value={phoneNumber}
-            onChangeText={handlePhoneChange}
-            keyboardType="number-pad"
-            maxLength={20}
-          />
+          <View style={styles.phoneInputRow}>
+            <View style={styles.countryCodeContainer}>
+              <Text style={styles.plusSign}>+</Text>
+              <TextInput
+                style={styles.countryCodeInput}
+                placeholder="1"
+                placeholderTextColor="#9CA3AF"
+                value={countryCode}
+                onChangeText={handleCountryCodeChange}
+                keyboardType="number-pad"
+                maxLength={3}
+              />
+            </View>
+            <TextInput
+              ref={phoneInputRef}
+              style={styles.phoneInput}
+              placeholder="XXX XXX XXXX"
+              placeholderTextColor="#9CA3AF"
+              value={phoneNumber}
+              onChangeText={handlePhoneChange}
+              keyboardType="number-pad"
+              maxLength={14}
+            />
+          </View>
         </View>
 
         {/* Get Started Button */}
@@ -266,11 +297,40 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     marginBottom: 8,
   },
-  input: {
+  phoneInputRow: {
+    flexDirection: "row",
+  },
+  countryCodeContainer: {
+    width: 72,
     height: 52,
     borderWidth: 1,
     borderColor: "#E5E7EB",
-    borderRadius: 8,
+    borderTopLeftRadius: 8,
+    borderBottomLeftRadius: 8,
+    borderRightWidth: 0,
+    backgroundColor: "#FFFFFF",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+  },
+  plusSign: {
+    fontSize: 16,
+    color: "#141414",
+  },
+  countryCodeInput: {
+    flex: 1,
+    height: 52,
+    fontSize: 16,
+    color: "#141414",
+    paddingHorizontal: 2,
+  },
+  phoneInput: {
+    flex: 1,
+    height: 52,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderTopRightRadius: 8,
+    borderBottomRightRadius: 8,
     paddingHorizontal: 16,
     fontSize: 16,
     color: "#141414",
