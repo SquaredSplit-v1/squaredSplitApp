@@ -4,14 +4,14 @@ import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { Dimensions, StyleSheet, Text, View } from "react-native";
 import Animated, {
-    Easing,
-    interpolate,
-    runOnJS,
-    SharedValue,
-    useAnimatedStyle,
-    useSharedValue,
-    withDelay,
-    withTiming,
+  Easing,
+  interpolate,
+  runOnJS,
+  SharedValue,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withTiming,
 } from "react-native-reanimated";
 import Svg, { Path } from "react-native-svg";
 
@@ -141,9 +141,9 @@ export default function AuthLoadingScreen() {
   const contentOpacity = useSharedValue(1);
 
   const navigateToDestination = () => {
-    // If user is authenticated, go to tabs, otherwise go to login
+    // If user is authenticated, go to dashboard, otherwise go to login
     if (user) {
-      router.replace("/(tabs)");
+      router.replace("/dashboard/dashboard");
     } else {
       router.replace("/(auth)/login");
     }
