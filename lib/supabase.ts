@@ -5,6 +5,12 @@ import { Platform } from "react-native";
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_KEY!;
 
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error(
+    `Missing Supabase configuration. Ensure EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_KEY are set for the current environment (${process.env.EXPO_PUBLIC_APP_ENV ?? "unknown"}).`
+  );
+}
+
 // Check if we're in a browser/React Native environment (not SSR)
 const isClient =
   Platform.OS !== "web" || (typeof window !== "undefined" && !!window.document);
@@ -16,8 +22,8 @@ function getSupabaseClient(): SupabaseClient {
   if (!_supabase) {
     _supabase = createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
-        storage: isClient ? AsyncStorage : undefined,
-        autoRefreshToken: isClient,
+        ...(isClient ? { storage: AsyncStorage } : {}),
+        autoRefreshToken: true,
         persistSession: isClient,
         detectSessionInUrl: false,
       },
