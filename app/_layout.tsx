@@ -37,7 +37,7 @@ function RootNavigator() {
     } else if (user && inAuthGroup) {
       // Signed in but still on an auth screen → go to dashboard
       // (skip if we're on onboarding and haven't finished it yet)
-      const onOnboarding = segments[1] === "onboarding";
+      const onOnboarding = (segments as string[])[1] === "onboarding";
       if (!onOnboarding || hasCompletedOnboarding) {
         router.replace("/dashboard/dashboard");
       }
