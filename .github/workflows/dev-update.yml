@@ -62,7 +62,7 @@ jobs:
         run: eas update --branch development --message "${{ github.event.head_commit.message }}"
         env:
           APP_ENV: development
-          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_URL: ${{ vars.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_KEY }}
-          EXPO_PUBLIC_SUPABASE_PHONE_AUTH_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_PHONE_AUTH_URL }}
-          EXPO_PUBLIC_API_URL: ${{ secrets.EXPO_PUBLIC_API_URL }}
+          EXPO_PUBLIC_SUPABASE_PHONE_AUTH_URL: ${{ vars.EXPO_PUBLIC_SUPABASE_PHONE_AUTH_URL }}
+          EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL }}
