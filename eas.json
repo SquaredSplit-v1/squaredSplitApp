@@ -9,13 +9,18 @@
       "distribution": "internal",
       "channel": "development",
       "env": {
-        "APP_ENV": "development"
+        "APP_ENV": "development",
+        "EXPO_ENV_FILE": ".env.dev"
       }
     },
     "ios-simulator": {
       "extends": "development",
       "ios": {
         "simulator": true
+      },
+      "env": {
+        "APP_ENV": "development",
+        "EXPO_ENV_FILE": ".env.dev"
       }
     },
     "staging": {
