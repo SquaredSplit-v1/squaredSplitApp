@@ -1,11 +1,12 @@
-import { AuthProvider } from "@/contexts/AuthContext";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import {
   DarkTheme,
   DefaultTheme,
   ThemeProvider,
 } from "@react-navigation/native";
-import { Stack } from "expo-router";
+import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import React, { useEffect } from "react";
 import "react-native-reanimated";
 import "../global.css";
 
@@ -15,21 +16,54 @@ export const unstable_settings = {
   initialRouteName: "(auth)",
 };
 
+/**
+ * Inner navigator that reacts to auth state changes and redirects
+ * the user to the correct route group.
+ */
+function RootNavigator() {
+  const { user, isLoading, hasCompletedOnboarding } = useAuth();
+  const router = useRouter();
+  const segments = useSegments();
+
+  useEffect(() => {
+    // Don't redirect while we're still fetching the session
+    if (isLoading) return;
+
+    const inAuthGroup = segments[0] === "(auth)";
+
+    if (!user && !inAuthGroup) {
+      // Not signed in → go to auth loading / login
+      router.replace("/(auth)/authloading");
+    } else if (user && inAuthGroup) {
+      // Signed in but still on an auth screen → go to dashboard
+      // (skip if we're on onboarding and haven't finished it yet)
+      const onOnboarding = segments[1] === "onboarding";
+      if (!onOnboarding || hasCompletedOnboarding) {
+        router.replace("/dashboard/dashboard");
+      }
+    }
+  }, [user, isLoading, segments, hasCompletedOnboarding, router]);
+
+  return (
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="(auth)" />
+      <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="dashboard" />
+      <Stack.Screen
+        name="modal"
+        options={{ presentation: "modal", title: "Modal", headerShown: true }}
+      />
+    </Stack>
+  );
+}
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
 
   return (
     <AuthProvider>
       <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="(auth)" />
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="dashboard" />
-          <Stack.Screen
-            name="modal"
-            options={{ presentation: "modal", title: "Modal", headerShown: true }}
-          />
-        </Stack>
+        <RootNavigator />
         <StatusBar style="auto" />
       </ThemeProvider>
     </AuthProvider>
