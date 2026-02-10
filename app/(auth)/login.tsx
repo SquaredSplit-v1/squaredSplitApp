@@ -1,5 +1,5 @@
 import { BoxIcon, TickIcon } from "@/components/svg";
-import { supabase } from "@/lib/supabase";
+import { sendOtp } from "@/lib/auth";
 import { Asset } from "expo-asset";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -145,12 +145,13 @@ export default function LoginScreen() {
     setIsLoading(true);
 
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        phone: formattedPhone,
-      });
+      const result = await sendOtp(formattedPhone);
 
-      if (error) {
-        Alert.alert("Error", error.message);
+      if (!result.success) {
+        const msg = result.retryAfter
+          ? `Too many attempts. Try again in ${result.retryAfter}s.`
+          : result.error ?? "Failed to send code.";
+        Alert.alert("Error", msg);
         return;
       }
 
