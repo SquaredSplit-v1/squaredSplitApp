@@ -1,60 +1,141 @@
-import { Asset } from "expo-asset";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useState } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { SvgUri } from "react-native-svg";
+import Svg, { Path } from "react-native-svg";
 
-// Nav icons
-const walletUri = Asset.fromModule(
-  require("../../assets/dashboard/Nav/wallet.svg"),
-).uri;
-const searchUri = Asset.fromModule(
-  require("../../assets/dashboard/Nav/search.svg"),
-).uri;
-const addFriendUri = Asset.fromModule(
-  require("../../assets/dashboard/Nav/add-friend.svg"),
-).uri;
+import type {
+  FilterOption,
+  Friend,
+  Group,
+  TabName,
+} from "@/components/dashboard";
+import {
+  AddExpenseButton,
+  BalanceSummary,
+  BottomTabBar,
+  FilterModal,
+  FriendsList,
+  GroupsList,
+  SquaredUpSection,
+} from "@/components/dashboard";
 
-// Tab icons
-const friendsUri = Asset.fromModule(
-  require("../../assets/dashboard/friends.svg"),
-).uri;
-const groupsUri = Asset.fromModule(
-  require("../../assets/dashboard/groups.svg"),
-).uri;
-const qrUri = Asset.fromModule(require("../../assets/dashboard/qr.svg")).uri;
-const activityUri = Asset.fromModule(
-  require("../../assets/dashboard/activity.svg"),
-).uri;
+// Notification bell icon (replaces wallet)
+function BellIcon() {
+  return (
+    <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M18 8A6 6 0 106 8c0 7-3 9-3 9h18s-3-2-3-9zM13.73 21a2 2 0 01-3.46 0"
+        stroke="#141414"
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
 
-// Add expense button
-const addExpenseUri = Asset.fromModule(
-  require("../../assets/dashboard/add-expense-button.svg"),
-).uri;
+// Mock data — replace with real data from your backend later
+const akAvatar = require("../../assets/dashboard/ak.png");
+const coconutAvatar = require("../../assets/dashboard/coconut.png");
 
-type TabName = "friends" | "groups" | "qr" | "activity" | "account";
+const MOCK_FRIENDS: Friend[] = [
+  {
+    id: "1",
+    name: "AJ",
+    avatar: akAvatar,
+    subtitle: "Due on 1 Jan",
+    subtitleType: "default",
+    balanceType: "owes_you",
+    amount: 10.0,
+  },
+  {
+    id: "2",
+    name: "Praneeth Reddy\nRamesh",
+    avatar: null,
+    subtitle: "Alert!",
+    subtitleType: "alert",
+    balanceType: "you_owe",
+    amount: 2420.0,
+  },
+  {
+    id: "3",
+    name: "AJ",
+    avatar: akAvatar,
+    subtitle: "Due on 1 Jan",
+    subtitleType: "default",
+    balanceType: "owes_you",
+    amount: 10.0,
+  },
+  {
+    id: "4",
+    name: "Sarah Paul",
+    avatar: akAvatar,
+    subtitle: "Upcoming due",
+    subtitleType: "upcoming",
+    balanceType: "owes_you",
+    amount: 370.5,
+  },
+  {
+    id: "5",
+    name: "Seshwath Hegde",
+    avatar: akAvatar,
+    subtitle: "8 Dec'25",
+    subtitleType: "default",
+    balanceType: "owes_you",
+    amount: 500.0,
+  },
+];
 
-const tabs: { name: TabName; label: string; icon?: string }[] = [
-  { name: "friends", label: "Friends", icon: friendsUri },
-  { name: "groups", label: "Groups", icon: groupsUri },
-  { name: "qr", label: "", icon: qrUri },
-  { name: "activity", label: "Activity", icon: activityUri },
-  { name: "account", label: "Account" },
+const MOCK_GROUPS: Group[] = [
+  {
+    id: "g1",
+    name: "Goa 2026",
+    avatar: coconutAvatar,
+    emoji: "🌴",
+    balanceType: "owes_you",
+    amount: 10.0,
+  },
+  {
+    id: "g2",
+    name: "Beach House",
+    avatar: coconutAvatar,
+    balanceType: "you_owe",
+    amount: 350.0,
+  },
+  {
+    id: "g3",
+    name: "Trip to Japan",
+    avatar: coconutAvatar,
+    balanceType: "you_owe",
+    amount: 1485.0,
+    members: [
+      { name: "AJ", amount: 1485.0, balanceType: "owes_you" },
+      { name: "Deep.R", amount: 1485.0, balanceType: "owes_you" },
+      { name: "AJ", amount: 1485.0, balanceType: "owes_you" },
+    ],
+  },
 ];
 
 export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
-  const [activeTab, setActiveTab] = useState<TabName>("friends");
-
-  const handleCreateGroup = () => {
-    // TODO: Navigate to create group
-    console.log("Create a new group");
-  };
+  const [activeTab, setActiveTab] = useState<TabName>("home");
+  const [filterVisible, setFilterVisible] = useState(false);
+  const [selectedFilter, setSelectedFilter] = useState<FilterOption>("none");
 
   const handleAddExpense = () => {
     // TODO: Navigate to add expense
     console.log("Add expense");
+  };
+
+  const handleFilterSelect = (filter: FilterOption) => {
+    setSelectedFilter(filter);
+    setFilterVisible(false);
+  };
+
+  const handleShowSquaredUp = () => {
+    // TODO: Toggle squared-up friends visibility
+    console.log("Show squared-up friends");
   };
 
   return (
@@ -71,85 +152,70 @@ export default function DashboardScreen() {
         {/* Navigation bar */}
         <View style={styles.navBar}>
           <TouchableOpacity style={styles.navIcon}>
-            <SvgUri width={28} height={28} uri={walletUri} />
+            <BellIcon />
           </TouchableOpacity>
           <View style={styles.navRight}>
             <TouchableOpacity style={styles.navIcon}>
-              <SvgUri width={24} height={24} uri={searchUri} />
+              <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+                <Path
+                  d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z"
+                  stroke="#141414"
+                  strokeWidth={1.8}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </Svg>
             </TouchableOpacity>
             <TouchableOpacity style={styles.navIcon}>
-              <SvgUri width={24} height={24} uri={addFriendUri} />
+              <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+                <Path
+                  d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M8.5 11a4 4 0 100-8 4 4 0 000 8zM20 8v6M23 11h-6"
+                  stroke="#141414"
+                  strokeWidth={1.8}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </Svg>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Welcome section */}
-        <View style={styles.welcomeSection}>
-          <Text style={styles.welcomeHi}>Hi!</Text>
-          <Text style={styles.welcomeText}>
-            Welcome to your{"\n"}dashboard.
-          </Text>
-          <TouchableOpacity onPress={handleCreateGroup}>
-            <Text style={styles.createGroupText}>+ Create a new group</Text>
-          </TouchableOpacity>
-        </View>
+        {/* Balance summary */}
+        <BalanceSummary
+          balanceToSquare={20.0}
+          youAreOwed={2575.0}
+          youOwe={2575.0}
+          onFilterPress={() => setFilterVisible(true)}
+        />
 
-        {/* Spacer */}
-        <View style={{ flex: 1 }} />
+        {/* Tab content */}
+        {activeTab === "groups" ? (
+          <GroupsList groups={MOCK_GROUPS} />
+        ) : (
+          <FriendsList friends={MOCK_FRIENDS} />
+        )}
 
-        {/* Add expense button */}
-        <View style={styles.addExpenseContainer}>
-          <TouchableOpacity onPress={handleAddExpense}>
-            <SvgUri width={70} height={70} uri={addExpenseUri} />
-          </TouchableOpacity>
-          <Text style={styles.addExpenseText}>Add Expense</Text>
-        </View>
+        {/* Show squared-up friends */}
+        <SquaredUpSection onPress={handleShowSquaredUp} />
       </View>
+
+      {/* Add expense floating button */}
+      <AddExpenseButton onPress={handleAddExpense} />
 
       {/* Bottom tab bar */}
-      <View style={[styles.tabBar, { paddingBottom: insets.bottom + 8 }]}>
-        {tabs.map((tab) => {
-          const isActive = activeTab === tab.name;
-          const isQR = tab.name === "qr";
+      <BottomTabBar
+        activeTab={activeTab}
+        onTabPress={setActiveTab}
+        bottomInset={insets.bottom}
+      />
 
-          return (
-            <TouchableOpacity
-              key={tab.name}
-              style={[styles.tabItem, isQR && styles.qrTabItem]}
-              onPress={() => setActiveTab(tab.name)}
-            >
-              {isQR ? (
-                <View>
-                  <SvgUri width={42} height={42} uri={tab.icon!} />
-                </View>
-              ) : tab.name === "account" ? (
-                <View
-                  style={[
-                    styles.accountIcon,
-                    isActive && styles.accountIconActive,
-                  ]}
-                >
-                  {/* Using a placeholder image for account */}
-                  <View style={styles.accountImageContainer}>
-                    <Text style={styles.accountPlaceholder}>👤</Text>
-                  </View>
-                </View>
-              ) : (
-                <View style={styles.tabIcon}>
-                  <SvgUri width={24} height={24} uri={tab.icon!} />
-                </View>
-              )}
-              {tab.label ? (
-                <Text
-                  style={[styles.tabLabel, isActive && styles.tabLabelActive]}
-                >
-                  {tab.label}
-                </Text>
-              ) : null}
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+      {/* Filter modal */}
+      <FilterModal
+        visible={filterVisible}
+        selectedFilter={selectedFilter}
+        onSelect={handleFilterSelect}
+        onClose={() => setFilterVisible(false)}
+      />
     </View>
   );
 }
@@ -183,116 +249,5 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-  },
-  welcomeSection: {
-    marginTop: 24,
-  },
-  welcomeHi: {
-    color: "#141414",
-    fontSize: 36,
-    fontWeight: "400",
-    lineHeight: 36,
-    letterSpacing: -0.72,
-  },
-  welcomeText: {
-    color: "#141414",
-    fontSize: 36,
-    fontWeight: "400",
-    lineHeight: 36,
-    letterSpacing: -0.72,
-    marginTop: 4,
-  },
-  createGroupText: {
-    color: "#A479A4",
-    fontSize: 16,
-    fontWeight: "500",
-    lineHeight: 24,
-    marginTop: 16,
-  },
-  addExpenseContainer: {
-    alignItems: "flex-end",
-    marginBottom: 16,
-    paddingRight: 8,
-  },
-  addExpenseText: {
-    color: "#141414",
-    textAlign: "center",
-    fontSize: 10,
-    fontWeight: "600",
-    lineHeight: 10,
-    marginTop: 0,
-  },
-  tabBar: {
-    flexDirection: "row",
-    backgroundColor: "#FFFFFF",
-    borderTopWidth: 0,
-    paddingTop: 8,
-    paddingHorizontal: 8,
-    // Shadow on top
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  tabItem: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 4,
-  },
-  qrTabItem: {
-    marginTop: -1,
-  },
-  tabIcon: {
-    width: 28,
-    height: 28,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  qrButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: "#8EAED9",
-    justifyContent: "center",
-    alignItems: "center",
-    // Shadow
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  accountIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    overflow: "hidden",
-  },
-  accountIconActive: {
-    borderWidth: 2,
-    borderColor: "#141414",
-  },
-  accountImageContainer: {
-    width: "100%",
-    height: "100%",
-    backgroundColor: "#E5E7EB",
-    justifyContent: "center",
-    alignItems: "center",
-    borderRadius: 14,
-  },
-  accountPlaceholder: {
-    fontSize: 16,
-  },
-  tabLabel: {
-    fontSize: 10,
-    fontWeight: "400",
-    color: "#9CA3AF",
-    marginTop: 4,
-  },
-  tabLabelActive: {
-    color: "#141414",
-    fontWeight: "500",
   },
 });
