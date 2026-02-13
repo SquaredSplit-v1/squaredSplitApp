@@ -36,13 +36,35 @@ Ledger (Derived View)
 ```sql
 create table users (
   id uuid primary key references auth.users(id),
+  phone text unique not null,  -- E.164 format only, mirrors auth.users.phone
   name text,
   email text,
   avatar_url text,
   status text default 'active',
   created_at timestamptz default now(),
-  updated_at timestamptz default now()
+  updated_at timestamptz default now(),
+  
+  -- Ensure phone is always E.164 format
+  constraint phone_e164_format check (phone ~ '^\+[1-9]\d{6,14}$')
 );
+
+-- Index for fast phone lookups
+create index idx_users_phone on users(phone);
+
+-- Trigger to sync phone from auth.users on user creation
+create or replace function sync_user_phone()
+returns trigger as $$
+begin
+  insert into public.users (id, phone)
+  values (new.id, new.phone)
+  on conflict (id) do update set phone = excluded.phone;
+  return new;
+end;
+$$ language plpgsql security definer;
+
+create trigger on_auth_user_created
+  after insert or update on auth.users
+  for each row execute function sync_user_phone();
 ```
 
 ---
