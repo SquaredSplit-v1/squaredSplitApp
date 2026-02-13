@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase";
+import { resendOtp, verifyOtp as verifyOtpApi } from "@/lib/auth";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -89,19 +89,21 @@ export default function VerifyOTPScreen() {
     setIsLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.verifyOtp({
-        phone: phone,
-        token: otpCode,
-        type: "sms",
-      });
+      const result = await verifyOtpApi(phone, otpCode);
 
-      if (error) {
-        Alert.alert("Verification Failed", error.message);
+      if (!result.success) {
+        const msg = result.retryAfter
+          ? `Too many attempts. Try again in ${result.retryAfter}s.`
+          : result.error ?? "Verification failed.";
+        Alert.alert("Verification Failed", msg);
         return;
       }
 
-      if (data.session) {
-        // Successfully verified - navigate to dashboard
+      // Session is now hydrated in the Supabase client by verifyOtpApi.
+      // AuthContext's onAuthStateChange will fire automatically.
+      if (result.isNewUser) {
+        router.replace("/(auth)/onboarding");
+      } else {
         router.replace("/dashboard/dashboard");
       }
     } catch {
@@ -111,18 +113,19 @@ export default function VerifyOTPScreen() {
     }
   };
 
-  const resendOtp = async () => {
+  const handleResendOtp = async () => {
     if (resendTimer > 0 || !phone) return;
 
     setIsLoading(true);
 
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        phone: phone,
-      });
+      const result = await resendOtp(phone);
 
-      if (error) {
-        Alert.alert("Error", error.message);
+      if (!result.success) {
+        const msg = result.retryAfter
+          ? `Too many attempts. Try again in ${result.retryAfter}s.`
+          : result.error ?? "Failed to resend code.";
+        Alert.alert("Error", msg);
         return;
       }
 
@@ -210,7 +213,7 @@ export default function VerifyOTPScreen() {
         <View style={styles.resendContainer}>
           <Text style={styles.resendText}>Didn&apos;t receive the code? </Text>
           <TouchableOpacity
-            onPress={resendOtp}
+            onPress={handleResendOtp}
             disabled={resendTimer > 0 || isLoading}
           >
             <Text

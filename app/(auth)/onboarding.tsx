@@ -1,3 +1,4 @@
+import { useAuth } from "@/contexts/AuthContext";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useRef, useState } from "react";
@@ -95,6 +96,7 @@ function FloatingImages() {
 export default function OnboardingScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { completeOnboarding } = useAuth();
   const [activeIndex, setActiveIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
 
@@ -103,7 +105,9 @@ export default function OnboardingScreen() {
     setActiveIndex(index);
   };
 
-  const handleSkip = () => {
+  const handleSkip = async () => {
+    // Mark onboarding as complete so the user isn't shown it again
+    await completeOnboarding();
     // Navigate to main dashboard
     router.replace("/dashboard/dashboard");
   };
