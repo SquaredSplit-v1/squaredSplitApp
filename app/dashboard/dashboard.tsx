@@ -1,4 +1,5 @@
 import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { StyleSheet, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -123,6 +124,8 @@ export default function DashboardScreen() {
   const [filterVisible, setFilterVisible] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<FilterOption>("none");
 
+  const router = useRouter();
+
   const handleAddExpense = () => {
     // TODO: Navigate to add expense
     console.log("Add expense");
@@ -151,7 +154,10 @@ export default function DashboardScreen() {
       <View style={[styles.content, { paddingTop: insets.top + 8 }]}>
         {/* Navigation bar */}
         <View style={styles.navBar}>
-          <TouchableOpacity style={styles.navIcon}>
+          <TouchableOpacity
+            style={styles.navIcon}
+            onPress={() => router.push("/(notifications)/notifications")}
+          >
             <BellIcon />
           </TouchableOpacity>
           <View style={styles.navRight}>
