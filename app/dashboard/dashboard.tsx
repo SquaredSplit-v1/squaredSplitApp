@@ -6,12 +6,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 
 import type {
+  Activity,
   FilterOption,
   Friend,
   Group,
   TabName,
 } from "@/components/dashboard";
 import {
+  ActivityList,
   AddExpenseButton,
   BalanceSummary,
   BottomTabBar,
@@ -85,6 +87,93 @@ const MOCK_FRIENDS: Friend[] = [
     subtitleType: "default",
     balanceType: "owes_you",
     amount: 500.0,
+  },
+];
+
+const MOCK_ACTIVITIES: Activity[] = [
+  {
+    id: "a1",
+    avatar: akAvatar,
+    segments: [
+      { text: "Paul", bold: true },
+      { text: " turned " },
+      { text: "Simplify debts", bold: true },
+      { text: " off in the group " },
+      { text: "Trip to Japan", bold: true },
+    ],
+    timeAgo: "5 mins ago",
+  },
+  {
+    id: "a2",
+    avatar: akAvatar,
+    segments: [
+      { text: "Paul", bold: true },
+      { text: " turned " },
+      { text: "Simplify debts", bold: true },
+      { text: " off in the group " },
+      { text: "Trip to Japan", bold: true },
+    ],
+    timeAgo: "5 mins ago",
+  },
+  {
+    id: "a3",
+    avatar: coconutAvatar,
+    segments: [
+      { text: "Paul", bold: true },
+      { text: " turned " },
+      { text: "Simplify debts", bold: true },
+      { text: " off in the group " },
+      { text: "Trip to Japan", bold: true },
+    ],
+    timeAgo: "5 mins ago",
+  },
+  {
+    id: "a4",
+    avatar: akAvatar,
+    segments: [
+      { text: "Paul", bold: true },
+      { text: " turned " },
+      { text: "Simplify debts", bold: true },
+      { text: " off in the group " },
+      { text: "Trip to Japan", bold: true },
+    ],
+    timeAgo: "5 mins ago",
+  },
+  {
+    id: "a5",
+    avatar: coconutAvatar,
+    segments: [
+      { text: "Paul", bold: true },
+      { text: " turned " },
+      { text: "Simplify debts", bold: true },
+      { text: " off in the group " },
+      { text: "Trip to Japan", bold: true },
+    ],
+    timeAgo: "5 mins ago",
+  },
+  {
+    id: "a6",
+    avatar: akAvatar,
+    segments: [
+      { text: "Paul", bold: true },
+      { text: " turned " },
+      { text: "Simplify debts", bold: true },
+      { text: " off in the group " },
+      { text: "Trip to Japan", bold: true },
+    ],
+    timeAgo: "5 mins ago",
+  },
+  {
+    id: "a7",
+    avatar: coconutAvatar,
+    segments: [
+      { text: "Paul", bold: true },
+      { text: " turned " },
+      { text: "Simplify debts", bold: true },
+      { text: " off in the group " },
+      { text: "Trip to Japan", bold: true },
+    ],
+    timeAgo: "5 mins ago",
   },
 ];
 
@@ -172,37 +261,46 @@ export default function DashboardScreen() {
                 />
               </Svg>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.navIcon}>
-              <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-                <Path
-                  d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M8.5 11a4 4 0 100-8 4 4 0 000 8zM20 8v6M23 11h-6"
-                  stroke="#141414"
-                  strokeWidth={1.8}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </Svg>
-            </TouchableOpacity>
+            {activeTab !== "activity" && (
+              <TouchableOpacity style={styles.navIcon}>
+                <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+                  <Path
+                    d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M8.5 11a4 4 0 100-8 4 4 0 000 8zM20 8v6M23 11h-6"
+                    stroke="#141414"
+                    strokeWidth={1.8}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </Svg>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
-        {/* Balance summary */}
-        <BalanceSummary
-          balanceToSquare={20.0}
-          youAreOwed={2575.0}
-          youOwe={2575.0}
-          onFilterPress={() => setFilterVisible(true)}
-        />
-
-        {/* Tab content */}
-        {activeTab === "groups" ? (
-          <GroupsList groups={MOCK_GROUPS} />
+        {/* Activity tab replaces full content area */}
+        {activeTab === "activity" ? (
+          <ActivityList activities={MOCK_ACTIVITIES} />
         ) : (
-          <FriendsList friends={MOCK_FRIENDS} />
-        )}
+          <>
+            {/* Balance summary */}
+            <BalanceSummary
+              balanceToSquare={20.0}
+              youAreOwed={2575.0}
+              youOwe={2575.0}
+              onFilterPress={() => setFilterVisible(true)}
+            />
 
-        {/* Show squared-up friends */}
-        <SquaredUpSection onPress={handleShowSquaredUp} />
+            {/* Friends / Groups tab content */}
+            {activeTab === "groups" ? (
+              <GroupsList groups={MOCK_GROUPS} />
+            ) : (
+              <FriendsList friends={MOCK_FRIENDS} />
+            )}
+
+            {/* Show squared-up friends */}
+            <SquaredUpSection onPress={handleShowSquaredUp} />
+          </>
+        )}
       </View>
 
       {/* Add expense floating button */}
