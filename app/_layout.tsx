@@ -75,12 +75,8 @@ export default function RootLayout() {
     Nunito_700Bold,
   });
 
-  useEffect(() => {
-    if (fontsLoaded) {
-      SplashScreen.hideAsync();
-    }
-  }, [fontsLoaded]);
-
+  // Native splash is hidden by the AuthLoadingScreen once the Lottie
+  // animation is mounted. We only gate on fonts being loaded here.
   if (!fontsLoaded) return null;
 
   return (

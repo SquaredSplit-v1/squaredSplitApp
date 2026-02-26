@@ -32,9 +32,8 @@ const loginBgUri = Asset.fromModule(
 
 const MARQUEE_ITEM_WIDTH = 88;
 const MARQUEE_GAP = 20;
-const MARQUEE_TOTAL_WIDTH = (MARQUEE_ITEM_WIDTH + MARQUEE_GAP) * 4; // 4 items
+const MARQUEE_TOTAL_WIDTH = (MARQUEE_ITEM_WIDTH + MARQUEE_GAP) * 4;
 
-// Gradient blob for login page background with blur
 function LoginGradientBlob() {
   return (
     <View style={styles.gradientBlobContainer}>
@@ -43,7 +42,6 @@ function LoginGradientBlob() {
   );
 }
 
-// Small version of the logo for login screen
 function SmallLogo() {
   return (
     <View style={{ width: 140, height: 100 }}>
@@ -52,7 +50,6 @@ function SmallLogo() {
   );
 }
 
-// Marquee component
 function Marquee() {
   const translateX = useSharedValue(0);
 
@@ -107,13 +104,10 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false);
 
   const formatPhoneNumber = (text: string) => {
-    // Remove all non-numeric characters
     const cleaned = text.replace(/\D/g, "");
 
-    // Format as +XXX XXX XXX XXXX (supports 3-digit country code and up to 12-digit phone)
     let formatted = "";
     if (cleaned.length > 0) {
-      // Country code: up to 3 digits
       formatted = "+" + cleaned.substring(0, Math.min(3, cleaned.length));
     }
     if (cleaned.length > 3) {
@@ -134,7 +128,6 @@ export default function LoginScreen() {
   };
 
   const handleGetStarted = async () => {
-    // Format phone number for Supabase (remove spaces)
     const formattedPhone = phoneNumber.replace(/\s/g, "");
 
     if (formattedPhone.length < 10) {
@@ -150,12 +143,11 @@ export default function LoginScreen() {
       if (!result.success) {
         const msg = result.retryAfter
           ? `Too many attempts. Try again in ${result.retryAfter}s.`
-          : result.error ?? "Failed to send code.";
+          : (result.error ?? "Failed to send code.");
         Alert.alert("Error", msg);
         return;
       }
 
-      // Navigate to OTP verification screen
       router.push({
         pathname: "/(auth)/verify-otp",
         params: { phone: formattedPhone },
@@ -179,7 +171,7 @@ export default function LoginScreen() {
         style={styles.scrollView}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: insets.top + 40, paddingBottom: insets.bottom + 20 },
+          { paddingTop: insets.top + 100, paddingBottom: insets.bottom + 20 },
         ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
