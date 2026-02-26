@@ -32,12 +32,12 @@ This document covers the complete phone-OTP authentication architecture, environ
 
 ### Key design decisions
 
-| Decision | Why |
-|---|---|
+| Decision                                          | Why                                                                                                                                                                                     |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | All OTP requests go through the **edge function** | Rate limiting (per phone & per IP), E.164 normalization, verify-attempt lockout are enforced server-side. The app never calls `supabase.auth.signInWithOtp()` / `verifyOtp()` directly. |
-| Session hydration via `setSession()` | After the edge function returns access/refresh tokens, `lib/auth.ts` calls `supabase.auth.setSession()` so the local client is immediately authenticated and `onAuthStateChange` fires. |
-| Onboarding flag in AsyncStorage | Per-user key (`@squaredsplit/onboarding_complete:<uid>`) avoids showing onboarding to returning users. |
-| Three Supabase projects | `dev` (local), `staging` (remote), `production` (remote) — each tied to a GitHub branch. |
+| Session hydration via `setSession()`              | After the edge function returns access/refresh tokens, `lib/auth.ts` calls `supabase.auth.setSession()` so the local client is immediately authenticated and `onAuthStateChange` fires. |
+| Onboarding flag in AsyncStorage                   | Per-user key (`@squaredsplit/onboarding_complete:<uid>`) avoids showing onboarding to returning users.                                                                                  |
+| Three Supabase projects                           | `dev` (local), `staging` (remote), `production` (remote) — each tied to a GitHub branch.                                                                                                |
 
 ---
 
@@ -45,11 +45,11 @@ This document covers the complete phone-OTP authentication architecture, environ
 
 The app reads env variables from `.env.*` files loaded automatically by Expo:
 
-| File | Branch | Supabase Instance |
-|---|---|---|
-| `.env.dev` | `dev` | Local — `http://127.0.0.1:54321` |
-| `.env.staging` | `staging` | Remote staging project |
-| `.env.production` | `main` | Remote production project |
+| File              | Branch    | Supabase Instance                |
+| ----------------- | --------- | -------------------------------- |
+| `.env.dev`        | `dev`     | Local — `http://127.0.0.1:54321` |
+| `.env.staging`    | `staging` | Remote staging project           |
+| `.env.production` | `main`    | Remote production project        |
 
 ### Required variables
 
@@ -111,7 +111,7 @@ authloading.tsx ──── animated splash ────┐
 
 `app/_layout.tsx` contains a `RootNavigator` that watches `useAuth()`:
 
-- **Not signed in + outside `(auth)` group** → redirect to `/(auth)/authloading`
+- **Not signed in + outside `(auth)` group** → redirect to `/dashboard/dashboard`
 - **Signed in + inside `(auth)` group** → redirect to `/dashboard/dashboard`
   - Exception: stays on `/(auth)/onboarding` until `hasCompletedOnboarding` is true
 
@@ -123,13 +123,13 @@ This means deep links into dashboard screens are protected automatically.
 
 ### How sessions are managed
 
-| Concern | Implementation |
-|---|---|
-| **Persistence** | `@react-native-async-storage/async-storage` configured in `lib/supabase.ts` |
-| **Auto-refresh** | `autoRefreshToken: true` — Supabase JS SDK refreshes tokens automatically before expiry |
-| **Hydration** | On app start, `supabase.auth.getSession()` loads the persisted session |
+| Concern              | Implementation                                                                                |
+| -------------------- | --------------------------------------------------------------------------------------------- |
+| **Persistence**      | `@react-native-async-storage/async-storage` configured in `lib/supabase.ts`                   |
+| **Auto-refresh**     | `autoRefreshToken: true` — Supabase JS SDK refreshes tokens automatically before expiry       |
+| **Hydration**        | On app start, `supabase.auth.getSession()` loads the persisted session                        |
 | **Realtime updates** | `onAuthStateChange` in `AuthContext` listens for `SIGNED_IN`, `SIGNED_OUT`, `TOKEN_REFRESHED` |
-| **Sign-out** | Calls `supabase.auth.signOut()` which clears AsyncStorage and emits `SIGNED_OUT` |
+| **Sign-out**         | Calls `supabase.auth.signOut()` which clears AsyncStorage and emits `SIGNED_OUT`              |
 
 ### Token lifecycle
 
@@ -179,8 +179,8 @@ APP_ENV=development npx expo start
 
 The local Supabase instance has **test phone numbers** configured in `supabase/config.toml`:
 
-| Phone | OTP Code |
-|---|---|
+| Phone          | OTP Code |
+| -------------- | -------- |
 | `+15551112222` | `123456` |
 | `+15559999999` | `123456` |
 | `+11234567890` | `123456` |
@@ -195,18 +195,18 @@ Use these on the login screen to bypass real SMS sending. Any other phone number
 
 ### File map
 
-| File | Role |
-|---|---|
-| `lib/supabase.ts` | Supabase client (lazy init, AsyncStorage, auto-refresh) |
-| `lib/auth.ts` | API layer — `sendOtp()`, `verifyOtp()`, `resendOtp()` |
-| `lib/env.ts` | `getAppEnv()`, `isDev()`, `isStaging()`, `isProduction()` |
-| `contexts/AuthContext.tsx` | React context — session / user / onboarding state |
-| `app/_layout.tsx` | Root layout with auth-gated navigation |
-| `app/(auth)/login.tsx` | Phone number input screen |
-| `app/(auth)/verify-otp.tsx` | OTP verification screen |
-| `app/(auth)/authloading.tsx` | Animated splash with auth check |
-| `app/(auth)/onboarding.tsx` | First-time user onboarding carousel |
-| `supabase/functions/phone-auth/index.ts` | Edge function (rate limit + OTP proxy) |
+| File                                     | Role                                                      |
+| ---------------------------------------- | --------------------------------------------------------- |
+| `lib/supabase.ts`                        | Supabase client (lazy init, AsyncStorage, auto-refresh)   |
+| `lib/auth.ts`                            | API layer — `sendOtp()`, `verifyOtp()`, `resendOtp()`     |
+| `lib/env.ts`                             | `getAppEnv()`, `isDev()`, `isStaging()`, `isProduction()` |
+| `contexts/AuthContext.tsx`               | React context — session / user / onboarding state         |
+| `app/_layout.tsx`                        | Root layout with auth-gated navigation                    |
+| `app/(auth)/login.tsx`                   | Phone number input screen                                 |
+| `app/(auth)/verify-otp.tsx`              | OTP verification screen                                   |
+| `app/dashboard/dashboard.tsx`            | Animated splash with auth check                           |
+| `app/(auth)/onboarding.tsx`              | First-time user onboarding carousel                       |
+| `supabase/functions/phone-auth/index.ts` | Edge function (rate limit + OTP proxy)                    |
 
 ---
 
@@ -252,12 +252,12 @@ The staging build has `bundleIdentifier` / `package` suffixed with `.staging` so
 
 The edge function enforces:
 
-| Limit | Value |
-|---|---|
-| OTP sends per phone | 5 per 15 min |
-| OTP sends per IP | 10 per 15 min |
-| Cooldown between sends | 30 seconds |
-| Verify attempts | 5 before 15-min lockout |
+| Limit                  | Value                   |
+| ---------------------- | ----------------------- |
+| OTP sends per phone    | 5 per 15 min            |
+| OTP sends per IP       | 10 per 15 min           |
+| Cooldown between sends | 30 seconds              |
+| Verify attempts        | 5 before 15-min lockout |
 
 To test: enter a wrong OTP 5 times — you should see "Too many attempts. Try again later." with a retry countdown.
 
@@ -289,11 +289,11 @@ supabase functions deploy phone-auth --project-ref <production-project-ref>
 
 ### GitHub branch → Supabase project mapping
 
-| Branch | Supabase Project | Env File |
-|---|---|---|
-| `dev` | Local (supabase start) | `.env.dev` |
-| `staging` | Staging project | `.env.staging` |
-| `main` | Production project | `.env.production` |
+| Branch    | Supabase Project       | Env File          |
+| --------- | ---------------------- | ----------------- |
+| `dev`     | Local (supabase start) | `.env.dev`        |
+| `staging` | Staging project        | `.env.staging`    |
+| `main`    | Production project     | `.env.production` |
 
 Supabase is connected via GitHub integration — pushing to a branch auto-deploys migrations and edge functions to the corresponding project.
 
@@ -316,12 +316,12 @@ Supabase is connected via GitHub integration — pushing to a branch auto-deploy
 
 **Responses:**
 
-| Status | Body | Meaning |
-|---|---|---|
-| 200 | `{ "success": true }` | OTP sent (or silently succeeded — doesn't reveal if phone exists) |
-| 400 | `{ "success": false, "error": "Invalid phone format..." }` | Phone not in E.164 format |
-| 429 | `{ "error": "Too many attempts...", "retryAfter": 120 }` | Rate limited |
-| 500 | `{ "success": false, "error": "Request failed" }` | Internal error |
+| Status | Body                                                       | Meaning                                                           |
+| ------ | ---------------------------------------------------------- | ----------------------------------------------------------------- |
+| 200    | `{ "success": true }`                                      | OTP sent (or silently succeeded — doesn't reveal if phone exists) |
+| 400    | `{ "success": false, "error": "Invalid phone format..." }` | Phone not in E.164 format                                         |
+| 429    | `{ "error": "Too many attempts...", "retryAfter": 120 }`   | Rate limited                                                      |
+| 500    | `{ "success": false, "error": "Request failed" }`          | Internal error                                                    |
 
 ### POST `/verify-otp`
 
@@ -336,12 +336,12 @@ Supabase is connected via GitHub integration — pushing to a branch auto-deploy
 
 **Responses:**
 
-| Status | Body | Meaning |
-|---|---|---|
-| 200 | `{ "session": {...}, "user": {...} }` | Verified — includes JWT tokens |
-| 400 | `{ "error": "Invalid request" }` | Missing phone or OTP |
-| 401 | `{ "error": "Invalid or expired OTP" }` | Wrong code (also records a failed attempt) |
-| 429 | `{ "error": "Too many attempts...", "retryAfter": 900 }` | Locked out after 5 failures |
+| Status | Body                                                     | Meaning                                    |
+| ------ | -------------------------------------------------------- | ------------------------------------------ |
+| 200    | `{ "session": {...}, "user": {...} }`                    | Verified — includes JWT tokens             |
+| 400    | `{ "error": "Invalid request" }`                         | Missing phone or OTP                       |
+| 401    | `{ "error": "Invalid or expired OTP" }`                  | Wrong code (also records a failed attempt) |
+| 429    | `{ "error": "Too many attempts...", "retryAfter": 900 }` | Locked out after 5 failures                |
 
 ---
 

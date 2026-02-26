@@ -30,7 +30,7 @@ const styles = StyleSheet.create({
   },
   separator: {
     height: 1,
-    backgroundColor: "#F3F4F5",
+    backgroundColor: "white",
     marginLeft: 56,
   },
 });

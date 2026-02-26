@@ -1,4 +1,4 @@
-import { ExpoConfig, ConfigContext } from "expo/config";
+import { ConfigContext, ExpoConfig } from "expo/config";
 
 // Determine environment from APP_ENV or default to development
 const APP_ENV = process.env.APP_ENV ?? "development";

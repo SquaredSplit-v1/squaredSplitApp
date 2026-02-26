@@ -43,7 +43,7 @@ function RootNavigator() {
 
     if (!user && !inAuthGroup) {
       // Not signed in → go to auth loading / login
-      router.replace("/(auth)/authloading");
+      router.replace("/dashboard/dashboard");
     } else if (user && inAuthGroup) {
       // Signed in but still on an auth screen → go to dashboard
       // (skip if we're on onboarding and haven't finished it yet)
@@ -59,6 +59,7 @@ function RootNavigator() {
       <Stack.Screen name="(auth)" />
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="dashboard" />
+      <Stack.Screen name="(add_expense)" />
       <Stack.Screen
         name="modal"
         options={{ presentation: "modal", title: "Modal", headerShown: true }}

@@ -1,4 +1,4 @@
-import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { StyleSheet, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -119,13 +119,13 @@ const MOCK_GROUPS: Group[] = [
 
 export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabName>("home");
   const [filterVisible, setFilterVisible] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<FilterOption>("none");
 
   const handleAddExpense = () => {
-    // TODO: Navigate to add expense
-    console.log("Add expense");
+    router.push("/(add_expense)");
   };
 
   const handleFilterSelect = (filter: FilterOption) => {
@@ -140,13 +140,6 @@ export default function DashboardScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Background gradient */}
-      <LinearGradient
-        colors={["#FFFFFF", "#E8E1EC", "#C5C9D8"]}
-        locations={[0, 0.65, 1]}
-        style={styles.backgroundGradient}
-      />
-
       {/* Main content */}
       <View style={[styles.content, { paddingTop: insets.top + 8 }]}>
         {/* Navigation bar */}
