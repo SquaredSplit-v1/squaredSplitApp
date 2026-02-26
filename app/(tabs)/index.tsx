@@ -1,17 +1,17 @@
-import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { useAuth } from '@/contexts/AuthContext';
-import { SquaredSplitLogo } from '@/components/svg/squared-split-logo';
+import { SquaredSplitLogo } from "@/components/svg/squared-split-logo";
+import { useAuthStore } from "@/stores/authStore";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
-  withTiming
-} from 'react-native-reanimated';
+  withTiming,
+} from "react-native-reanimated";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export default function HomeScreen() {
-  const { signOut } = useAuth();
+  const signOut = useAuthStore((s) => s.signOut);
   const scale = useSharedValue(1);
   const opacity = useSharedValue(1);
 
@@ -61,12 +61,12 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F3F4F5',
+    backgroundColor: "#F3F4F5",
   },
   content: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     paddingHorizontal: 24,
   },
   logoContainer: {
@@ -75,28 +75,28 @@ const styles = StyleSheet.create({
   },
   welcomeText: {
     fontSize: 28,
-    fontWeight: '700',
-    color: '#141414',
+    fontWeight: "700",
+    color: "#141414",
     marginBottom: 8,
-    textAlign: 'center',
+    textAlign: "center",
   },
   subText: {
     fontSize: 16,
-    color: '#6B6B6B',
-    textAlign: 'center',
+    color: "#6B6B6B",
+    textAlign: "center",
   },
   buttonContainer: {
     paddingHorizontal: 24,
     paddingBottom: 40,
   },
   signOutButton: {
-    backgroundColor: '#141414',
+    backgroundColor: "#141414",
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
     shadowOffset: {
       width: 0,
       height: 2,
@@ -106,8 +106,8 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   signOutText: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
 });

@@ -1,4 +1,4 @@
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuthStore } from "@/stores/authStore";
 import { Asset } from "expo-asset";
 import { useRouter } from "expo-router";
 import React, { useEffect } from "react";
@@ -121,7 +121,8 @@ function AnimatedLogo({ slashProgress }: LogoProps) {
 
 export default function AuthLoadingScreen() {
   const router = useRouter();
-  const { user, isLoading } = useAuth();
+  const user = useAuthStore((s) => s.user);
+  const isLoading = useAuthStore((s) => s.isLoading);
 
   // Animation values
   const blobTranslateY = useSharedValue(0);

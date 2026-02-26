@@ -1,4 +1,4 @@
-import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { useAuthStore } from "@/stores/authStore";
 import {
   Nunito_400Regular,
   Nunito_600SemiBold,
@@ -31,7 +31,9 @@ export const unstable_settings = {
  * the user to the correct route group.
  */
 function RootNavigator() {
-  const { user, isLoading, hasCompletedOnboarding } = useAuth();
+  const user = useAuthStore((s) => s.user);
+  const isLoading = useAuthStore((s) => s.isLoading);
+  const hasCompletedOnboarding = useAuthStore((s) => s.hasCompletedOnboarding);
   const router = useRouter();
   const segments = useSegments();
 
@@ -81,14 +83,18 @@ export default function RootLayout() {
     }
   }, [fontsLoaded]);
 
+  // Initialize Zustand auth store (hydrate session + start listener)
+  useEffect(() => {
+    const cleanup = useAuthStore.getState().initialize();
+    return cleanup;
+  }, []);
+
   if (!fontsLoaded) return null;
 
   return (
-    <AuthProvider>
-      <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-        <RootNavigator />
-        <StatusBar style="auto" />
-      </ThemeProvider>
-    </AuthProvider>
+    <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+      <RootNavigator />
+      <StatusBar style="auto" />
+    </ThemeProvider>
   );
 }
