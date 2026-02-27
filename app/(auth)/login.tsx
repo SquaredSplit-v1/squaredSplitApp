@@ -1,4 +1,3 @@
-import { BoxIcon, TickIcon } from "@/components/svg";
 import { sendOtp } from "@/lib/auth";
 import { Asset } from "expo-asset";
 import { useRouter } from "expo-router";
@@ -29,9 +28,15 @@ const logoUri = Asset.fromModule(require("../../assets/app-icon.svg")).uri;
 const loginBgUri = Asset.fromModule(
   require("../../assets/auth/Blur-Ellipse.svg"),
 ).uri;
+const lightningUri = Asset.fromModule(
+  require("../../assets/auth/lightning.svg"),
+).uri;
+const loveUri = Asset.fromModule(require("../../assets/auth/love.svg")).uri;
+const manUri = Asset.fromModule(require("../../assets/auth/man.svg")).uri;
+const womanUri = Asset.fromModule(require("../../assets/auth/woman.svg")).uri;
 
 const MARQUEE_ITEM_WIDTH = 88;
-const MARQUEE_GAP = 20;
+const MARQUEE_GAP = 2;
 const MARQUEE_TOTAL_WIDTH = (MARQUEE_ITEM_WIDTH + MARQUEE_GAP) * 4; // 4 items
 
 // Gradient blob for login page background with blur
@@ -73,26 +78,22 @@ function Marquee() {
   }));
 
   const items = [
-    { type: "box" },
-    { type: "tick" },
-    { type: "box" },
-    { type: "tick" },
-    { type: "box" },
-    { type: "tick" },
-    { type: "box" },
-    { type: "tick" },
+    lightningUri,
+    womanUri,
+    loveUri,
+    manUri,
+    lightningUri,
+    womanUri,
+    loveUri,
+    manUri,
   ];
 
   return (
     <View style={styles.marqueeContainer}>
       <Animated.View style={[styles.marqueeContent, animatedStyle]}>
-        {items.map((item, index) => (
+        {items.map((uri, index) => (
           <View key={index} style={styles.marqueeItem}>
-            {item.type === "box" ? (
-              <BoxIcon width={88} height={88} />
-            ) : (
-              <TickIcon width={88} height={88} />
-            )}
+            <SvgUri width={88} height={88} uri={uri} />
           </View>
         ))}
       </Animated.View>
@@ -150,7 +151,7 @@ export default function LoginScreen() {
       if (!result.success) {
         const msg = result.retryAfter
           ? `Too many attempts. Try again in ${result.retryAfter}s.`
-          : result.error ?? "Failed to send code.";
+          : (result.error ?? "Failed to send code.");
         Alert.alert("Error", msg);
         return;
       }
