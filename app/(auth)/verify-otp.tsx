@@ -1,4 +1,5 @@
-import { resendOtp, verifyOtp as verifyOtpApi } from "@/lib/auth";
+import { supabase } from "@/lib/supabase";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -14,6 +15,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+const ONBOARDING_COMPLETE_KEY = "@squaredsplit/onboarding_complete";
+
 const OTP_LENGTH = 6;
 
 export default function VerifyOTPScreen() {
@@ -23,7 +26,8 @@ export default function VerifyOTPScreen() {
 
   const [otp, setOtp] = useState<string[]>(new Array(OTP_LENGTH).fill(""));
   const [isLoading, setIsLoading] = useState(false);
-  const [resendTimer, setResendTimer] = useState(30);
+  const [resendTimer, setResendTimer] = useState(60);
+  const [otpError, setOtpError] = useState<string | null>(null);
   const inputRefs = useRef<(TextInput | null)[]>([]);
 
   useEffect(() => {
@@ -40,6 +44,8 @@ export default function VerifyOTPScreen() {
   }, [resendTimer]);
 
   const handleOtpChange = (value: string, index: number) => {
+    // Clear error when user starts editing
+    if (otpError) setOtpError(null);
     // Only allow digits
     if (value && !/^\d+$/.test(value)) return;
 
@@ -77,34 +83,49 @@ export default function VerifyOTPScreen() {
   const verifyOtp = async () => {
     const otpCode = otp.join("");
     if (otpCode.length !== OTP_LENGTH) {
-      Alert.alert("Error", "Please enter the complete verification code");
+      setOtpError("Please enter the complete verification code");
       return;
     }
 
     if (!phone) {
-      Alert.alert("Error", "Phone number not found. Please go back and try again.");
+      Alert.alert(
+        "Error",
+        "Phone number not found. Please go back and try again.",
+      );
       return;
     }
 
     setIsLoading(true);
+    setOtpError(null);
 
     try {
-      const result = await verifyOtpApi(phone, otpCode);
+      const { data, error } = await supabase.auth.verifyOtp({
+        phone,
+        token: otpCode,
+        type: "sms",
+      });
 
-      if (!result.success) {
-        const msg = result.retryAfter
-          ? `Too many attempts. Try again in ${result.retryAfter}s.`
-          : result.error ?? "Verification failed.";
-        Alert.alert("Verification Failed", msg);
+      if (error) {
+        // Wrong / expired OTP — surface inline so the user can resend
+        setOtpError("Incorrect code. Please try again or resend a new one.");
+        // Clear the entered digits and refocus first cell
+        setOtp(new Array(OTP_LENGTH).fill(""));
+        inputRefs.current[0]?.focus();
         return;
       }
 
-      // Session is now hydrated in the Supabase client by verifyOtpApi.
-      // AuthContext's onAuthStateChange will fire automatically.
-      if (result.isNewUser) {
-        router.replace("/(auth)/onboarding");
+      // Session is hydrated by supabase.auth.verifyOtp automatically.
+      // Check per-user onboarding flag from AsyncStorage.
+      const userId = data.user?.id ?? "";
+      const onboardingValue = await AsyncStorage.getItem(
+        `${ONBOARDING_COMPLETE_KEY}:${userId}`,
+      );
+      const hasCompletedOnboarding = onboardingValue === "true";
+
+      if (hasCompletedOnboarding) {
+        router.replace("/(tabs)");
       } else {
-        router.replace("/dashboard/dashboard");
+        router.replace("/(auth)/onboarding");
       }
     } catch {
       Alert.alert("Error", "Something went wrong. Please try again.");
@@ -117,20 +138,20 @@ export default function VerifyOTPScreen() {
     if (resendTimer > 0 || !phone) return;
 
     setIsLoading(true);
+    setOtpError(null);
+    setOtp(new Array(OTP_LENGTH).fill(""));
 
     try {
-      const result = await resendOtp(phone);
+      const { error } = await supabase.auth.signInWithOtp({ phone });
 
-      if (!result.success) {
-        const msg = result.retryAfter
-          ? `Too many attempts. Try again in ${result.retryAfter}s.`
-          : result.error ?? "Failed to resend code.";
-        Alert.alert("Error", msg);
+      if (error) {
+        Alert.alert("Error", error.message ?? "Failed to resend code.");
         return;
       }
 
-      setResendTimer(30);
-      Alert.alert("Success", "A new verification code has been sent");
+      setResendTimer(60);
+      inputRefs.current[0]?.focus();
+      Alert.alert("Code sent", "A new verification code has been sent.");
     } catch {
       Alert.alert("Error", "Failed to resend code. Please try again.");
     } finally {
@@ -166,7 +187,9 @@ export default function VerifyOTPScreen() {
         <Text style={styles.title}>Verify your number</Text>
         <Text style={styles.subtitle}>
           Enter the 6-digit code sent to{"\n"}
-          <Text style={styles.phoneText}>{formatPhoneDisplay(phone || "")}</Text>
+          <Text style={styles.phoneText}>
+            {formatPhoneDisplay(phone || "")}
+          </Text>
         </Text>
 
         {/* OTP Input */}
@@ -180,6 +203,7 @@ export default function VerifyOTPScreen() {
               style={[
                 styles.otpInput,
                 digit ? styles.otpInputFilled : null,
+                otpError ? styles.otpInputError : null,
               ]}
               value={digit}
               onChangeText={(value) => handleOtpChange(value, index)}
@@ -192,6 +216,9 @@ export default function VerifyOTPScreen() {
             />
           ))}
         </View>
+
+        {/* Inline error */}
+        {otpError ? <Text style={styles.errorText}>{otpError}</Text> : null}
 
         {/* Verify Button */}
         <TouchableOpacity
@@ -283,6 +310,16 @@ const styles = StyleSheet.create({
   },
   otpInputFilled: {
     borderColor: "#141414",
+  },
+  otpInputError: {
+    borderColor: "#EF4444",
+  },
+  errorText: {
+    fontSize: 13,
+    color: "#EF4444",
+    textAlign: "center",
+    marginTop: -20,
+    marginBottom: 16,
   },
   verifyButton: {
     height: 52,
