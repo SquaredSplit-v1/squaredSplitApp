@@ -132,7 +132,7 @@ export default function AuthLoadingScreen() {
     if (user) {
       router.replace("/dashboard/dashboard");
     } else {
-      router.replace("/(auth)/login");
+      router.replace("/(auth)/phone");
     }
   };
 

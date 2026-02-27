@@ -10,7 +10,7 @@ export default function AuthLayout() {
     >
       <Stack.Screen name="index" />
       <Stack.Screen name="authloading" />
-      <Stack.Screen name="login" />
+      <Stack.Screen name="phone" />
       <Stack.Screen name="verify-otp" />
       <Stack.Screen name="onboarding" />
     </Stack>
