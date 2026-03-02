@@ -21,7 +21,8 @@
     "update:dev": "APP_ENV=development eas update --branch development",
     "update:staging": "APP_ENV=staging eas update --branch staging",
     "update:production": "APP_ENV=production eas update --branch production",
-    "release": "node ./scripts/release.js"
+    "release": "node ./scripts/release.js",
+    "prepare": "husky"
   },
   "dependencies": {
     "@expo-google-fonts/nunito": "^0.4.2",
@@ -66,8 +67,17 @@
     "@types/react": "~19.1.0",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
+    "prettier": "^3.8.1",
     "supabase": "^2.70.5",
     "typescript": "~5.9.2"
   },
-  "private": true
+  "private": true,
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ]
+  }
 }
