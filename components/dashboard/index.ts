@@ -1,3 +1,6 @@
+export { default as ActivityItem } from "./ActivityItem";
+export type { Activity, ActivitySegment } from "./ActivityItem";
+export { default as ActivityList } from "./ActivityList";
 export { default as AddExpenseButton } from "./AddExpenseButton";
 export { default as BalanceSummary } from "./BalanceSummary";
 export { default as BottomTabBar } from "./BottomTabBar";
