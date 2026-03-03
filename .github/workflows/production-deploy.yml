@@ -1,0 +1,59 @@
+# Production Branch - Full Build & Store Submission
+# Creates production builds and submits to App Store / Google Play
+
+name: "Production - Build & Submit to Store"
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  eas-build-production:
+    name: Build + Auto-Submit to App Store & Play Store
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup Expo & EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Build + Submit Android to Play Store
+        run: |
+          eas build \
+            --platform android \
+            --profile production \
+            --auto-submit \
+            --non-interactive \
+            --no-wait
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          APP_ENV: ${{ vars.APP_ENV }}
+
+      - name: Build + Submit iOS to App Store
+        run: |
+          eas build \
+            --platform ios \
+            --profile production \
+            --auto-submit \
+            --non-interactive \
+            --no-wait
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          APP_ENV: ${{ vars.APP_ENV }}
