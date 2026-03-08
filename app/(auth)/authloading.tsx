@@ -1,41 +1,38 @@
-import { useAuth } from "@/contexts/AuthContext";
-import { useRouter } from "expo-router";
-import * as SplashScreen from "expo-splash-screen";
-import LottieView from "lottie-react-native";
-import React, { useCallback, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { useAuthStore } from '@/stores/authStore'
+import { useRouter } from 'expo-router'
+import * as SplashScreen from 'expo-splash-screen'
+import LottieView from 'lottie-react-native'
+import React, { useCallback } from 'react'
+import { StyleSheet, View } from 'react-native'
 
-SplashScreen.preventAutoHideAsync();
+SplashScreen.preventAutoHideAsync()
 
-const splashAnimation = require("../../assets/animations/splash.json");
+const splashAnimation = require('../../assets/animations/splash.json')
 
 export default function AuthLoadingScreen() {
-  const router = useRouter();
-  const { user, isLoading } = useAuth();
-  const lottieRef = useRef<LottieView>(null);
-  const [lottieReady, setLottieReady] = useState(false);
+  const router = useRouter()
+  const user = useAuthStore((s) => s.user)
+  const isLoading = useAuthStore((s) => s.isLoading)
 
-  const onLottieLayout = useCallback(async () => {
-    if (!lottieReady) {
-      setLottieReady(true);
-      await SplashScreen.hideAsync();
-    }
-  }, [lottieReady]);
+  // Animation values
+  const blobTranslateY = useSharedValue(0)
+  const slashProgress = useSharedValue(0)
+  const contentOpacity = useSharedValue(1)
 
   const onAnimationFinish = useCallback(
     (isCancelled: boolean) => {
-      if (isCancelled) return;
+      if (isCancelled) return
 
-      if (isLoading) return;
+      if (isLoading) return
 
       if (user) {
-        router.replace("/dashboard/dashboard");
+        router.replace('/dashboard/dashboard')
       } else {
-        router.replace("/(auth)/login");
+        router.replace('/(auth)/login')
       }
     },
-    [isLoading, user, router],
-  );
+    [isLoading, user, router]
+  )
 
   return (
     <View style={styles.container}>
@@ -50,12 +47,12 @@ export default function AuthLoadingScreen() {
         resizeMode="cover"
       />
     </View>
-  );
+  )
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: '#FFFFFF',
   },
-});
+})
