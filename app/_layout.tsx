@@ -67,11 +67,17 @@ function RootNavigator() {
 
 export default function RootLayout() {
   const colorScheme = useColorScheme()
+  const initialize = useAuthStore((s) => s.initialize)
   const [fontsLoaded] = useFonts({
     Nunito_400Regular,
     Nunito_600SemiBold,
     Nunito_700Bold,
   })
+
+  useEffect(() => {
+    const unsubscribe = initialize()
+    return unsubscribe
+  }, [])
 
   useEffect(() => {
     if (fontsLoaded) {
