@@ -29,7 +29,7 @@ export default function AuthLoadingScreen() {
   useEffect(() => {
     if (!animationDone || isLoading) return
     if (user) {
-      router.replace('/dashboard/dashboard')
+      router.replace('/(tabs)')
     } else {
       router.replace('/(auth)/login')
     }

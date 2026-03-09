@@ -1,21 +1,23 @@
-import { useRouter } from 'expo-router'
+import { useAuthStore } from '@/stores/authStore'
 import React from 'react'
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-export default function ProfileSetupScreen() {
+export default function AccountScreen() {
   const insets = useSafeAreaInsets()
-  const router = useRouter()
+  const signOut = useAuthStore((s) => s.signOut)
 
   return (
     <View
       style={[styles.container, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }]}
     >
-      <Text style={styles.title}>Set up your profile</Text>
-      <Text style={styles.subtitle}>Tell us a bit about yourself to get started.</Text>
+      <View style={styles.content}>
+        <Text style={styles.title}>Account</Text>
+        <Text style={styles.subtitle}>Manage your profile and settings</Text>
+      </View>
 
-      <TouchableOpacity style={styles.button} onPress={() => router.replace('/(tabs)')}>
-        <Text style={styles.buttonText}>Continue to Dashboard</Text>
+      <TouchableOpacity style={styles.signOutButton} onPress={signOut}>
+        <Text style={styles.signOutText}>Sign Out</Text>
       </TouchableOpacity>
     </View>
   )
@@ -27,28 +29,33 @@ const styles = StyleSheet.create({
     backgroundColor: '#F3F4F5',
     paddingHorizontal: 24,
   },
+  content: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   title: {
     fontSize: 28,
-    fontWeight: '600',
+    fontFamily: 'Nunito_700Bold',
+    fontWeight: '700',
     color: '#141414',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
+    fontFamily: 'Nunito_400Regular',
     color: '#6B6B6B',
-    lineHeight: 24,
-    marginBottom: 40,
   },
-  button: {
+  signOutButton: {
     height: 52,
     backgroundColor: '#141414',
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 'auto',
   },
-  buttonText: {
+  signOutText: {
     fontSize: 16,
+    fontFamily: 'Nunito_600SemiBold',
     fontWeight: '600',
     color: '#FFFFFF',
   },
