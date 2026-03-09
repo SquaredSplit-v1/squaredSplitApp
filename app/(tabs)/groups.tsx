@@ -4,12 +4,12 @@ import { StyleSheet, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Svg, { Path } from 'react-native-svg'
 
-import type { FilterOption, Friend } from '@/components/dashboard'
+import type { FilterOption, Group } from '@/components/dashboard'
 import {
   AddExpenseButton,
   BalanceSummary,
   FilterModal,
-  FriendsList,
+  GroupsList,
   SquaredUpSection,
 } from '@/components/dashboard'
 
@@ -27,57 +27,39 @@ function BellIcon() {
   )
 }
 
-const akAvatar = require('../../assets/dashboard/ak.png')
+const coconutAvatar = require('../../assets/dashboard/coconut.png')
 
-const MOCK_FRIENDS: Friend[] = [
+const MOCK_GROUPS: Group[] = [
   {
-    id: '1',
-    name: 'AJ',
-    avatar: akAvatar,
-    subtitle: 'Due on 1 Jan',
-    subtitleType: 'default',
+    id: 'g1',
+    name: 'Goa 2026',
+    avatar: coconutAvatar,
+    emoji: '🌴',
     balanceType: 'owes_you',
     amount: 10.0,
   },
   {
-    id: '2',
-    name: 'Praneeth Reddy\nRamesh',
-    avatar: null,
-    subtitle: 'Alert!',
-    subtitleType: 'alert',
+    id: 'g2',
+    name: 'Beach House',
+    avatar: coconutAvatar,
     balanceType: 'you_owe',
-    amount: 2420.0,
+    amount: 350.0,
   },
   {
-    id: '3',
-    name: 'AJ',
-    avatar: akAvatar,
-    subtitle: 'Due on 1 Jan',
-    subtitleType: 'default',
-    balanceType: 'owes_you',
-    amount: 10.0,
-  },
-  {
-    id: '4',
-    name: 'Sarah Paul',
-    avatar: akAvatar,
-    subtitle: 'Upcoming due',
-    subtitleType: 'upcoming',
-    balanceType: 'owes_you',
-    amount: 370.5,
-  },
-  {
-    id: '5',
-    name: 'Seshwath Hegde',
-    avatar: akAvatar,
-    subtitle: "8 Dec'25",
-    subtitleType: 'default',
-    balanceType: 'owes_you',
-    amount: 500.0,
+    id: 'g3',
+    name: 'Trip to Japan',
+    avatar: coconutAvatar,
+    balanceType: 'you_owe',
+    amount: 1485.0,
+    members: [
+      { name: 'AJ', amount: 1485.0, balanceType: 'owes_you' },
+      { name: 'Deep.R', amount: 1485.0, balanceType: 'owes_you' },
+      { name: 'AJ', amount: 1485.0, balanceType: 'owes_you' },
+    ],
   },
 ]
 
-export default function HomeScreen() {
+export default function GroupsScreen() {
   const insets = useSafeAreaInsets()
   const router = useRouter()
   const [filterVisible, setFilterVisible] = useState(false)
@@ -86,10 +68,6 @@ export default function HomeScreen() {
   const handleFilterSelect = (filter: FilterOption) => {
     setSelectedFilter(filter)
     setFilterVisible(false)
-  }
-
-  const handleShowSquaredUp = () => {
-    console.log('Show squared-up friends')
   }
 
   return (
@@ -132,9 +110,9 @@ export default function HomeScreen() {
           onFilterPress={() => setFilterVisible(true)}
         />
 
-        <FriendsList friends={MOCK_FRIENDS} />
+        <GroupsList groups={MOCK_GROUPS} />
 
-        <SquaredUpSection onPress={handleShowSquaredUp} />
+        <SquaredUpSection onPress={() => console.log('Show squared-up')} />
       </View>
 
       <AddExpenseButton onPress={() => console.log('Add expense')} />

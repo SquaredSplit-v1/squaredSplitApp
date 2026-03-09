@@ -46,10 +46,10 @@ function RootNavigator() {
       router.replace('/(auth)/authloading')
     } else if (user && inAuthGroup) {
       // Signed in but still in the auth group → leave
-      router.replace(hasCompletedOnboarding ? '/dashboard/dashboard' : '/onboarding')
+      router.replace(hasCompletedOnboarding ? '/(tabs)' : '/onboarding')
     } else if (user && inOnboardingGroup && hasCompletedOnboarding) {
-      // Already completed onboarding — skip straight to dashboard
-      router.replace('/dashboard/dashboard')
+      // Already completed onboarding — skip straight to tabs
+      router.replace('/(tabs)')
     }
   }, [user, isLoading, segments, hasCompletedOnboarding, router])
 
@@ -58,7 +58,6 @@ function RootNavigator() {
       <Stack.Screen name="(auth)" />
       <Stack.Screen name="onboarding" />
       <Stack.Screen name="(tabs)" />
-      <Stack.Screen name="dashboard" />
       <Stack.Screen
         name="modal"
         options={{ presentation: 'modal', title: 'Modal', headerShown: true }}
