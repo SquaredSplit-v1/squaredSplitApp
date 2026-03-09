@@ -1,37 +1,37 @@
-import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { useAuth } from '@/contexts/AuthContext';
-import { SquaredSplitLogo } from '@/components/svg/squared-split-logo';
+import { SquaredSplitLogo } from '@/components/svg/squared-split-logo'
+import { useAuthStore } from '@/stores/authStore'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
-  withTiming
-} from 'react-native-reanimated';
+  withTiming,
+} from 'react-native-reanimated'
 
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable)
 
 export default function HomeScreen() {
-  const { signOut } = useAuth();
-  const scale = useSharedValue(1);
-  const opacity = useSharedValue(1);
+  const signOut = useAuthStore((s) => s.signOut)
+  const scale = useSharedValue(1)
+  const opacity = useSharedValue(1)
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
     opacity: opacity.value,
-  }));
+  }))
 
   const handlePressIn = () => {
-    scale.value = withSpring(0.95, { damping: 15, stiffness: 300 });
-  };
+    scale.value = withSpring(0.95, { damping: 15, stiffness: 300 })
+  }
 
   const handlePressOut = () => {
-    scale.value = withSpring(1, { damping: 15, stiffness: 300 });
-  };
+    scale.value = withSpring(1, { damping: 15, stiffness: 300 })
+  }
 
   const handleSignOut = async () => {
-    opacity.value = withTiming(0.5, { duration: 200 });
-    await signOut();
-  };
+    opacity.value = withTiming(0.5, { duration: 200 })
+    await signOut()
+  }
 
   return (
     <View style={styles.container}>
@@ -55,7 +55,7 @@ export default function HomeScreen() {
         </AnimatedPressable>
       </View>
     </View>
-  );
+  )
 }
 
 const styles = StyleSheet.create({
@@ -110,4 +110,4 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-});
+})
