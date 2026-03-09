@@ -136,10 +136,7 @@ export default function LoginScreen() {
       const result = await sendOtp(formattedPhone)
 
       if (!result.success) {
-        const msg = result.retryAfter
-          ? `Too many attempts. Try again in ${result.retryAfter}s.`
-          : (result.error ?? 'Failed to send code.')
-        Alert.alert('Error', msg)
+        Alert.alert('Error', result.error ?? 'Failed to send code.')
         return
       }
 

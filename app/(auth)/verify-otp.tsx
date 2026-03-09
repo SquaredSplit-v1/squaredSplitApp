@@ -1,3 +1,4 @@
+import { resendOtp as resendOtpApi, verifyOtp as verifyOtpApi } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { Ionicons } from '@expo/vector-icons'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -97,15 +98,11 @@ export default function VerifyOTPScreen() {
     setOtpError(null)
 
     try {
-      const { data, error } = await supabase.auth.verifyOtp({
-        phone,
-        token: otpCode,
-        type: 'sms',
-      })
+      const result = await verifyOtpApi(phone, otpCode)
 
-      if (error) {
+      if (!result.success) {
         // Wrong / expired OTP — surface inline so the user can resend
-        setOtpError('Incorrect code. Please try again or resend a new one.')
+        setOtpError(result.error ?? 'Incorrect code. Please try again or resend a new one.')
         // Clear the entered digits and refocus first cell
         setOtp(new Array(OTP_LENGTH).fill(''))
         inputRefs.current[0]?.focus()
@@ -114,7 +111,10 @@ export default function VerifyOTPScreen() {
 
       // Session is hydrated by supabase.auth.verifyOtp automatically.
       // Check per-user onboarding flag from AsyncStorage.
-      const userId = data.user?.id ?? ''
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      const userId = session?.user?.id ?? ''
       const onboardingValue = await AsyncStorage.getItem(`${ONBOARDING_COMPLETE_KEY}:${userId}`)
       const hasCompletedOnboarding = onboardingValue === 'true'
 
@@ -138,10 +138,10 @@ export default function VerifyOTPScreen() {
     setOtp(new Array(OTP_LENGTH).fill(''))
 
     try {
-      const { error } = await supabase.auth.signInWithOtp({ phone })
+      const result = await resendOtpApi(phone)
 
-      if (error) {
-        Alert.alert('Error', error.message ?? 'Failed to resend code.')
+      if (!result.success) {
+        Alert.alert('Error', result.error ?? 'Failed to resend code.')
         return
       }
 
