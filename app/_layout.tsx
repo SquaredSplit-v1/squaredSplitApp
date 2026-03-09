@@ -10,6 +10,7 @@ import { Stack, useRouter, useSegments } from 'expo-router'
 import * as SplashScreen from 'expo-splash-screen'
 import { StatusBar } from 'expo-status-bar'
 import React, { useEffect } from 'react'
+import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import 'react-native-reanimated'
 import '../global.css'
 
@@ -38,23 +39,24 @@ function RootNavigator() {
     if (isLoading) return
 
     const inAuthGroup = segments[0] === '(auth)'
+    const inOnboardingGroup = segments[0] === 'onboarding'
 
     if (!user && !inAuthGroup) {
-      // Not signed in → go to auth loading / login
+      // Not signed in (includes landing on /onboarding without a session) → auth
       router.replace('/(auth)/authloading')
     } else if (user && inAuthGroup) {
-      // Signed in but still on an auth screen → go to dashboard
-      // (skip if we're on onboarding and haven't finished it yet)
-      const onOnboarding = (segments as string[])[1] === 'onboarding'
-      if (!onOnboarding || hasCompletedOnboarding) {
-        router.replace('/dashboard/dashboard')
-      }
+      // Signed in but still in the auth group → leave
+      router.replace(hasCompletedOnboarding ? '/dashboard/dashboard' : '/onboarding')
+    } else if (user && inOnboardingGroup && hasCompletedOnboarding) {
+      // Already completed onboarding — skip straight to dashboard
+      router.replace('/dashboard/dashboard')
     }
   }, [user, isLoading, segments, hasCompletedOnboarding, router])
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(auth)" />
+      <Stack.Screen name="onboarding" />
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="dashboard" />
       <Stack.Screen
@@ -88,9 +90,11 @@ export default function RootLayout() {
   if (!fontsLoaded) return null
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <RootNavigator />
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <RootNavigator />
+        <StatusBar style="auto" />
+      </ThemeProvider>
+    </GestureHandlerRootView>
   )
 }

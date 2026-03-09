@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { Ionicons } from '@expo/vector-icons'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import React, { useEffect, useRef, useState } from 'react'
@@ -120,7 +121,7 @@ export default function VerifyOTPScreen() {
       if (hasCompletedOnboarding) {
         router.replace('/(tabs)')
       } else {
-        router.replace('/(auth)/onboarding')
+        router.replace('/onboarding')
       }
     } catch {
       Alert.alert('Error', 'Something went wrong. Please try again.')
@@ -173,13 +174,13 @@ export default function VerifyOTPScreen() {
         </TouchableOpacity>
 
         {/* Header */}
-        <Text style={styles.title}>Verify your number</Text>
-        <Text style={styles.subtitle}>
-          Enter the 6-digit code sent to{'\n'}
-          <Text style={styles.phoneText}>{formatPhoneDisplay(phone || '')}</Text>
+        <Text style={styles.title}>
+          Please enter the verification code sent to your mobile number
         </Text>
+        <Text style={styles.phoneDisplay}>{formatPhoneDisplay(phone || '')}</Text>
 
         {/* OTP Input */}
+        <Text style={styles.otpLabel}>Verification code</Text>
         <View style={styles.otpContainer}>
           {otp.map((digit, index) => (
             <TextInput
@@ -205,7 +206,23 @@ export default function VerifyOTPScreen() {
         {/* Inline error */}
         {otpError ? <Text style={styles.errorText}>{otpError}</Text> : null}
 
-        {/* Verify Button */}
+        {/* Send again */}
+        <TouchableOpacity
+          style={styles.sendAgainButton}
+          onPress={handleResendOtp}
+          disabled={resendTimer > 0 || isLoading}
+        >
+          <Ionicons
+            name="refresh-circle"
+            size={22}
+            color={resendTimer > 0 ? '#9CA3AF' : '#3B82F6'}
+          />
+          <Text style={[styles.sendAgainText, resendTimer > 0 && styles.sendAgainTextDisabled]}>
+            {resendTimer > 0 ? `Send again in ${resendTimer}s` : 'Send again'}
+          </Text>
+        </TouchableOpacity>
+
+        {/* Save changes Button */}
         <TouchableOpacity
           style={[
             styles.verifyButton,
@@ -220,16 +237,6 @@ export default function VerifyOTPScreen() {
             <Text style={styles.verifyButtonText}>Verify</Text>
           )}
         </TouchableOpacity>
-
-        {/* Resend */}
-        <View style={styles.resendContainer}>
-          <Text style={styles.resendText}>Didn&apos;t receive the code? </Text>
-          <TouchableOpacity onPress={handleResendOtp} disabled={resendTimer > 0 || isLoading}>
-            <Text style={[styles.resendLink, resendTimer > 0 && styles.resendLinkDisabled]}>
-              {resendTimer > 0 ? `Resend in ${resendTimer}s` : 'Resend'}
-            </Text>
-          </TouchableOpacity>
-        </View>
       </View>
     </KeyboardAvoidingView>
   )
@@ -252,20 +259,22 @@ const styles = StyleSheet.create({
     color: '#6B6B6B',
   },
   title: {
-    fontSize: 28,
-    fontWeight: '600',
+    fontSize: 22,
+    fontWeight: '500',
     color: '#141414',
-    marginBottom: 12,
+    lineHeight: 30,
+    marginBottom: 8,
   },
-  subtitle: {
+  phoneDisplay: {
     fontSize: 16,
-    color: '#6B6B6B',
-    lineHeight: 24,
-    marginBottom: 40,
-  },
-  phoneText: {
     fontWeight: '600',
-    color: '#141414',
+    color: '#F97316',
+    marginBottom: 32,
+  },
+  otpLabel: {
+    fontSize: 13,
+    color: '#9CA3AF',
+    marginBottom: 10,
   },
   otpContainer: {
     flexDirection: 'row',
@@ -286,6 +295,15 @@ const styles = StyleSheet.create({
     color: '#141414',
   },
   otpInputFilled: {
+    borderColor: '#F9F0BF',
+    backgroundColor: '#F9F0BF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 0,
+  },
+  otpInputFocused: {
     borderColor: '#141414',
   },
   otpInputError: {
@@ -295,8 +313,21 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#EF4444',
     textAlign: 'center',
-    marginTop: -20,
-    marginBottom: 16,
+    marginBottom: 12,
+  },
+  sendAgainButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 24,
+  },
+  sendAgainText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#3B82F6',
+  },
+  sendAgainTextDisabled: {
+    color: '#9CA3AF',
   },
   verifyButton: {
     height: 52,
@@ -313,22 +344,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
-  },
-  resendContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  resendText: {
-    fontSize: 14,
-    color: '#6B6B6B',
-  },
-  resendLink: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#141414',
-  },
-  resendLinkDisabled: {
-    color: '#9CA3AF',
   },
 })
