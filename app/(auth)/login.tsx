@@ -1,5 +1,4 @@
 import { sendOtp } from '@/lib/auth'
-import { Asset } from 'expo-asset'
 import { useRouter } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import {
@@ -22,14 +21,13 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { SvgUri } from 'react-native-svg'
 
-const logoUri = Asset.fromModule(require('../../assets/app-icon.svg')).uri
-const loginBgUri = Asset.fromModule(require('../../assets/auth/Blur-Ellipse.svg')).uri
-const lightningUri = Asset.fromModule(require('../../assets/auth/lightning.svg')).uri
-const loveUri = Asset.fromModule(require('../../assets/auth/love.svg')).uri
-const manUri = Asset.fromModule(require('../../assets/auth/man.svg')).uri
-const womanUri = Asset.fromModule(require('../../assets/auth/woman.svg')).uri
+import AppIcon from '../../assets/app-icon.svg'
+import BlurEllipse from '../../assets/auth/Blur-Ellipse.svg'
+import Lightning from '../../assets/auth/lightning.svg'
+import Love from '../../assets/auth/love.svg'
+import Man from '../../assets/auth/man.svg'
+import Woman from '../../assets/auth/woman.svg'
 
 const MARQUEE_ITEM_WIDTH = 88
 const MARQUEE_GAP = 2
@@ -39,7 +37,7 @@ const MARQUEE_TOTAL_WIDTH = (MARQUEE_ITEM_WIDTH + MARQUEE_GAP) * 4 // 4 items
 function LoginGradientBlob() {
   return (
     <View style={styles.gradientBlobContainer}>
-      <SvgUri width="100%" height="100%" uri={loginBgUri} />
+      <BlurEllipse width="100%" height="100%" />
     </View>
   )
 }
@@ -48,7 +46,7 @@ function LoginGradientBlob() {
 function SmallLogo() {
   return (
     <View style={{ width: 140, height: 100 }}>
-      <SvgUri width="100%" height="100%" uri={logoUri} />
+      <AppIcon width="100%" height="100%" />
     </View>
   )
 }
@@ -73,14 +71,14 @@ function Marquee() {
     transform: [{ translateX: translateX.value }],
   }))
 
-  const items = [lightningUri, womanUri, loveUri, manUri, lightningUri, womanUri, loveUri, manUri]
+  const items = [Lightning, Woman, Love, Man, Lightning, Woman, Love, Man]
 
   return (
     <View style={styles.marqueeContainer}>
       <Animated.View style={[styles.marqueeContent, animatedStyle]}>
-        {items.map((uri, index) => (
+        {items.map((SvgComponent, index) => (
           <View key={index} style={styles.marqueeItem}>
-            <SvgUri width={88} height={88} uri={uri} />
+            <SvgComponent width={88} height={88} />
           </View>
         ))}
       </Animated.View>

@@ -44,19 +44,28 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event: AuthChangeEvent, s: Session | null) => {
-      set({ session: s, user: s?.user ?? null, isLoading: false })
-
       switch (event) {
         case 'SIGNED_IN':
         case 'TOKEN_REFRESHED':
           if (s?.user) {
             const onboarded = await loadOnboardingFlag(s.user.id)
-            set({ hasCompletedOnboarding: onboarded })
+            set({
+              session: s,
+              user: s.user,
+              hasCompletedOnboarding: onboarded,
+              isLoading: false,
+            })
+          } else {
+            set({ session: s, user: null, isLoading: false })
           }
           break
 
         case 'SIGNED_OUT':
-          set({ hasCompletedOnboarding: false })
+          set({ session: null, user: null, hasCompletedOnboarding: false, isLoading: false })
+          break
+
+        default:
+          set({ session: s, user: s?.user ?? null, isLoading: false })
           break
       }
     })

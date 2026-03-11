@@ -1,9 +1,7 @@
-import { Asset } from 'expo-asset'
 import React from 'react'
 import { StyleSheet, View } from 'react-native'
-import { SvgUri } from 'react-native-svg'
 
-const loginBgUri = Asset.fromModule(require('../../assets/auth/Blur-Ellipse.svg')).uri
+import BlurEllipse from '../../assets/auth/Blur-Ellipse.svg'
 
 /**
  * Blurred gradient ellipse positioned behind the login screen content.
@@ -11,7 +9,7 @@ const loginBgUri = Asset.fromModule(require('../../assets/auth/Blur-Ellipse.svg'
 export function LoginGradientBlob() {
   return (
     <View style={styles.container}>
-      <SvgUri width="100%" height="100%" uri={loginBgUri} />
+      <BlurEllipse width="100%" height="100%" />
     </View>
   )
 }
