@@ -35,15 +35,15 @@ const floatingImages = [
 ]
 
 const IMAGE_POSITIONS = [
-  { top: 0.02, left: 0.75, size: 72, rotation: '8deg' },
-  { top: 0.04, left: 0.05, size: 64, rotation: '-6deg' },
-  { top: 0.14, left: 0.35, size: 90, rotation: '3deg' },
-  { top: 0.24, left: 0.05, size: 80, rotation: '-4deg' },
-  { top: 0.22, left: 0.78, size: 95, rotation: '6deg' },
-  { top: 0.36, left: 0.22, size: 65, rotation: '-8deg' },
-  { top: 0.35, left: 0.62, size: 60, rotation: '5deg' },
-  { top: 0.44, left: 0.72, size: 85, rotation: '-3deg' },
-  { top: 0.46, left: 0.05, size: 70, rotation: '7deg' },
+  { top: 0.12, left: 0.75, size: 72, rotation: '8deg' },
+  { top: 0.14, left: 0.05, size: 64, rotation: '-6deg' },
+  { top: 0.24, left: 0.35, size: 90, rotation: '3deg' },
+  { top: 0.34, left: 0.05, size: 80, rotation: '-4deg' },
+  { top: 0.36, left: 0.7, size: 95, rotation: '6deg' },
+  { top: 0.46, left: 0.22, size: 65, rotation: '-8deg' },
+  { top: 0.45, left: 0.46, size: 60, rotation: '5deg' },
+  { top: 0.57, left: 0.62, size: 85, rotation: '-3deg' },
+  { top: 0.56, left: 0.05, size: 70, rotation: '7deg' },
 ]
 
 const slides = [
