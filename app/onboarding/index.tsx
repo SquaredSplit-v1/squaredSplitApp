@@ -1,7 +1,7 @@
 import { useAuthStore } from '@/stores/authStore'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useRouter } from 'expo-router'
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   Dimensions,
   Image,
@@ -9,15 +9,10 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from 'react-native'
-import { Gesture, GestureDetector } from 'react-native-gesture-handler'
-import Animated, {
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from 'react-native-reanimated'
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window')
@@ -65,7 +60,6 @@ const slides = [
 ]
 
 const SLIDE_COUNT = slides.length
-const SPRING_CONFIG = { damping: 22, stiffness: 160 }
 
 function FloatingImages() {
   return (
@@ -188,44 +182,57 @@ function SlideContent({ slide, isLast, insets, onAction, activeIndex }: SlideCon
   )
 }
 
+interface FadeSlideProps {
+  slide: (typeof slides)[number]
+  index: number
+  activeIndex: number
+  isLast: boolean
+  insets: { top: number; bottom: number }
+  onAction: () => void
+}
+
+function FadeSlide({ slide, index, activeIndex, isLast, insets, onAction }: FadeSlideProps) {
+  const isActive = index === activeIndex
+  const opacity = useSharedValue(isActive ? 1 : 0)
+
+  useEffect(() => {
+    opacity.value = withTiming(isActive ? 1 : 0, { duration: 400 })
+  }, [isActive, opacity])
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    zIndex: isActive ? 1 : 0,
+  }))
+
+  return (
+    <Animated.View
+      style={[StyleSheet.absoluteFillObject, animatedStyle]}
+      pointerEvents={isActive ? 'auto' : 'none'}
+    >
+      <SlideContent
+        slide={slide}
+        isActive={isActive}
+        isLast={isLast}
+        insets={insets}
+        onAction={onAction}
+        activeIndex={activeIndex}
+      />
+    </Animated.View>
+  )
+}
+
 export default function OnboardingScreen() {
   const insets = useSafeAreaInsets()
   const router = useRouter()
   const completeOnboarding = useAuthStore((s) => s.completeOnboarding)
 
   const [activeIndex, setActiveIndex] = useState(0)
-  const translateX = useSharedValue(0)
 
-  const panGesture = Gesture.Pan()
-    .activeOffsetX([-10, 10])
-    .onUpdate((event) => {
-      const base = -activeIndex * SCREEN_WIDTH
-      const raw = base + event.translationX
-      const maxLeft = -(SLIDE_COUNT - 1) * SCREEN_WIDTH
-      // add resistance at boundaries
-      if (raw > 0) {
-        translateX.value = raw * 0.2
-      } else if (raw < maxLeft) {
-        translateX.value = maxLeft + (raw - maxLeft) * 0.2
-      } else {
-        translateX.value = raw
-      }
-    })
-    .onEnd((event) => {
-      const threshold = SCREEN_WIDTH * 0.25
-      let next = activeIndex
-      if (event.translationX < -threshold || event.velocityX < -600) {
-        next = Math.min(activeIndex + 1, SLIDE_COUNT - 1)
-      } else if (event.translationX > threshold || event.velocityX > 600) {
-        next = Math.max(activeIndex - 1, 0)
-      }
-      translateX.value = withSpring(-next * SCREEN_WIDTH, SPRING_CONFIG)
-      runOnJS(setActiveIndex)(next)
-    })
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.value }],
-  }))
+  const handleScreenTap = () => {
+    if (activeIndex < SLIDE_COUNT - 1) {
+      setActiveIndex((prev) => prev + 1)
+    }
+  }
 
   const handleAction = async () => {
     await completeOnboarding()
@@ -235,23 +242,21 @@ export default function OnboardingScreen() {
   const isLast = activeIndex === SLIDE_COUNT - 1
 
   return (
-    <View style={styles.container}>
-      <GestureDetector gesture={panGesture}>
-        <Animated.View style={[styles.slidesRow, animatedStyle]}>
-          {slides.map((slide, index) => (
-            <SlideContent
-              key={index}
-              slide={slide}
-              isActive={index === activeIndex}
-              isLast={isLast}
-              insets={insets}
-              onAction={handleAction}
-              activeIndex={activeIndex}
-            />
-          ))}
-        </Animated.View>
-      </GestureDetector>
-    </View>
+    <TouchableWithoutFeedback onPress={handleScreenTap}>
+      <View style={styles.container}>
+        {slides.map((slide, index) => (
+          <FadeSlide
+            key={index}
+            index={index}
+            activeIndex={activeIndex}
+            slide={slide}
+            isLast={isLast}
+            insets={insets}
+            onAction={handleAction}
+          />
+        ))}
+      </View>
+    </TouchableWithoutFeedback>
   )
 }
 
@@ -259,11 +264,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     overflow: 'hidden',
-  },
-  slidesRow: {
-    flexDirection: 'row',
-    width: SCREEN_WIDTH * SLIDE_COUNT,
-    flex: 1,
   },
   slide: {
     width: SCREEN_WIDTH,
