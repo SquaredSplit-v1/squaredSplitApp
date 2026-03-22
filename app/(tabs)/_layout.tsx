@@ -1,7 +1,8 @@
+import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { Redirect, Tabs } from 'expo-router'
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Svg, { Path } from 'react-native-svg'
@@ -98,7 +99,12 @@ const ICONS: Record<string, React.FC<{ active: boolean }>> = {
 
 /* ─── Custom floating tab bar ───────────────────────────── */
 
-function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+function CustomTabBar({
+  state,
+  descriptors,
+  navigation,
+  avatarUrl,
+}: BottomTabBarProps & { avatarUrl: string | null }) {
   const insets = useSafeAreaInsets()
 
   return (
@@ -132,7 +138,10 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 
               {route.name === 'account' ? (
                 <View style={[styles.avatar, isActive && styles.avatarActive]}>
-                  <Image source={akAvatar} style={styles.avatarImg} />
+                  <Image
+                    source={avatarUrl ? { uri: avatarUrl } : akAvatar}
+                    style={styles.avatarImg}
+                  />
                 </View>
               ) : Icon ? (
                 <Icon active={isActive} />
@@ -152,12 +161,46 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 export default function TabLayout() {
   const session = useAuthStore((s) => s.session)
   const isLoading = useAuthStore((s) => s.isLoading)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function fetchOrUpdateProfile() {
+      if (!session) return
+
+      try {
+        console.log('Calling upsert-profile edge function...')
+        const { data, error } = await supabase.functions.invoke('upsert-profile', {
+          body: {
+            full_name: 'John Doe', // Providing a default name to satisfy the function requirements
+            avatar_url: 'https://i.pravatar.cc/150?u=' + session.user.id,
+          },
+        })
+
+        if (error) {
+          console.error('Error calling upsert-profile:', error)
+          return
+        }
+
+        console.log('Successfully called upsert-profile:', data)
+        if (data?.profile?.avatar_url) {
+          setAvatarUrl(data.profile.avatar_url)
+        }
+      } catch (err) {
+        console.error('Exception calling upsert-profile:', err)
+      }
+    }
+
+    fetchOrUpdateProfile()
+  }, [session])
 
   if (isLoading) return null
   if (!session) return <Redirect href="/(auth)/login" />
 
   return (
-    <Tabs tabBar={(props) => <CustomTabBar {...props} />} screenOptions={{ headerShown: false }}>
+    <Tabs
+      tabBar={(props) => <CustomTabBar {...props} avatarUrl={avatarUrl} />}
+      screenOptions={{ headerShown: false }}
+    >
       <Tabs.Screen name="index" options={{ title: 'Home' }} />
       <Tabs.Screen name="groups" options={{ title: 'Groups' }} />
       <Tabs.Screen name="ai" options={{ title: 'AI Assist' }} />
