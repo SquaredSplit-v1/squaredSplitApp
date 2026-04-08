@@ -1,56 +1,55 @@
-import { ExpoConfig, ConfigContext } from "expo/config";
+import { ExpoConfig, ConfigContext } from 'expo/config'
 
 // Determine environment from APP_ENV or default to development
-const APP_ENV = process.env.APP_ENV ?? "development";
+const APP_ENV = process.env.APP_ENV ?? 'development'
 
 const envConfig = {
   development: {
-    name: "SquaredSplit (Dev)",
-    slug: "squaredSplitApp",
-    scheme: "squaredsplitapp.dev",
-    icon: "./assets/images/icon.png",
-    bundleIdentifier: "com.sqsplit.squaredSplitApp.dev",
-    package: "com.sqsplit.squaredSplitApp.dev",
+    name: 'SquaredSplit (Dev)',
+    slug: 'squaredSplitApp',
+    scheme: 'squaredsplitapp.dev',
+    icon: './assets/images/icon.png',
+    bundleIdentifier: 'com.sqsplit.squaredSplitApp.dev',
+    package: 'com.sqsplit.squaredSplitApp.dev',
     eas: {
-      projectId: "d74c8f5a-fa0d-4949-b5b6-b36310280603",
+      projectId: 'd74c8f5a-fa0d-4949-b5b6-b36310280603',
     },
   },
   staging: {
-    name: "SquaredSplit (Staging)",
-    slug: "squaredSplitApp",
-    scheme: "squaredsplitapp.staging",
-    icon: "./assets/images/icon.png",
-    bundleIdentifier: "com.sqsplit.squaredSplitApp.staging",
-    package: "com.sqsplit.squaredSplitApp.staging",
+    name: 'SquaredSplit (Staging)',
+    slug: 'squaredSplitApp',
+    scheme: 'squaredsplitapp.staging',
+    icon: './assets/images/icon.png',
+    bundleIdentifier: 'com.sqsplit.squaredSplitApp.staging',
+    package: 'com.sqsplit.squaredSplitApp.staging',
     eas: {
-      projectId: "d74c8f5a-fa0d-4949-b5b6-b36310280603",
+      projectId: 'd74c8f5a-fa0d-4949-b5b6-b36310280603',
     },
   },
   production: {
-    name: "SquaredSplit",
-    slug: "squaredSplitApp",
-    scheme: "squaredsplitapp",
-    icon: "./assets/images/icon.png",
-    bundleIdentifier: "com.sqsplit.squaredSplitApp",
-    package: "com.sqsplit.squaredSplitApp",
+    name: 'SquaredSplit',
+    slug: 'squaredSplitApp',
+    scheme: 'squaredsplitapp',
+    icon: './assets/images/icon.png',
+    bundleIdentifier: 'com.sqsplit.squaredSplitApp',
+    package: 'com.sqsplit.squaredSplitApp',
     eas: {
-      projectId: "d74c8f5a-fa0d-4949-b5b6-b36310280603",
+      projectId: 'd74c8f5a-fa0d-4949-b5b6-b36310280603',
     },
   },
-} as const;
+} as const
 
-const currentEnv =
-  envConfig[APP_ENV as keyof typeof envConfig] ?? envConfig.development;
+const currentEnv = envConfig[APP_ENV as keyof typeof envConfig] ?? envConfig.development
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: currentEnv.name,
   slug: currentEnv.slug,
-  version: "1.0.0",
-  orientation: "portrait",
+  version: '1.0.0',
+  orientation: 'portrait',
   icon: currentEnv.icon,
   scheme: currentEnv.scheme,
-  userInterfaceStyle: "automatic",
+  userInterfaceStyle: 'automatic',
   newArchEnabled: true,
   ios: {
     supportsTablet: true,
@@ -61,37 +60,37 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     adaptiveIcon: {
-      backgroundColor: "#E6F4FE",
-      foregroundImage: "./assets/images/android-icon-foreground.png",
-      backgroundImage: "./assets/images/android-icon-background.png",
-      monochromeImage: "./assets/images/android-icon-monochrome.png",
+      backgroundColor: '#E6F4FE',
+      foregroundImage: './assets/images/android-icon-foreground.png',
+      backgroundImage: './assets/images/android-icon-background.png',
+      monochromeImage: './assets/images/android-icon-monochrome.png',
     },
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
     package: currentEnv.package,
   },
   web: {
-    bundler: "metro",
-    output: "static",
-    favicon: "./assets/images/favicon.png",
+    bundler: 'metro',
+    output: 'static',
+    favicon: './assets/images/favicon.png',
   },
   updates: {
-    url: "https://u.expo.dev/d74c8f5a-fa0d-4949-b5b6-b36310280603"
+    url: 'https://u.expo.dev/d74c8f5a-fa0d-4949-b5b6-b36310280603',
   },
   runtimeVersion: {
-    policy: "appVersion"
+    policy: 'appVersion',
   },
   plugins: [
-    "expo-router",
+    'expo-router',
     [
-      "expo-splash-screen",
+      'expo-splash-screen',
       {
-        image: "./assets/images/splash-icon.png",
+        image: './assets/images/splash-icon.png',
         imageWidth: 200,
-        resizeMode: "contain",
-        backgroundColor: "#ffffff",
+        resizeMode: 'contain',
+        backgroundColor: '#ffffff',
         dark: {
-          backgroundColor: "#000000",
+          backgroundColor: '#000000',
         },
       },
     ],
@@ -105,5 +104,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     eas: currentEnv.eas,
     APP_ENV,
   },
-  owner: "sqsplit",
-});
+  owner: 'sqsplit',
+})
+
+// app.config.ts — TEMPORARY verification, remove after confirming
+console.log('🔑 SUPABASE_URL:', process.env.EXPO_PUBLIC_SUPABASE_URL ? '✅ Found' : '❌ Missing')
+console.log('🔑 ANON_KEY:', process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ? '✅ Found' : '❌ Missing')
+console.log(
+  '🔑 SERVICE_ROLE_KEY:',
+  process.env.EXPO_PUBLIC_SERVICE_ROLE_KEY ? '✅ Found' : '❌ Missing'
+)
