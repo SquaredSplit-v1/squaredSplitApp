@@ -1,7 +1,8 @@
-import { supabase } from '@/lib/supabase'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { AuthChangeEvent, Session, User } from '@supabase/supabase-js'
 import { create } from 'zustand'
+
+import { supabase } from '@/lib/supabase'
 
 const ONBOARDING_COMPLETE_KEY = '@squaredsplit/onboarding_complete'
 

@@ -1,9 +1,10 @@
-import React from "react";
-import { FlatList, StyleSheet, Text, View } from "react-native";
-import ActivityItem, { Activity } from "./ActivityItem";
+import React from 'react'
+import { FlatList, StyleSheet, Text, View } from 'react-native'
+
+import ActivityItem, { Activity } from './ActivityItem'
 
 interface ActivityListProps {
-  activities: Activity[];
+  activities: Activity[]
 }
 
 export default function ActivityList({ activities }: ActivityListProps) {
@@ -12,13 +13,13 @@ export default function ActivityList({ activities }: ActivityListProps) {
       <Text style={styles.title}>Recent activities</Text>
       <FlatList
         data={activities}
-        keyExtractor={(item) => item.id}
+        keyExtractor={item => item.id}
         renderItem={({ item }) => <ActivityItem item={item} />}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
       />
     </View>
-  );
+  )
 }
 
 const styles = StyleSheet.create({
@@ -26,10 +27,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    color: "#141414",
-    fontFamily: "Nunito_600SemiBold",
+    color: '#141414',
+    fontFamily: 'Nunito_600SemiBold',
     fontSize: 22,
-    fontWeight: "600",
+    fontWeight: '600',
     lineHeight: 26.4,
     letterSpacing: -0.44,
     marginBottom: 8,
@@ -37,4 +38,4 @@ const styles = StyleSheet.create({
   listContent: {
     paddingBottom: 120,
   },
-});
+})

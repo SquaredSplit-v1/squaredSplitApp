@@ -1,24 +1,25 @@
-import React from "react";
-import { FlatList, StyleSheet, View } from "react-native";
-import GroupItem from "./GroupItem";
-import type { Group } from "./types";
+import React from 'react'
+import { FlatList, StyleSheet, View } from 'react-native'
+
+import GroupItem from './GroupItem'
+import type { Group } from './types'
 
 interface GroupsListProps {
-  groups: Group[];
+  groups: Group[]
 }
 
 export default function GroupsList({ groups }: GroupsListProps) {
   return (
     <FlatList
       data={groups}
-      keyExtractor={(item) => item.id}
+      keyExtractor={item => item.id}
       renderItem={({ item }) => <GroupItem group={item} />}
       ItemSeparatorComponent={() => <View style={styles.separator} />}
       showsVerticalScrollIndicator={false}
       style={styles.list}
       contentContainerStyle={styles.listContent}
     />
-  );
+  )
 }
 
 const styles = StyleSheet.create({
@@ -30,7 +31,7 @@ const styles = StyleSheet.create({
   },
   separator: {
     height: 1,
-    backgroundColor: "#F3F4F5",
+    backgroundColor: '#F3F4F5',
     marginLeft: 56,
   },
-});
+})

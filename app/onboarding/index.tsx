@@ -1,4 +1,3 @@
-import { useAuthStore } from '@/stores/authStore'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useRouter } from 'expo-router'
 import React, { useEffect, useState } from 'react'
@@ -14,6 +13,8 @@ import {
 } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+
+import { useAuthStore } from '@/store/authStore'
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window')
 
@@ -224,13 +225,13 @@ function FadeSlide({ slide, index, activeIndex, isLast, insets, onAction }: Fade
 export default function OnboardingScreen() {
   const insets = useSafeAreaInsets()
   const router = useRouter()
-  const completeOnboarding = useAuthStore((s) => s.completeOnboarding)
+  const completeOnboarding = useAuthStore(s => s.completeOnboarding)
 
   const [activeIndex, setActiveIndex] = useState(0)
 
   const handleScreenTap = () => {
     if (activeIndex < SLIDE_COUNT - 1) {
-      setActiveIndex((prev) => prev + 1)
+      setActiveIndex(prev => prev + 1)
     }
   }
 

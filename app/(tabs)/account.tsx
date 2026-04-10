@@ -1,11 +1,12 @@
-import { useAuthStore } from '@/stores/authStore'
 import React from 'react'
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
+import { useAuthStore } from '@/store/authStore'
+
 export default function AccountScreen() {
   const insets = useSafeAreaInsets()
-  const signOut = useAuthStore((s) => s.signOut)
+  const signOut = useAuthStore(s => s.signOut)
 
   return (
     <View

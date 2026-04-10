@@ -1,5 +1,3 @@
-import { resendOtp as resendOtpApi, verifyOtp as verifyOtpApi } from '@/lib/auth'
-import { supabase } from '@/lib/supabase'
 import { Ionicons } from '@expo/vector-icons'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useLocalSearchParams, useRouter } from 'expo-router'
@@ -16,6 +14,9 @@ import {
   View,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+
+import { resendOtp as resendOtpApi, verifyOtp as verifyOtpApi } from '@/lib/auth'
+import { supabase } from '@/lib/supabase'
 
 const ONBOARDING_COMPLETE_KEY = '@squaredsplit/onboarding_complete'
 
@@ -185,7 +186,7 @@ export default function VerifyOTPScreen() {
           {otp.map((digit, index) => (
             <TextInput
               key={index}
-              ref={(ref) => {
+              ref={ref => {
                 inputRefs.current[index] = ref
               }}
               style={[
@@ -194,7 +195,7 @@ export default function VerifyOTPScreen() {
                 otpError ? styles.otpInputError : null,
               ]}
               value={digit}
-              onChangeText={(value) => handleOtpChange(value, index)}
+              onChangeText={value => handleOtpChange(value, index)}
               onKeyPress={({ nativeEvent }) => handleKeyPress(nativeEvent.key, index)}
               keyboardType="number-pad"
               maxLength={1}
