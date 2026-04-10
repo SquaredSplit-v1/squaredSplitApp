@@ -1,50 +1,211 @@
-# Welcome to your Expo app 👋
+# SquaredSplit
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+> Split expenses fairly. Settle up simply.
 
-## Get started
+A React Native mobile app built with Expo and Supabase for splitting bills,
+tracking shared expenses, and simplifying group debts.
 
-1. Install dependencies
+---
 
-   ```bash
-   npm install
-   ```
+## Tech Stack
 
-2. Start the app
+| Layer | Technology |
+|---|---|
+| Mobile | React Native + Expo SDK 52 |
+| Routing | Expo Router v3 (file-based) |
+| Backend | Supabase (Auth · Postgres · Storage · Edge Functions) |
+| State | Zustand |
+| Styling | NativeWind (Tailwind for RN) |
+| Build | EAS Build + EAS Update (OTA) |
+| CI/CD | GitHub Actions + EAS |
 
-   ```bash
-   npx expo start
-   ```
+---
 
-In the output, you'll find options to open the app in a
+## Prerequisites
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+- Node.js 18+
+- [Expo CLI](https://docs.expo.dev/get-started/installation/): `npm install -g expo-cli`
+- [EAS CLI](https://docs.expo.dev/eas/): `npm install -g eas-cli`
+- Xcode (iOS) or Android Studio (Android)
+- A Supabase account (project already provisioned — see team lead for access)
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+---
 
-## Get a fresh project
+## Environment Setup
 
-When you're ready, run:
+This project uses separate `.env` files per environment.
+**Never commit `.env.*` files (except `.env.example`) to the repository.**
+
+### Environment Files
+
+| File | Purpose | Committed? |
+|---|---|---|
+| `.env` | Local development fallback | ❌ No |
+| `.env.dev` | Dev Supabase branch | ❌ No |
+| `.env.staging` | Staging Supabase branch | ❌ No |
+| `.env.production` | Production Supabase branch | ❌ No |
+| `.env.example` | Template with all variable names | ✅ Yes |
+
+### Required Variables
+
+Copy `.env.example` and fill in the values (get them from the team lead or
+Supabase dashboard → Project Settings → API):
 
 ```bash
-npm run reset-project
+cp .env.example .env.dev
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+**Client-side variables** (must use `EXPO_PUBLIC_` prefix to be accessible in app code):
 
-## Learn more
+```bash
+EXPO_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+EXPO_PUBLIC_APP_ENV=development
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+**Build-time only variables** (no prefix — used in `app.config.ts` and build
+scripts only, never in app bundle):
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+```bash
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
 
-## Join the community
+---
 
-Join our community of developers creating universal apps.
+## Supabase Setup
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+This project uses **Supabase Branching** with three persistent branches:
+
+| Branch | Maps to | Supabase Branch |
+|---|---|---|
+| `main` | Production | `main` (prod) |
+| `staging` | Staging | `staging` |
+| `dev` | Local + dev builds | `dev` |
+
+Supabase Pro is required for branching (already subscribed).
+GitHub is connected to Supabase for auto branch preview environments.
+
+To run migrations locally:
+
+```bash
+npx supabase db push --db-url "$EXPO_PUBLIC_SUPABASE_URL"
+```
+
+---
+
+## EAS Build & Secrets
+
+Environment variables for cloud builds are stored in **EAS Secrets** —
+they are never committed to the repo.
+
+### Verify secrets are configured
+
+```bash
+eas secret:list
+```
+
+### Build profiles
+
+| Profile | Branch | Environment | Purpose |
+|---|---|---|---|
+| `development` | `dev` | Dev Supabase | Local dev client build |
+| `staging` | `staging` | Staging Supabase | Internal testing / QA |
+| `production` | `main` | Prod Supabase | App Store / Play Store |
+
+### Trigger a build
+
+```bash
+# Development build (installs on device via dev client)
+eas build --profile development --platform all
+
+# Staging build (for QA testing)
+eas build --profile staging --platform all
+
+# Production build (for store submission)
+eas build --profile production --platform all
+```
+
+### OTA Updates (EAS Update)
+
+Over-the-air JS bundle updates are deployed via EAS Update.
+No new native build required for JS-only changes.
+
+```bash
+# Push update to staging channel
+eas update --branch staging --message "fix: OTP screen keyboard handling"
+
+# Push update to production channel
+eas update --branch production --message "feat: groups tab"
+```
+
+---
+
+## Local Development
+
+### 1. Install dependencies
+
+```bash
+npm install
+```
+
+### 2. Start the app
+
+```bash
+# With dev Supabase environment
+npx expo start --env-file .env.dev
+```
+
+Press:
+- `i` — iOS Simulator
+- `a` — Android Emulator
+- Scan QR — Expo Go (limited, use dev build for Supabase auth)
+
+> ⚠️ Supabase Auth (phone OTP) requires a **development build**, not Expo Go.
+> Run `eas build --profile development` once and install the `.ipa`/`.apk` on your device.
+
+---
+
+## Branch Strategy
+main ← production releases only (PRs from staging)
+staging ← QA and client preview (PRs from dev)
+dev ← integration branch (PRs from feature/* branches)
+feature/SS-XXX-short-title ← individual feature branches
+
+
+### Workflow
+
+```bash
+# 1. Cut a feature branch from dev
+git checkout dev && git pull
+git checkout -b feature/SS-042-group-invite-qr
+
+# 2. Build, commit, push
+git push origin feature/SS-042-group-invite-qr
+
+# 3. Open PR → dev
+# 4. After review and merge → staging → main
+```
+
+---
+
+## Project Structure
+squaredsplit/
+├── app/ # Expo Router screens (file-based routing)
+│ ├── (auth)/ # Auth screens (login, OTP, onboarding)
+│ └── (app)/ # Main app screens (tabs + modals)
+├── components/ # Shared UI components
+├── hooks/ # Custom React hooks
+├── lib/
+│ ├── supabase.ts # Supabase client initialisation
+│ └── utils/ # Utility functions (formatCurrency, etc.)
+├── store/ # Zustand state stores
+├── types/ # TypeScript types and DB schema types
+├── supabase/
+│ └── migrations/ # Supabase DB migration files
+├── .env.example # ← Copy this and fill in values
+├── app.config.ts # Expo app config (reads env vars)
+├── eas.json # EAS build profiles
+└── README.md
+
+
+---

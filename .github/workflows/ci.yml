@@ -1,19 +1,19 @@
-name: CI - Code Quality
+name: CI — Lint & Type Check
+
 on:
-  push:
-    branches: [dev, staging, main]
   pull_request:
-    branches: [staging, main]
+    branches: [dev, staging, main]
+
 jobs:
-  quality:
-    name: Lint & Typescript Check
+  lint-and-typecheck:
+    name: Lint & TypeCheck
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -22,8 +22,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run ESLint
-        run: npm run lint
-
-      - name: TypeScript Check
+      - name: TypeScript check
         run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
