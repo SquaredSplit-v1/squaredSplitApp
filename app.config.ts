@@ -81,6 +81,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     policy: 'appVersion',
   },
   plugins: [
+    'expo-secure-store',
     'expo-router',
     [
       'expo-splash-screen',
