@@ -44,7 +44,13 @@ export default function GroupItem({ group }: GroupItemProps) {
       >
         {/* Avatar */}
         <View style={styles.avatarContainer}>
-          <Image source={group.avatar} style={styles.avatar} />
+          {group.avatar ? (
+            <Image source={group.avatar} style={styles.avatar} />
+          ) : (
+            <View style={[styles.avatar, styles.avatarPlaceholder]}>
+              <Text style={styles.avatarInitial}>{group.name[0]}</Text>
+            </View>
+          )}
           {group.emoji && (
             <View style={styles.emojiOverlay}>
               <Text style={styles.emojiText}>{group.emoji}</Text>
@@ -114,6 +120,16 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
+  },
+  avatarPlaceholder: {
+    backgroundColor: '#D4E7FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInitial: {
+    fontFamily: 'Nunito_700Bold',
+    fontSize: 18,
+    color: '#141414',
   },
   emojiOverlay: {
     position: 'absolute',

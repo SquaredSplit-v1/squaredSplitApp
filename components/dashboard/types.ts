@@ -5,7 +5,7 @@ export type BalanceType = 'owes_you' | 'you_owe'
 export interface Friend {
   id: string
   name: string
-  avatar: ImageSourcePropType // Can be a local image (require) or a remote URL
+  avatar: ImageSourcePropType | null // Can be a local image (require) or a remote URL
   subtitle: string
   subtitleType?: 'default' | 'alert' | 'upcoming'
   balanceType: BalanceType
@@ -21,7 +21,7 @@ export interface GroupMember {
 export interface Group {
   id: string
   name: string
-  avatar: ImageSourcePropType
+  avatar: ImageSourcePropType | null
   emoji?: string
   balanceType: BalanceType
   amount: number
