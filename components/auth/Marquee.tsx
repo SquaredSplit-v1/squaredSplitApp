@@ -1,4 +1,3 @@
-import { BoxIcon, TickIcon } from '@/components/svg'
 import React, { useEffect } from 'react'
 import { StyleSheet, View } from 'react-native'
 import Animated, {
@@ -8,6 +7,8 @@ import Animated, {
   withRepeat,
   withTiming,
 } from 'react-native-reanimated'
+
+import { BoxIcon, TickIcon } from '@/components/svg'
 
 const MARQUEE_ITEM_WIDTH = 88
 const MARQUEE_GAP = 20

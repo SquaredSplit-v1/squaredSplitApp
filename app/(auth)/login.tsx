@@ -1,4 +1,3 @@
-import { sendOtp } from '@/lib/auth'
 import { useRouter } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import {
@@ -21,6 +20,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+
+import { sendOtp } from '@/lib/auth'
 
 import AppIcon from '../../assets/app-icon.svg'
 import BlurEllipse from '../../assets/auth/Blur-Ellipse.svg'

@@ -1,4 +1,3 @@
-import { useAuthStore } from '@/stores/authStore'
 import {
   Nunito_400Regular,
   Nunito_600SemiBold,
@@ -15,6 +14,7 @@ import 'react-native-reanimated'
 import '../global.css'
 
 import { useColorScheme } from '@/hooks/use-color-scheme'
+import { useAuthStore } from '@/store/authStore' // ← now correctly after external imports
 
 // Keep splash screen visible while fonts load
 SplashScreen.preventAutoHideAsync()
@@ -28,9 +28,9 @@ export const unstable_settings = {
  * the user to the correct route group.
  */
 function RootNavigator() {
-  const user = useAuthStore((s) => s.user)
-  const isLoading = useAuthStore((s) => s.isLoading)
-  const hasCompletedOnboarding = useAuthStore((s) => s.hasCompletedOnboarding)
+  const user = useAuthStore(s => s.user)
+  const isLoading = useAuthStore(s => s.isLoading)
+  const hasCompletedOnboarding = useAuthStore(s => s.hasCompletedOnboarding)
   const router = useRouter()
   const segments = useSegments()
 
@@ -68,7 +68,7 @@ function RootNavigator() {
 
 export default function RootLayout() {
   const colorScheme = useColorScheme()
-  const initialize = useAuthStore((s) => s.initialize)
+  const initialize = useAuthStore(s => s.initialize)
   const [fontsLoaded] = useFonts({
     Nunito_400Regular,
     Nunito_600SemiBold,
@@ -78,7 +78,7 @@ export default function RootLayout() {
   useEffect(() => {
     const unsubscribe = initialize()
     return unsubscribe
-  }, [])
+  }, [initialize])
 
   useEffect(() => {
     if (fontsLoaded) {

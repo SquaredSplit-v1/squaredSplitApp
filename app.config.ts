@@ -108,9 +108,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
 })
 
 // app.config.ts — TEMPORARY verification, remove after confirming
-console.log('🔑 SUPABASE_URL:', process.env.EXPO_PUBLIC_SUPABASE_URL ? '✅ Found' : '❌ Missing')
+/*console.log('🔑 SUPABASE_URL:', process.env.EXPO_PUBLIC_SUPABASE_URL ? '✅ Found' : '❌ Missing')
 console.log('🔑 ANON_KEY:', process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ? '✅ Found' : '❌ Missing')
 console.log(
   '🔑 SERVICE_ROLE_KEY:',
   process.env.EXPO_PUBLIC_SERVICE_ROLE_KEY ? '✅ Found' : '❌ Missing'
-)
+)*/

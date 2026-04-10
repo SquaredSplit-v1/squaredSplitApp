@@ -1,3 +1,7 @@
+import React, { useCallback, useState } from 'react'
+import { FlatList, StyleSheet, View } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
+
 import {
   NotificationHeader,
   NotificationItem,
@@ -5,9 +9,6 @@ import {
   SuccessToast,
 } from '@/components/notifications'
 import type { NotificationRequest, RejectionReason } from '@/components/notifications/types'
-import React, { useCallback, useState } from 'react'
-import { FlatList, StyleSheet, View } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
 
 // ── Mock data ───────────────────────────────────────────────────────────
 const INITIAL_REQUESTS: NotificationRequest[] = [
@@ -73,7 +74,7 @@ function Notifications() {
     setToastVisible(true)
 
     // Remove item from list
-    setRequests((prev) => prev.filter((r) => r.id !== item.id))
+    setRequests(prev => prev.filter(r => r.id !== item.id))
   }, [])
 
   // ── Reject handler (opens modal) ──
@@ -84,10 +85,10 @@ function Notifications() {
 
   // ── Rejection confirmed ──
   const handleRejectionSave = useCallback(
-    (reason: RejectionReason, otherText?: string) => {
+    (_reason: RejectionReason, _otherText?: string) => {
       if (selectedItem) {
         // Remove item from list
-        setRequests((prev) => prev.filter((r) => r.id !== selectedItem.id))
+        setRequests(prev => prev.filter(r => r.id !== selectedItem.id))
       }
       setRejectionModalVisible(false)
       setSelectedItem(null)
@@ -109,7 +110,7 @@ function Notifications() {
         {/* List */}
         <FlatList
           data={requests}
-          keyExtractor={(item) => item.id}
+          keyExtractor={item => item.id}
           renderItem={({ item }) => (
             <NotificationItem item={item} onAccept={handleAccept} onReject={handleReject} />
           )}

@@ -22,7 +22,9 @@
     "update:staging": "APP_ENV=staging eas update --branch staging",
     "update:production": "APP_ENV=production eas update --branch production",
     "release": "node ./scripts/release.js",
-    "prepare": "husky"
+    "prepare": "husky",
+    "lint:fix": "expo lint --fix",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json}\""
   },
   "dependencies": {
     "@expo-google-fonts/nunito": "^0.4.2",
@@ -67,11 +69,21 @@
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
-    "eslint": "^9.25.0",
+    "@typescript-eslint/eslint-plugin": "^8.58.1",
+    "@typescript-eslint/parser": "^8.58.1",
+    "babel-plugin-module-resolver": "^5.0.3",
+    "eslint": "^9.39.4",
     "eslint-config-expo": "~10.0.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-import-resolver-typescript": "^4.4.4",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-prettier": "^5.5.5",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-native": "^5.0.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
-    "prettier": "^3.8.1",
+    "prettier": "^3.8.2",
     "react-native-svg-transformer": "^1.5.3",
     "supabase": "^2.70.5",
     "typescript": "~5.9.2"
