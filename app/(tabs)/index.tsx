@@ -88,10 +88,6 @@ export default function HomeScreen() {
     setFilterVisible(false)
   }
 
-  const handleShowSquaredUp = () => {
-    console.log('Show squared-up friends')
-  }
-
   return (
     <View style={styles.container}>
       <View style={[styles.content, { paddingTop: insets.top + 8 }]}>
@@ -134,7 +130,7 @@ export default function HomeScreen() {
 
         <FriendsList friends={MOCK_FRIENDS} />
 
-        <SquaredUpSection onPress={handleShowSquaredUp} />
+        <SquaredUpSection onPress={() => console.log('Show squared-up friends')} />
       </View>
 
       <AddExpenseButton onPress={() => console.log('Add expense')} />
