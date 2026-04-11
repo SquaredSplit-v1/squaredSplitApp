@@ -66,10 +66,9 @@ function RootLayout() {
 
 // Sentry.wrap requires native modules present in the dev client build.
 // Falls back to plain RootLayout if native module is unavailable.
-
 const wrapped = (() => {
   try {
-    return Sentry.wrap(RootLayout as any)
+    return Sentry.wrap(RootLayout as Parameters<typeof Sentry.wrap>[0])
   } catch {
     console.warn('[layout] Sentry.wrap unavailable — rebuild dev client to enable')
     return RootLayout
