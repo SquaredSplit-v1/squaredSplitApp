@@ -83,6 +83,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   plugins: [
     'expo-router',
     'expo-contacts',
+    'expo-image-picker',
     'expo-secure-store',
     [
       'expo-splash-screen',
