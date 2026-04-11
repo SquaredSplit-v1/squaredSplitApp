@@ -24,7 +24,15 @@ import Animated, {
 } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
+import { CountryPickerModal } from '@/components/ui/CountryPickerModal'
 import { sendOtp } from '@/lib/auth'
+import {
+  CountryCode,
+  DEFAULT_COUNTRY,
+  formatPhoneDisplay,
+  isValidPhoneNumber,
+  toE164,
+} from '@/lib/validation'
 
 import AppIcon from '../../assets/app-icon.svg'
 import BlurEllipse from '../../assets/auth/Blur-Ellipse.svg'
@@ -84,7 +92,7 @@ function LoginGradientBlob() {
 
 function SmallLogo() {
   return (
-    <View style={{ width: 140, height: 100 }}>
+    <View style={styles.logoWrapper}>
       <AppIcon width="100%" height="100%" />
     </View>
   )
@@ -226,12 +234,13 @@ export default function LoginScreen() {
 
     const fullPhone = `${selectedCountry.code}${phoneNumber}`
     setIsLoading(true)
+    setErrorMessage(null)
 
     try {
       const result = await sendOtp(fullPhone)
 
       if (!result.success) {
-        Alert.alert('Error', result.error ?? 'Failed to send code.')
+        setErrorMessage(result.error ?? 'Failed to send code.')
         return
       }
 
@@ -240,7 +249,7 @@ export default function LoginScreen() {
         params: { phone: fullPhone },
       })
     } catch {
-      Alert.alert('Error', 'Something went wrong. Please try again.')
+      setErrorMessage('Something went wrong. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -302,7 +311,7 @@ export default function LoginScreen() {
           </View>
         </View>
 
-        {/* Get Started Button */}
+        {/* Get Started button — disabled until number is valid */}
         <TouchableOpacity
           style={[styles.button, (!isValid || isLoading) && styles.buttonDisabled]}
           onPress={handleGetStarted}
@@ -317,10 +326,10 @@ export default function LoginScreen() {
 
         {/* Footer links */}
         <View style={styles.footerLinks}>
-          <TouchableOpacity>
+          <TouchableOpacity accessibilityRole="link">
             <Text style={styles.footerLink}>Privacy policy</Text>
           </TouchableOpacity>
-          <TouchableOpacity>
+          <TouchableOpacity accessibilityRole="link">
             <Text style={styles.footerLink}>Terms of service</Text>
           </TouchableOpacity>
         </View>
@@ -360,10 +369,18 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 24,
   },
+
+  // Logo
   logoContainer: {
     alignItems: 'flex-start',
     marginBottom: 8,
   },
+  logoWrapper: {
+    width: 140,
+    height: 100,
+  },
+
+  // Tagline
   tagline: {
     fontSize: 24,
     fontWeight: '300',
@@ -373,6 +390,8 @@ const styles = StyleSheet.create({
     paddingBottom: 90,
     marginBottom: 48,
   },
+
+  // Marquee
   marqueeContainer: {
     height: 100,
     overflow: 'hidden',
@@ -458,6 +477,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
   },
+
+  // Footer
   footerLinks: {
     flexDirection: 'row',
     justifyContent: 'space-between',
