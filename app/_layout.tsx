@@ -1,56 +1,68 @@
+import * as Sentry from '@sentry/react-native'
 import { SplashScreen, Stack } from 'expo-router'
 import { useEffect, useRef } from 'react'
+import { View } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
+import Toast from 'react-native-toast-message'
 
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { useAppUpdates } from '@/hooks/useAppUpdates'
+import { initSentry } from '@/lib/sentry'
 import { useAuthStore } from '@/store/authStore'
 
-// Must be called before any navigator renders
 SplashScreen.preventAutoHideAsync()
+initSentry()
 
-export default function RootLayout() {
-  useAppUpdates() // Check for updates on app load and prompt user if available
+export default Sentry.wrap(function RootLayout() {
+  useAppUpdates()
   const { session, hasOnboarded, isLoading, initialize } = useAuthStore()
   const unsubRef = useRef<(() => void) | null>(null)
 
-  // Boot auth listener once
   useEffect(() => {
     unsubRef.current = initialize()
     return () => unsubRef.current?.()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Hide splash only after auth state is resolved
+  // Hide splash when auth state resolves
   useEffect(() => {
     if (!isLoading) {
-      SplashScreen.hideAsync()
+      SplashScreen.hideAsync().catch(e =>
+        console.warn('[layout] SplashScreen.hideAsync failed:', e)
+      )
     }
   }, [isLoading])
 
-  // Keep splash visible — no screen rendered until state is known
-  if (isLoading) return null
+  // Nuclear fallback — force hide splash after 3s in case hideAsync never fires
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      SplashScreen.hideAsync().catch(() => {})
+    }, 3000)
+    return () => clearTimeout(timer)
+  }, [])
+
+  if (isLoading) return <View style={{ flex: 1, backgroundColor: '#F3F4F5' }} />
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
-        <Stack screenOptions={{ headerShown: false }}>
-          {/* ── Fully authenticated + onboarded ── */}
-          <Stack.Protected guard={!!session && hasOnboarded}>
-            <Stack.Screen name="(tabs)" />
-          </Stack.Protected>
+    <ErrorBoundary>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Protected guard={!!session && hasOnboarded}>
+              <Stack.Screen name="(tabs)" />
+            </Stack.Protected>
+            <Stack.Protected guard={!!session && !hasOnboarded}>
+              <Stack.Screen name="onboarding" />
+            </Stack.Protected>
+            <Stack.Protected guard={!session}>
+              <Stack.Screen name="(auth)" />
+            </Stack.Protected>
+          </Stack>
 
-          {/* ── Authenticated but profile not set up ── */}
-          <Stack.Protected guard={!!session && !hasOnboarded}>
-            <Stack.Screen name="(auth)/setup-profile" />
-          </Stack.Protected>
-
-          {/* ── Not authenticated ── */}
-          <Stack.Protected guard={!session}>
-            <Stack.Screen name="(auth)/login" />
-            <Stack.Screen name="(auth)/verify-otp" />
-          </Stack.Protected>
-        </Stack>
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
+          {/* Toast must be last child to render above everything */}
+          <Toast />
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    </ErrorBoundary>
   )
-}
+})
