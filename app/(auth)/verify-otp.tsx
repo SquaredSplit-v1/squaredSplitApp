@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons'
+import * as Haptics from 'expo-haptics'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import React, { useEffect, useRef, useState } from 'react'
 import {
@@ -46,7 +47,44 @@ export default function VerifyOTPScreen() {
     }
   }, [resendTimer])
 
-  // ─── Handlers ───────────────────────────────────────────────────────────────
+  // ─── Core verify logic — shared by button tap and auto-submit ──────────────
+
+  const handleVerifyWithOtp = async (otpCode: string) => {
+    if (otpCode.length !== OTP_LENGTH) return
+
+    if (!phone) {
+      Alert.alert('Error', 'Phone number not found. Please go back and try again.')
+      return
+    }
+
+    setIsLoading(true)
+    setOtpError(null)
+
+    try {
+      const result = await verifyOtpApi(phone, otpCode)
+
+      if (!result.success) {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
+        setOtpError(result.error ?? 'Incorrect code. Please try again or resend a new one.')
+        setOtp(new Array(OTP_LENGTH).fill(''))
+        inputRefs.current[0]?.focus()
+        return
+      }
+
+      // ✅ Haptic success feedback
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+      // RootNavigator handles redirect — do not navigate manually
+    } catch {
+      Alert.alert('Error', 'Something went wrong. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Verify button tap
+  const handleVerify = () => handleVerifyWithOtp(otp.join(''))
+
+  // ─── Input handlers ────────────────────────────────────────────────────────
 
   const handleOtpChange = (value: string, index: number) => {
     if (otpError) setOtpError(null)
@@ -62,13 +100,25 @@ export default function VerifyOTPScreen() {
       })
       setOtp(newOtp)
       inputRefs.current[Math.min(index + digits.length, OTP_LENGTH - 1)]?.focus()
+
+      // Auto-submit if paste fills all 6 digits
+      if (newOtp.filter(d => d !== '').length === OTP_LENGTH) {
+        handleVerifyWithOtp(newOtp.join(''))
+      }
       return
     }
 
     newOtp[index] = value
     setOtp(newOtp)
+
     if (value && index < OTP_LENGTH - 1) {
+      // Advance to next box
       inputRefs.current[index + 1]?.focus()
+    }
+
+    // Auto-submit on 6th digit
+    if (value && index === OTP_LENGTH - 1) {
+      handleVerifyWithOtp(newOtp.join(''))
     }
   }
 
@@ -78,41 +128,7 @@ export default function VerifyOTPScreen() {
     }
   }
 
-  const handleVerify = async () => {
-    const otpCode = otp.join('')
-
-    if (otpCode.length !== OTP_LENGTH) {
-      setOtpError('Please enter the complete verification code')
-      return
-    }
-
-    if (!phone) {
-      Alert.alert('Error', 'Phone number not found. Please go back and try again.')
-      return
-    }
-
-    setIsLoading(true)
-    setOtpError(null)
-
-    try {
-      const result = await verifyOtpApi(phone, otpCode)
-
-      if (!result.success) {
-        setOtpError(result.error ?? 'Incorrect code. Please try again or resend a new one.')
-        setOtp(new Array(OTP_LENGTH).fill(''))
-        inputRefs.current[0]?.focus()
-        return
-      }
-
-      // ✅ Session hydrated via supabase.auth.setSession() inside verifyOtpApi.
-      // authStore.onAuthStateChange picks it up → RootNavigator redirects.
-      // Do NOT navigate manually here.
-    } catch {
-      Alert.alert('Error', 'Something went wrong. Please try again.')
-    } finally {
-      setIsLoading(false)
-    }
-  }
+  // ─── Resend ────────────────────────────────────────────────────────────────
 
   const handleResendOtp = async () => {
     if (resendTimer > 0 || !phone) return
@@ -187,6 +203,7 @@ export default function VerifyOTPScreen() {
               keyboardType="number-pad"
               maxLength={1}
               selectTextOnFocus
+              editable={!isLoading}
               accessibilityLabel={`OTP digit ${index + 1}`}
             />
           ))}
