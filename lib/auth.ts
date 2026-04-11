@@ -21,9 +21,6 @@ export interface VerifyOtpResult {
 
 export async function sendOtp(phone: string): Promise<SendOtpResult> {
   try {
-    console.log('📞 sendOtp URL:', PHONE_AUTH_URL)
-    console.log('📞 sendOtp phone:', phone)
-
     const res = await fetch(`${PHONE_AUTH_URL}/send-otp`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -61,8 +58,6 @@ export async function verifyOtp(phone: string, otp: string): Promise<VerifyOtpRe
     })
 
     const data = await res.json()
-    console.log('✅ verifyOtp response status:', res.status)
-    console.log('✅ verifyOtp response data:', JSON.stringify(data))
 
     if (res.status === 429) {
       return {
@@ -77,26 +72,19 @@ export async function verifyOtp(phone: string, otp: string): Promise<VerifyOtpRe
     }
 
     if (data.session && data.user) {
-      console.log('✅ calling setSession with tokens')
       const { error: sessionError } = await supabase.auth.setSession({
         access_token: data.session.access_token,
         refresh_token: data.session.refresh_token,
       })
-      console.log('✅ setSession error:', sessionError ?? 'none')
 
-      // Directly hydrate the store — bypasses onAuthStateChange listener bug
-      // with custom storage adapters (LargeSecureStore)
       if (!sessionError) {
         await useAuthStore.getState().hydrateSession(data.session, data.user)
       }
-    } else {
-      console.log('❌ data.session or data.user is null')
     }
 
     const isNewUser = !!data.user?.created_at && isRecentTimestamp(data.user.created_at)
     return { success: true, isNewUser }
-  } catch (e) {
-    console.log('❌ verifyOtp caught error:', e)
+  } catch {
     return { success: false, error: 'Network error. Please try again.' }
   }
 }

@@ -3,7 +3,6 @@ import { useRouter } from 'expo-router'
 import React, { useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -24,15 +23,7 @@ import Animated, {
 } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { CountryPickerModal } from '@/components/ui/CountryPickerModal'
 import { sendOtp } from '@/lib/auth'
-import {
-  CountryCode,
-  DEFAULT_COUNTRY,
-  formatPhoneDisplay,
-  isValidPhoneNumber,
-  toE164,
-} from '@/lib/validation'
 
 import AppIcon from '../../assets/app-icon.svg'
 import BlurEllipse from '../../assets/auth/Blur-Ellipse.svg'
@@ -160,7 +151,6 @@ function CountryPickerModal({ visible, selected, onSelect, onClose }: CountryPic
       onRequestClose={onClose}
     >
       <View style={[styles.modalContainer, { paddingTop: insets.top + 16 }]}>
-        {/* Modal header */}
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Select Country</Text>
           <TouchableOpacity onPress={onClose} accessibilityRole="button" accessibilityLabel="Close">
@@ -168,7 +158,6 @@ function CountryPickerModal({ visible, selected, onSelect, onClose }: CountryPic
           </TouchableOpacity>
         </View>
 
-        {/* Search */}
         <View style={styles.searchContainer}>
           <Ionicons name="search" size={16} color="#9CA3AF" style={{ marginRight: 8 }} />
           <TextInput
@@ -182,7 +171,6 @@ function CountryPickerModal({ visible, selected, onSelect, onClose }: CountryPic
           />
         </View>
 
-        {/* List */}
         <FlatList
           data={filtered}
           keyExtractor={(item, index) => `${item.country}-${index}`}
@@ -216,25 +204,26 @@ export default function LoginScreen() {
   const insets = useSafeAreaInsets()
   const router = useRouter()
 
-  const [selectedCountry, setSelectedCountry] = useState(COUNTRY_CODES[0]) // India default
+  const [selectedCountry, setSelectedCountry] = useState(COUNTRY_CODES[0])
   const [phoneNumber, setPhoneNumber] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [showPicker, setShowPicker] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
 
   const handlePhoneChange = (text: string) => {
-    const cleaned = text.replace(/\D/g, '')
-    setPhoneNumber(cleaned)
+    if (errorMessage) setErrorMessage('')
+    setPhoneNumber(text.replace(/\D/g, ''))
   }
 
   const handleGetStarted = async () => {
     if (phoneNumber.length < 7) {
-      Alert.alert('Invalid Phone Number', 'Please enter a valid phone number.')
+      setErrorMessage('Please enter a valid phone number.')
       return
     }
 
     const fullPhone = `${selectedCountry.code}${phoneNumber}`
     setIsLoading(true)
-    setErrorMessage(null)
+    setErrorMessage('')
 
     try {
       const result = await sendOtp(fullPhone)
@@ -285,7 +274,6 @@ export default function LoginScreen() {
         <View style={styles.inputSection}>
           <Text style={styles.inputLabel}>Enter your mobile number to continue</Text>
           <View style={styles.phoneRow}>
-            {/* Country code button */}
             <TouchableOpacity
               style={styles.countryPicker}
               onPress={() => setShowPicker(true)}
@@ -297,9 +285,8 @@ export default function LoginScreen() {
               <Ionicons name="chevron-down" size={14} color="#6B6B6B" />
             </TouchableOpacity>
 
-            {/* Phone number input */}
             <TextInput
-              style={styles.phoneInput}
+              style={[styles.phoneInput, !!errorMessage && styles.phoneInputError]}
               placeholder="XXX XXX XXXX"
               placeholderTextColor="#9CA3AF"
               value={phoneNumber}
@@ -309,9 +296,11 @@ export default function LoginScreen() {
               autoFocus={false}
             />
           </View>
+
+          {/* ← inline error — fixes the unused vars warning */}
+          {!!errorMessage && <Text style={styles.errorText}>{errorMessage}</Text>}
         </View>
 
-        {/* Get Started button — disabled until number is valid */}
         <TouchableOpacity
           style={[styles.button, (!isValid || isLoading) && styles.buttonDisabled]}
           onPress={handleGetStarted}
@@ -324,7 +313,6 @@ export default function LoginScreen() {
           )}
         </TouchableOpacity>
 
-        {/* Footer links */}
         <View style={styles.footerLinks}>
           <TouchableOpacity accessibilityRole="link">
             <Text style={styles.footerLink}>Privacy policy</Text>
@@ -335,7 +323,6 @@ export default function LoginScreen() {
         </View>
       </ScrollView>
 
-      {/* Country picker modal */}
       <CountryPickerModal
         visible={showPicker}
         selected={selectedCountry}
@@ -369,8 +356,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 24,
   },
-
-  // Logo
   logoContainer: {
     alignItems: 'flex-start',
     marginBottom: 8,
@@ -379,8 +364,6 @@ const styles = StyleSheet.create({
     width: 140,
     height: 100,
   },
-
-  // Tagline
   tagline: {
     fontSize: 24,
     fontWeight: '300',
@@ -390,8 +373,6 @@ const styles = StyleSheet.create({
     paddingBottom: 90,
     marginBottom: 48,
   },
-
-  // Marquee
   marqueeContainer: {
     height: 100,
     overflow: 'hidden',
@@ -411,8 +392,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-
-  // Phone input row
   inputSection: {
     marginBottom: 16,
   },
@@ -459,8 +438,14 @@ const styles = StyleSheet.create({
     color: '#141414',
     backgroundColor: '#FFFFFF',
   },
-
-  // Buttons
+  phoneInputError: {
+    borderColor: '#EF4444',
+  },
+  errorText: {
+    fontSize: 13,
+    color: '#EF4444',
+    marginTop: 6,
+  },
   button: {
     height: 52,
     backgroundColor: '#141414',
@@ -477,8 +462,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
   },
-
-  // Footer
   footerLinks: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -492,8 +475,6 @@ const styles = StyleSheet.create({
     lineHeight: 16.8,
     letterSpacing: -0.28,
   },
-
-  // Modal
   modalContainer: {
     flex: 1,
     backgroundColor: '#FFFFFF',
