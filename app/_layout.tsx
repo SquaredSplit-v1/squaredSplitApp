@@ -14,7 +14,7 @@ import { useAuthStore } from '@/store/authStore'
 SplashScreen.preventAutoHideAsync()
 initSentry()
 
-export default Sentry.wrap(function RootLayout() {
+function RootLayout() {
   useAppUpdates()
   const { session, hasOnboarded, isLoading, initialize } = useAuthStore()
   const unsubRef = useRef<(() => void) | null>(null)
@@ -24,7 +24,6 @@ export default Sentry.wrap(function RootLayout() {
     return () => unsubRef.current?.()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Hide splash when auth state resolves
   useEffect(() => {
     if (!isLoading) {
       SplashScreen.hideAsync().catch(e =>
@@ -33,7 +32,6 @@ export default Sentry.wrap(function RootLayout() {
     }
   }, [isLoading])
 
-  // Nuclear fallback — force hide splash after 3s in case hideAsync never fires
   useEffect(() => {
     const timer = setTimeout(() => {
       SplashScreen.hideAsync().catch(() => {})
@@ -59,10 +57,23 @@ export default Sentry.wrap(function RootLayout() {
             </Stack.Protected>
           </Stack>
 
-          {/* Toast must be last child to render above everything */}
           <Toast />
         </SafeAreaProvider>
       </GestureHandlerRootView>
     </ErrorBoundary>
   )
-})
+}
+
+// Sentry.wrap requires native modules present in the dev client build.
+// Falls back to plain RootLayout if native module is unavailable.
+
+const wrapped = (() => {
+  try {
+    return Sentry.wrap(RootLayout as any)
+  } catch {
+    console.warn('[layout] Sentry.wrap unavailable — rebuild dev client to enable')
+    return RootLayout
+  }
+})()
+
+export default wrapped
