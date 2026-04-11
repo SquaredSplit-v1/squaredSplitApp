@@ -2,6 +2,7 @@ import type { Session, User } from '@supabase/supabase-js'
 import { create } from 'zustand'
 
 import { supabase } from '@/lib/supabase/client'
+import { useContactsStore } from '@/store/contactsStore'
 import { useCurrencyStore } from '@/store/currencyStore'
 
 interface ProfileRow {
@@ -45,7 +46,6 @@ export const useAuthStore = create<AuthState>(set => ({
       isLoading: false,
     })
 
-    // Load currency preference after session hydration
     useCurrencyStore.getState().initialize(user.id)
   },
 
@@ -54,6 +54,7 @@ export const useAuthStore = create<AuthState>(set => ({
   logout: async () => {
     set({ session: null, user: null, hasOnboarded: false })
     useCurrencyStore.getState().reset()
+    useContactsStore.getState().reset()
     await supabase.auth.signOut()
   },
 
@@ -64,6 +65,7 @@ export const useAuthStore = create<AuthState>(set => ({
       if (event === 'SIGNED_OUT') {
         set({ session: null, user: null, hasOnboarded: false, isLoading: false })
         useCurrencyStore.getState().reset()
+        useContactsStore.getState().reset()
         return
       }
 
@@ -83,7 +85,6 @@ export const useAuthStore = create<AuthState>(set => ({
           isLoading: false,
         })
 
-        // Load currency preference after auth state resolves
         useCurrencyStore.getState().initialize(session.user.id)
       } else {
         set({ session: null, user: null, hasOnboarded: false, isLoading: false })
