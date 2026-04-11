@@ -3,16 +3,14 @@ import { useEffect, useRef } from 'react'
 import { View } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
-import Toast from 'react-native-toast-message'
 
-import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { useAppUpdates } from '@/hooks/useAppUpdates'
 import { useAuthStore } from '@/store/authStore'
 
 SplashScreen.preventAutoHideAsync()
 
 export default function RootLayout() {
-  useAppUpdates()
+  //  useAppUpdates()
   const { session, hasOnboarded, isLoading, initialize } = useAuthStore()
   const unsubRef = useRef<(() => void) | null>(null)
 
@@ -39,23 +37,20 @@ export default function RootLayout() {
   if (isLoading) return <View style={{ flex: 1, backgroundColor: '#F3F4F5' }} />
 
   return (
-    <ErrorBoundary>
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <SafeAreaProvider>
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Protected guard={!!session && hasOnboarded}>
-              <Stack.Screen name="(tabs)" />
-            </Stack.Protected>
-            <Stack.Protected guard={!!session && !hasOnboarded}>
-              <Stack.Screen name="onboarding" />
-            </Stack.Protected>
-            <Stack.Protected guard={!session}>
-              <Stack.Screen name="(auth)" />
-            </Stack.Protected>
-          </Stack>
-          <Toast />
-        </SafeAreaProvider>
-      </GestureHandlerRootView>
-    </ErrorBoundary>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Protected guard={!!session && hasOnboarded}>
+            <Stack.Screen name="(tabs)" />
+          </Stack.Protected>
+          <Stack.Protected guard={!!session && !hasOnboarded}>
+            <Stack.Screen name="onboarding" />
+          </Stack.Protected>
+          <Stack.Protected guard={!session}>
+            <Stack.Screen name="(auth)" />
+          </Stack.Protected>
+        </Stack>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   )
 }

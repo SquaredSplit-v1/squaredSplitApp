@@ -1,5 +1,4 @@
 import * as Haptics from 'expo-haptics'
-import * as ImagePicker from 'expo-image-picker'
 import React, { useState } from 'react'
 import {
   ActivityIndicator,
@@ -19,10 +18,18 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { saveProfile, uploadAvatar } from '@/lib/profile'
 import { useAuthStore } from '@/store/authStore'
 
+// Lazy-loaded — expo-image-picker needs a dev client rebuild.
+// Importing at module level would crash the entire app on startup.
+const getImagePicker = () => {
+  try {
+    return require('expo-image-picker') as typeof import('expo-image-picker')
+  } catch {
+    return null
+  }
+}
+
 const MAX_NAME_LENGTH = 30
 const DEFAULT_AVATAR = 'https://api.dicebear.com/7.x/initials/png?seed='
-
-// ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function ProfileSetupScreen() {
   const insets = useSafeAreaInsets()
@@ -34,20 +41,21 @@ export default function ProfileSetupScreen() {
   const [isLoading, setIsLoading] = useState(false)
   const [nameError, setNameError] = useState<string | null>(null)
 
-  // ─── Handlers ───────────────────────────────────────────────────────────────
-
   const handleNameChange = (text: string) => {
     setDisplayName(text)
     if (nameError) setNameError(null)
   }
 
   const handlePickFromLibrary = async () => {
+    const ImagePicker = getImagePicker()
+    if (!ImagePicker) {
+      Alert.alert('Unavailable', 'Photo picker is not available in this build.')
+      return
+    }
+
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (status !== 'granted') {
-      Alert.alert(
-        'Permission required',
-        'Please allow access to your photo library to pick an avatar.'
-      )
+      Alert.alert('Permission required', 'Please allow access to your photo library.')
       return
     }
 
@@ -64,9 +72,15 @@ export default function ProfileSetupScreen() {
   }
 
   const handleTakePhoto = async () => {
+    const ImagePicker = getImagePicker()
+    if (!ImagePicker) {
+      Alert.alert('Unavailable', 'Camera is not available in this build.')
+      return
+    }
+
     const { status } = await ImagePicker.requestCameraPermissionsAsync()
     if (status !== 'granted') {
-      Alert.alert('Permission required', 'Please allow camera access to take a photo.')
+      Alert.alert('Permission required', 'Please allow camera access.')
       return
     }
 
@@ -123,8 +137,6 @@ export default function ProfileSetupScreen() {
       }
 
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-      // completeOnboarding sets hasCompletedOnboarding: true in store + DB
-      // RootNavigator will redirect to /(tabs) automatically
       await completeOnboarding()
     } catch {
       Alert.alert('Error', 'Something went wrong. Please try again.')
@@ -135,23 +147,18 @@ export default function ProfileSetupScreen() {
 
   const handleSkip = async () => {
     if (!user) return
-
     setIsLoading(true)
-
     try {
       const name = displayName.trim() || 'User'
       const avatarUrl = `${DEFAULT_AVATAR}${encodeURIComponent(name)}`
       await saveProfile(user.id, { full_name: name, avatar_url: avatarUrl })
       await completeOnboarding()
     } catch {
-      // Even if save fails, complete onboarding so user isn't stuck
       await completeOnboarding()
     } finally {
       setIsLoading(false)
     }
   }
-
-  // ─── Render ─────────────────────────────────────────────────────────────────
 
   const avatarSource = avatarUri
     ? { uri: avatarUri }
@@ -172,11 +179,9 @@ export default function ProfileSetupScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
         <Text style={styles.title}>Set up your profile</Text>
         <Text style={styles.subtitle}>Tell us a bit about yourself to get started.</Text>
 
-        {/* Avatar picker */}
         <TouchableOpacity
           style={styles.avatarContainer}
           onPress={handleAvatarPress}
@@ -190,7 +195,6 @@ export default function ProfileSetupScreen() {
         </TouchableOpacity>
         <Text style={styles.avatarHint}>Tap to add a photo</Text>
 
-        {/* Display name */}
         <View style={styles.inputSection}>
           <Text style={styles.inputLabel}>Display name</Text>
           <TextInput
@@ -217,7 +221,6 @@ export default function ProfileSetupScreen() {
 
         <View style={styles.spacer} />
 
-        {/* Save button */}
         <TouchableOpacity
           style={[styles.saveButton, !canSave && styles.saveButtonDisabled]}
           onPress={handleSave}
@@ -233,7 +236,6 @@ export default function ProfileSetupScreen() {
           )}
         </TouchableOpacity>
 
-        {/* Skip */}
         <TouchableOpacity
           style={styles.skipButton}
           onPress={handleSkip}
@@ -248,17 +250,9 @@ export default function ProfileSetupScreen() {
   )
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F3F4F5',
-  },
-  content: {
-    paddingHorizontal: 24,
-    alignItems: 'center',
-  },
+  container: { flex: 1, backgroundColor: '#F3F4F5' },
+  content: { paddingHorizontal: 24, alignItems: 'center' },
   title: {
     fontSize: 28,
     fontWeight: '600',
@@ -280,12 +274,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     position: 'relative',
   },
-  avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#E5E7EB',
-  },
+  avatar: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#E5E7EB' },
   avatarBadge: {
     position: 'absolute',
     bottom: 0,
@@ -299,24 +288,10 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#F3F4F5',
   },
-  avatarBadgeText: {
-    fontSize: 14,
-  },
-  avatarHint: {
-    fontSize: 13,
-    color: '#9CA3AF',
-    marginBottom: 40,
-  },
-  inputSection: {
-    width: '100%',
-    marginBottom: 8,
-  },
-  inputLabel: {
-    fontSize: 14,
-    fontWeight: '400',
-    color: '#9CA3AF',
-    marginBottom: 8,
-  },
+  avatarBadgeText: { fontSize: 14 },
+  avatarHint: { fontSize: 13, color: '#9CA3AF', marginBottom: 40 },
+  inputSection: { width: '100%', marginBottom: 8 },
+  inputLabel: { fontSize: 14, color: '#9CA3AF', marginBottom: 8 },
   input: {
     height: 52,
     borderWidth: 1,
@@ -327,27 +302,11 @@ const styles = StyleSheet.create({
     color: '#141414',
     backgroundColor: '#FFFFFF',
   },
-  inputError: {
-    borderColor: '#EF4444',
-  },
-  inputFooter: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: 4,
-  },
-  errorText: {
-    fontSize: 13,
-    color: '#EF4444',
-    flex: 1,
-  },
-  charCount: {
-    fontSize: 12,
-    color: '#9CA3AF',
-  },
-  spacer: {
-    flex: 1,
-    minHeight: 40,
-  },
+  inputError: { borderColor: '#EF4444' },
+  inputFooter: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 4 },
+  errorText: { fontSize: 13, color: '#EF4444', flex: 1 },
+  charCount: { fontSize: 12, color: '#9CA3AF' },
+  spacer: { flex: 1, minHeight: 40 },
   saveButton: {
     width: '100%',
     height: 52,
@@ -357,23 +316,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
-  saveButtonDisabled: {
-    backgroundColor: '#9CA3AF',
-  },
-  saveButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  skipButton: {
-    width: '100%',
-    height: 52,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  skipButtonText: {
-    fontSize: 16,
-    fontWeight: '400',
-    color: '#6B6B6B',
-  },
+  saveButtonDisabled: { backgroundColor: '#9CA3AF' },
+  saveButtonText: { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
+  skipButton: { width: '100%', height: 52, justifyContent: 'center', alignItems: 'center' },
+  skipButtonText: { fontSize: 16, color: '#6B6B6B' },
 })

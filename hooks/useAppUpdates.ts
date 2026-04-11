@@ -1,18 +1,24 @@
+// expo-updates requires a dev client rebuild to function.
+// Full implementation is preserved below — re-enable after build:dev:ios.
+// Tracked as: SS-015
+
+export function useAppUpdates(): void {
+  // no-op until dev client includes expo-updates native module
+}
+
+/* ── restore after rebuild ────────────────────────────────────────────────────
+
 import * as Updates from 'expo-updates'
 import { useEffect } from 'react'
 import { AppState, type AppStateStatus } from 'react-native'
 
-export function useAppUpdates() {
+export function useAppUpdates(): void {
   const { isUpdateAvailable, isUpdatePending } = Updates.useUpdates()
 
-  // Apply downloaded update — triggers on next foreground after fetch completes
   useEffect(() => {
-    if (isUpdatePending) {
-      Updates.reloadAsync()
-    }
+    if (isUpdatePending) Updates.reloadAsync()
   }, [isUpdatePending])
 
-  // Check for update every time app comes to foreground
   useEffect(() => {
     if (__DEV__) return
 
@@ -20,9 +26,7 @@ export function useAppUpdates() {
       if (nextState === 'active') {
         try {
           await Updates.checkForUpdateAsync()
-          if (isUpdateAvailable) {
-            await Updates.fetchUpdateAsync()
-          }
+          if (isUpdateAvailable) await Updates.fetchUpdateAsync()
         } catch {
           // Silent fail — never block the user for an update check
         }
@@ -33,3 +37,5 @@ export function useAppUpdates() {
     return () => subscription.remove()
   }, [isUpdateAvailable])
 }
+
+──────────────────────────────────────────────────────────────────────────── */
