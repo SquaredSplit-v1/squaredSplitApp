@@ -14,19 +14,14 @@ import 'react-native-reanimated'
 import '../global.css'
 
 import { useColorScheme } from '@/hooks/use-color-scheme'
-import { useAuthStore } from '@/store/authStore' // ← now correctly after external imports
+import { useAuthStore } from '@/store/authStore'
 
-// Keep splash screen visible while fonts load
 SplashScreen.preventAutoHideAsync()
 
 export const unstable_settings = {
   initialRouteName: '(auth)',
 }
 
-/**
- * Inner navigator that reacts to auth state changes and redirects
- * the user to the correct route group.
- */
 function RootNavigator() {
   const user = useAuthStore(s => s.user)
   const isLoading = useAuthStore(s => s.isLoading)
@@ -35,20 +30,23 @@ function RootNavigator() {
   const segments = useSegments()
 
   useEffect(() => {
-    // Don't redirect while we're still fetching the session
+    console.log('🧭 RootNavigator:', {
+      isLoading,
+      user: user?.id ?? 'null',
+      segments,
+      hasCompletedOnboarding,
+    })
+
     if (isLoading) return
 
     const inAuthGroup = segments[0] === '(auth)'
     const inOnboardingGroup = segments[0] === 'onboarding'
 
     if (!user && !inAuthGroup) {
-      // Not signed in (includes landing on /onboarding without a session) → auth
       router.replace('/(auth)/authloading')
     } else if (user && inAuthGroup) {
-      // Signed in but still in the auth group → leave
       router.replace(hasCompletedOnboarding ? '/(tabs)' : '/onboarding')
     } else if (user && inOnboardingGroup && hasCompletedOnboarding) {
-      // Already completed onboarding — skip straight to tabs
       router.replace('/(tabs)')
     }
   }, [user, isLoading, segments, hasCompletedOnboarding, router])
@@ -56,7 +54,6 @@ function RootNavigator() {
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(auth)" />
-      <Stack.Screen name="onboarding" />
       <Stack.Screen name="(tabs)" />
       <Stack.Screen
         name="modal"
@@ -78,7 +75,7 @@ export default function RootLayout() {
   useEffect(() => {
     const unsubscribe = initialize()
     return unsubscribe
-  }, [initialize])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (fontsLoaded) {
