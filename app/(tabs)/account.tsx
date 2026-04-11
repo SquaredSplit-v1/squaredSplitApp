@@ -6,7 +6,7 @@ import { useAuthStore } from '@/store/authStore'
 
 export default function AccountScreen() {
   const insets = useSafeAreaInsets()
-  const signOut = useAuthStore(s => s.signOut)
+  const logout = useAuthStore(s => s.logout)
 
   return (
     <View
@@ -17,7 +17,7 @@ export default function AccountScreen() {
         <Text style={styles.subtitle}>Manage your profile and settings</Text>
       </View>
 
-      <TouchableOpacity style={styles.signOutButton} onPress={signOut}>
+      <TouchableOpacity style={styles.signOutButton} onPress={logout}>
         <Text style={styles.signOutText}>Sign Out</Text>
       </TouchableOpacity>
     </View>
