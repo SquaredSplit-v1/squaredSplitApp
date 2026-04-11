@@ -1,4 +1,3 @@
-import * as Sentry from '@sentry/react-native'
 import { SplashScreen, Stack } from 'expo-router'
 import { useEffect, useRef } from 'react'
 import { View } from 'react-native'
@@ -8,13 +7,11 @@ import Toast from 'react-native-toast-message'
 
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { useAppUpdates } from '@/hooks/useAppUpdates'
-import { initSentry } from '@/lib/sentry'
 import { useAuthStore } from '@/store/authStore'
 
 SplashScreen.preventAutoHideAsync()
-initSentry()
 
-function RootLayout() {
+export default function RootLayout() {
   useAppUpdates()
   const { session, hasOnboarded, isLoading, initialize } = useAuthStore()
   const unsubRef = useRef<(() => void) | null>(null)
@@ -56,23 +53,9 @@ function RootLayout() {
               <Stack.Screen name="(auth)" />
             </Stack.Protected>
           </Stack>
-
           <Toast />
         </SafeAreaProvider>
       </GestureHandlerRootView>
     </ErrorBoundary>
   )
 }
-
-// Sentry.wrap requires native modules present in the dev client build.
-// Falls back to plain RootLayout if native module is unavailable.
-const wrapped = (() => {
-  try {
-    return Sentry.wrap(RootLayout as Parameters<typeof Sentry.wrap>[0])
-  } catch {
-    console.warn('[layout] Sentry.wrap unavailable — rebuild dev client to enable')
-    return RootLayout
-  }
-})()
-
-export default wrapped

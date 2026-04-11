@@ -1,6 +1,8 @@
-import * as Sentry from '@sentry/react-native'
 import React from 'react'
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+
+// Sentry.captureException will be re-enabled after dev client rebuild includes
+// @sentry/react-native native modules
 
 interface Props {
   children: React.ReactNode
@@ -22,11 +24,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
-    if (!__DEV__) {
-      Sentry.captureException(error, { extra: { componentStack: info.componentStack } })
-    } else {
-      console.error('[ErrorBoundary]', error, info)
-    }
+    console.error('[ErrorBoundary]', error, info)
   }
 
   handleReset = () => {
@@ -60,10 +58,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 32,
   },
-  emoji: {
-    fontSize: 48,
-    marginBottom: 16,
-  },
+  emoji: { fontSize: 48, marginBottom: 16 },
   title: {
     fontSize: 20,
     fontWeight: '600',
@@ -86,9 +81,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  buttonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
+  buttonText: { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
 })
