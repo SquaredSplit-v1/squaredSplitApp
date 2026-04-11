@@ -3,12 +3,14 @@ import { useEffect, useRef } from 'react'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 
+import { useAppUpdates } from '@/hooks/useAppUpdates'
 import { useAuthStore } from '@/store/authStore'
 
 // Must be called before any navigator renders
 SplashScreen.preventAutoHideAsync()
 
 export default function RootLayout() {
+  useAppUpdates() // Check for updates on app load and prompt user if available
   const { session, hasOnboarded, isLoading, initialize } = useAuthStore()
   const unsubRef = useRef<(() => void) | null>(null)
 
