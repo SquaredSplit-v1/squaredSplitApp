@@ -12,6 +12,7 @@ interface AuthState {
   isLoading: boolean
   hasCompletedOnboarding: boolean
   initialize: () => () => void
+  hydrateSession: (session: Session, user: User) => Promise<void>
   completeOnboarding: () => Promise<void>
   signOut: () => Promise<void>
 }
@@ -45,11 +46,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event: AuthChangeEvent, s: Session | null) => {
+      console.log('🔑 onAuthStateChange:', event, 'user:', s?.user?.id ?? 'null')
       switch (event) {
         case 'SIGNED_IN':
         case 'TOKEN_REFRESHED':
           if (s?.user) {
+            set({ isLoading: true })
             const onboarded = await loadOnboardingFlag(s.user.id)
+            console.log('🔑 onboarded flag:', onboarded)
             set({
               session: s,
               user: s.user,
@@ -57,7 +61,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
               isLoading: false,
             })
           } else {
-            set({ session: s, user: null, isLoading: false })
+            set({ session: null, user: null, isLoading: false })
           }
           break
 
@@ -66,12 +70,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           break
 
         default:
-          set({ session: s, user: s?.user ?? null, isLoading: false })
+          if (s !== undefined) {
+            set({ session: s, user: s?.user ?? null, isLoading: false })
+          }
           break
       }
     })
 
     return () => subscription.unsubscribe()
+  },
+
+  // Directly hydrate store after verifyOtp — bypasses onAuthStateChange listener
+  hydrateSession: async (session: Session, user: User) => {
+    const onboarded = await loadOnboardingFlag(user.id)
+    console.log('💉 hydrateSession: user:', user.id, 'onboarded:', onboarded)
+    set({ session, user, hasCompletedOnboarding: onboarded, isLoading: false })
   },
 
   completeOnboarding: async () => {

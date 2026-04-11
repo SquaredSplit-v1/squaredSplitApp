@@ -13,7 +13,7 @@ export default function AuthLayout() {
       <Stack.Screen name="authloading" />
       <Stack.Screen name="login" options={{ animation: 'none' }} />
       <Stack.Screen name="verify-otp" />
-      <Stack.Screen name="onboarding" />
+      {/* onboarding removed — it belongs to root stack, not (auth) */}
     </Stack>
   )
 }

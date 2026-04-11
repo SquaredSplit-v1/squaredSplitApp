@@ -2,7 +2,6 @@ import { useRouter } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -21,7 +20,15 @@ import Animated, {
 } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
+import { CountryPickerModal } from '@/components/ui/CountryPickerModal'
 import { sendOtp } from '@/lib/auth'
+import {
+  CountryCode,
+  DEFAULT_COUNTRY,
+  formatPhoneDisplay,
+  isValidPhoneNumber,
+  toE164,
+} from '@/lib/validation'
 
 import AppIcon from '../../assets/app-icon.svg'
 import BlurEllipse from '../../assets/auth/Blur-Ellipse.svg'
@@ -30,11 +37,14 @@ import Love from '../../assets/auth/love.svg'
 import Man from '../../assets/auth/man.svg'
 import Woman from '../../assets/auth/woman.svg'
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
 const MARQUEE_ITEM_WIDTH = 88
 const MARQUEE_GAP = 2
-const MARQUEE_TOTAL_WIDTH = (MARQUEE_ITEM_WIDTH + MARQUEE_GAP) * 4 // 4 items
+const MARQUEE_TOTAL_WIDTH = (MARQUEE_ITEM_WIDTH + MARQUEE_GAP) * 4
 
-// Gradient blob for login page background with blur
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
 function LoginGradientBlob() {
   return (
     <View style={styles.gradientBlobContainer}>
@@ -43,16 +53,14 @@ function LoginGradientBlob() {
   )
 }
 
-// Small version of the logo for login screen
 function SmallLogo() {
   return (
-    <View style={{ width: 140, height: 100 }}>
+    <View style={styles.logoWrapper}>
       <AppIcon width="100%" height="100%" />
     </View>
   )
 }
 
-// Marquee component
 function Marquee() {
   const translateX = useSharedValue(0)
 
@@ -87,65 +95,55 @@ function Marquee() {
   )
 }
 
+// ─── Screen ───────────────────────────────────────────────────────────────────
+
 export default function LoginScreen() {
   const insets = useSafeAreaInsets()
   const router = useRouter()
-  const [phoneNumber, setPhoneNumber] = useState('')
+
+  const [country, setCountry] = useState<CountryCode>(DEFAULT_COUNTRY)
+  const [digits, setDigits] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
-  const formatPhoneNumber = (text: string) => {
-    // Remove all non-numeric characters
-    const cleaned = text.replace(/\D/g, '')
-
-    // Format as +XXX XXX XXX XXXX (supports 3-digit country code and up to 12-digit phone)
-    let formatted = ''
-    if (cleaned.length > 0) {
-      // Country code: up to 3 digits
-      formatted = '+' + cleaned.substring(0, Math.min(3, cleaned.length))
-    }
-    if (cleaned.length > 3) {
-      formatted += ' ' + cleaned.substring(3, 6)
-    }
-    if (cleaned.length > 6) {
-      formatted += ' ' + cleaned.substring(6, 9)
-    }
-    if (cleaned.length > 9) {
-      formatted += ' ' + cleaned.substring(9, 15)
-    }
-
-    return formatted
-  }
+  const isValid = isValidPhoneNumber(digits, country)
+  const displayValue = formatPhoneDisplay(digits, country)
 
   const handlePhoneChange = (text: string) => {
-    setPhoneNumber(formatPhoneNumber(text))
+    const cleaned = text.replace(/\D/g, '').slice(0, country.maxDigits)
+    setDigits(cleaned)
+    if (errorMessage) setErrorMessage(null)
+  }
+
+  const handleCountryChange = (c: CountryCode) => {
+    setCountry(c)
+    setDigits('')
+    setErrorMessage(null)
   }
 
   const handleGetStarted = async () => {
-    // Format phone number for Supabase (remove spaces)
-    const formattedPhone = phoneNumber.replace(/\s/g, '')
-
-    if (formattedPhone.length < 10) {
-      Alert.alert('Invalid Phone Number', 'Please enter a valid phone number')
+    if (!isValid) {
+      setErrorMessage(`Enter a valid ${country.name} number`)
       return
     }
 
     setIsLoading(true)
+    setErrorMessage(null)
 
     try {
-      const result = await sendOtp(formattedPhone)
+      const result = await sendOtp(toE164(digits, country))
 
       if (!result.success) {
-        Alert.alert('Error', result.error ?? 'Failed to send code.')
+        setErrorMessage(result.error ?? 'Failed to send code.')
         return
       }
 
-      // Navigate to OTP verification screen
       router.push({
         pathname: '/(auth)/verify-otp',
-        params: { phone: formattedPhone },
+        params: { phone: toE164(digits, country) },
       })
     } catch {
-      Alert.alert('Error', 'Something went wrong. Please try again.')
+      setErrorMessage('Something went wrong. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -156,7 +154,6 @@ export default function LoginScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      {/* Blurred gradient blob */}
       <LoginGradientBlob />
 
       <ScrollView
@@ -182,22 +179,41 @@ export default function LoginScreen() {
         {/* Input section */}
         <View style={styles.inputSection}>
           <Text style={styles.inputLabel}>Enter your mobile number to continue</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="+1 XXX XXX XXXX"
-            placeholderTextColor="#9CA3AF"
-            value={phoneNumber}
-            onChangeText={handlePhoneChange}
-            keyboardType="number-pad"
-            maxLength={20}
-          />
+
+          <View style={styles.inputRow}>
+            {/* Country picker */}
+            <CountryPickerModal selected={country} onSelect={handleCountryChange} />
+
+            {/* Phone number input */}
+            <TextInput
+              style={[styles.input, errorMessage ? styles.inputError : null]}
+              placeholder={'X'.repeat(country.minDigits)}
+              placeholderTextColor="#9CA3AF"
+              value={displayValue}
+              onChangeText={handlePhoneChange}
+              keyboardType="number-pad"
+              maxLength={country.maxDigits + 2} // +2 for spaces in display
+              returnKeyType="done"
+              onSubmitEditing={handleGetStarted}
+            />
+          </View>
+
+          {/* Inline error toast */}
+          {errorMessage ? (
+            <View style={styles.errorToast}>
+              <Text style={styles.errorText}>⚠ {errorMessage}</Text>
+            </View>
+          ) : null}
         </View>
 
-        {/* Get Started Button */}
+        {/* Get Started button — disabled until number is valid */}
         <TouchableOpacity
-          style={[styles.button, isLoading && styles.buttonDisabled]}
+          style={[styles.button, (!isValid || isLoading) && styles.buttonDisabled]}
           onPress={handleGetStarted}
-          disabled={isLoading}
+          disabled={!isValid || isLoading}
+          accessibilityLabel="Get Started"
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !isValid || isLoading }}
         >
           {isLoading ? (
             <ActivityIndicator color="#FFFFFF" />
@@ -208,10 +224,10 @@ export default function LoginScreen() {
 
         {/* Footer links */}
         <View style={styles.footerLinks}>
-          <TouchableOpacity>
+          <TouchableOpacity accessibilityRole="link">
             <Text style={styles.footerLink}>Privacy policy</Text>
           </TouchableOpacity>
-          <TouchableOpacity>
+          <TouchableOpacity accessibilityRole="link">
             <Text style={styles.footerLink}>Terms of service</Text>
           </TouchableOpacity>
         </View>
@@ -219,6 +235,8 @@ export default function LoginScreen() {
     </KeyboardAvoidingView>
   )
 }
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: {
@@ -235,22 +253,24 @@ const styles = StyleSheet.create({
     borderRadius: 500,
     overflow: 'hidden',
   },
-  blurContainer: {
-    width: 700,
-    height: 700,
-    borderRadius: 500,
-    overflow: 'hidden',
-  },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
     paddingHorizontal: 24,
   },
+
+  // Logo
   logoContainer: {
     alignItems: 'flex-start',
     marginBottom: 8,
   },
+  logoWrapper: {
+    width: 140,
+    height: 100,
+  },
+
+  // Tagline
   tagline: {
     fontSize: 24,
     fontWeight: '300',
@@ -260,6 +280,8 @@ const styles = StyleSheet.create({
     paddingBottom: 90,
     marginBottom: 48,
   },
+
+  // Marquee
   marqueeContainer: {
     height: 100,
     overflow: 'hidden',
@@ -279,6 +301,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+
+  // Input
   inputSection: {
     marginBottom: 16,
   },
@@ -289,7 +313,12 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     marginBottom: 8,
   },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   input: {
+    flex: 1,
     height: 52,
     borderWidth: 1,
     borderColor: '#E5E7EB',
@@ -299,6 +328,27 @@ const styles = StyleSheet.create({
     color: '#141414',
     backgroundColor: '#FFFFFF',
   },
+  inputError: {
+    borderColor: '#EF4444',
+  },
+
+  // Error toast
+  errorToast: {
+    marginTop: 8,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  errorText: {
+    fontSize: 13,
+    color: '#DC2626',
+    fontWeight: '500',
+  },
+
+  // Button
   button: {
     height: 52,
     backgroundColor: '#141414',
@@ -315,6 +365,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
   },
+
+  // Footer
   footerLinks: {
     flexDirection: 'row',
     justifyContent: 'space-between',

@@ -2,7 +2,6 @@
 import "@supabase/functions-js/edge-runtime.d.ts"
 import { createClient } from "@supabase/supabase-js"
 
-// Initialize Supabase client with service role (server-side only)
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -24,16 +23,20 @@ function normalizePhoneE164(phone: string | undefined | null): string | null {
 }
 
 // ============================================================================
-// Rate Limiting (Database-backed — survives across isolate restarts)
+// Rate Limiting Constants
 // ============================================================================
 
-const OTP_SEND_LIMIT  = 3                     // 3 sends per window
-const OTP_WINDOW_MS   = 60 * 60 * 1000        // 1 hour window
-const OTP_COOLDOWN_MS = 30 * 1000             // 30s between sends
-const LOCKOUT_MS      = 60 * 60 * 1000        // 1 hour lockout after limit hit
+const OTP_SEND_LIMIT  = 5                      // 5 sends per window
+const OTP_WINDOW_MS   = 10 * 60 * 1000         // 10 min rolling window
+const OTP_COOLDOWN_MS = 30 * 1000              // 30s between sends
+const LOCKOUT_MS      = 10 * 60 * 1000         // 10 min lockout after limit hit
 
-const VERIFY_MAX_ATTEMPTS = 5
-const VERIFY_LOCKOUT_MS   = 15 * 60 * 1000    // 15 min lockout after failed verifies
+const VERIFY_MAX_ATTEMPTS = 5                  // 5 wrong OTPs before lockout
+const VERIFY_LOCKOUT_MS   = 10 * 60 * 1000     // 10 min lockout after failed verifies
+
+// ============================================================================
+// Rate Limiting — Send OTP
+// ============================================================================
 
 async function checkAndIncrementRateLimit(
   phone: string
@@ -47,6 +50,7 @@ async function checkAndIncrementRateLimit(
     .eq("phone", phone)
     .single()
 
+  // First ever attempt — insert and allow
   if (!existing) {
     await supabase.from("otp_rate_limits").insert({
       phone,
@@ -57,7 +61,7 @@ async function checkAndIncrementRateLimit(
     return { allowed: true }
   }
 
-  // Check lockout
+  // Active lockout
   if (existing.locked_until && new Date(existing.locked_until) > now) {
     const retryAfter = Math.ceil(
       (new Date(existing.locked_until).getTime() - now.getTime()) / 1000
@@ -65,7 +69,7 @@ async function checkAndIncrementRateLimit(
     return { allowed: false, retryAfter }
   }
 
-  // Reset expired window
+  // Expired window — reset and allow
   if (new Date(existing.window_start) < windowStart) {
     await supabase
       .from("otp_rate_limits")
@@ -79,14 +83,14 @@ async function checkAndIncrementRateLimit(
     return { allowed: true }
   }
 
-  // Cooldown between sends
+  // Cooldown between individual sends
   const timeSinceLast = now.getTime() - new Date(existing.last_attempt).getTime()
   if (timeSinceLast < OTP_COOLDOWN_MS) {
     const retryAfter = Math.ceil((OTP_COOLDOWN_MS - timeSinceLast) / 1000)
     return { allowed: false, retryAfter }
   }
 
-  // Hit the limit — lock the phone
+  // ✅ Check limit BEFORE incrementing — prevents off-by-one lockout
   if (existing.attempt_count >= OTP_SEND_LIMIT) {
     const lockedUntil = new Date(now.getTime() + LOCKOUT_MS)
     await supabase
@@ -96,7 +100,7 @@ async function checkAndIncrementRateLimit(
     return { allowed: false, retryAfter: Math.ceil(LOCKOUT_MS / 1000) }
   }
 
-  // Increment
+  // Under limit — increment and allow
   await supabase
     .from("otp_rate_limits")
     .update({
@@ -107,6 +111,10 @@ async function checkAndIncrementRateLimit(
 
   return { allowed: true }
 }
+
+// ============================================================================
+// Rate Limiting — Verify OTP
+// ============================================================================
 
 async function checkVerifyAttempts(
   phone: string
@@ -140,12 +148,10 @@ async function recordFailedVerify(phone: string): Promise<void> {
     .eq("phone", phone)
     .single()
 
-  const currentAttempts = existing?.verify_attempts ?? 0
-  const newAttempts = currentAttempts + 1
-  const lockedUntil =
-    newAttempts >= VERIFY_MAX_ATTEMPTS
-      ? new Date(now.getTime() + VERIFY_LOCKOUT_MS).toISOString()
-      : null
+  const newAttempts = (existing?.verify_attempts ?? 0) + 1
+  const lockedUntil = newAttempts >= VERIFY_MAX_ATTEMPTS
+    ? new Date(now.getTime() + VERIFY_LOCKOUT_MS).toISOString()
+    : null
 
   await supabase
     .from("otp_rate_limits")
@@ -194,10 +200,7 @@ Deno.serve(async (req: Request) => {
       const phone = normalizePhoneE164(rawPhone)
       if (!phone) {
         return new Response(
-          JSON.stringify({
-            success: false,
-            error: "Invalid phone format. Use E.164 format (e.g., +919876543210)",
-          }),
+          JSON.stringify({ success: false, error: "Invalid phone format. Use E.164 (e.g. +919876543210)" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         )
       }
@@ -205,10 +208,7 @@ Deno.serve(async (req: Request) => {
       const rateLimit = await checkAndIncrementRateLimit(phone)
       if (!rateLimit.allowed) {
         return new Response(
-          JSON.stringify({
-            error: "Too many attempts. Try again later.",
-            retryAfter: rateLimit.retryAfter,
-          }),
+          JSON.stringify({ error: "Too many attempts. Try again later.", retryAfter: rateLimit.retryAfter }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         )
       }
@@ -236,10 +236,7 @@ Deno.serve(async (req: Request) => {
       const verifyLimit = await checkVerifyAttempts(phone)
       if (!verifyLimit.allowed) {
         return new Response(
-          JSON.stringify({
-            error: "Too many attempts. Try again later.",
-            retryAfter: verifyLimit.retryAfter,
-          }),
+          JSON.stringify({ error: "Too many attempts. Try again later.", retryAfter: verifyLimit.retryAfter }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         )
       }
@@ -271,6 +268,7 @@ Deno.serve(async (req: Request) => {
       JSON.stringify({ error: "Not found" }),
       { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     )
+
   } catch (_error) {
     return new Response(
       JSON.stringify({ success: false, error: "Request failed" }),
