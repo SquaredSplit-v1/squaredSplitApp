@@ -9,10 +9,12 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Alert,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Svg, { Path } from 'react-native-svg'
 
+import { createExpense } from '@/lib/api/createExpense'
 import { formatAmount } from '@/lib/currency'
 import { useAuthStore } from '@/store/authStore'
 import { useCurrencyStore } from '@/store/currencyStore'
@@ -39,6 +41,7 @@ export default function HomeScreen() {
   const { current: currency } = useCurrencyStore()
   const { balance, activity, isLoading, isRefreshing, fetch, refresh, reset } = useHomeStore()
   const [addExpenseVisible, setAddExpenseVisible] = useState(false)
+  const [creatingExpense, setCreatingExpense] = useState(false)
 
   useEffect(() => {
     if (user) fetch(user.id)
@@ -48,6 +51,28 @@ export default function HomeScreen() {
   const handleRefresh = useCallback(() => {
     if (user) refresh(user.id)
   }, [user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleTestExpense = async () => {
+    if (!user) {
+      Alert.alert('Error', 'Please sign in first')
+      return
+    }
+
+    setCreatingExpense(true)
+    try {
+      const expense = await createExpense({
+        amount: 100,
+        description: 'Test pizza from SS-020 ✅',
+        participants: [user.id], // Use current user as sole participant for test
+      })
+      Alert.alert('Success', `Created expense: ${expense.id.slice(0, 8)}...`)
+      setAddExpenseVisible(false)
+    } catch (error: unknown) {
+      Alert.alert('Error', (error as Error).message || 'Failed to create expense')
+    } finally {
+      setCreatingExpense(false)
+    }
+  }
 
   const isEmpty = !isLoading && activity.length === 0 && balance.netBalance === 0
 
@@ -171,7 +196,7 @@ export default function HomeScreen() {
         <Text style={styles.fabIcon}>+</Text>
       </TouchableOpacity>
 
-      {/* ── Add Expense modal stub ── */}
+      {/* ── Add Expense modal ── */}
       <Modal
         visible={addExpenseVisible}
         animationType="slide"
@@ -186,10 +211,16 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
           <View style={styles.modalBody}>
-            <Text style={styles.modalStub}>💡 Expense creation coming in SS-019</Text>
-            <Text style={styles.modalStubSub}>
-              Groups and expenses schema is being built next sprint.
-            </Text>
+            <TouchableOpacity
+              style={[styles.testButton, creatingExpense && styles.testButtonDisabled]}
+              onPress={handleTestExpense}
+              disabled={creatingExpense}
+            >
+              <Text style={styles.testButtonText}>
+                {creatingExpense ? 'Creating...' : '🧪 TEST CREATE EXPENSE (₹100)'}
+              </Text>
+            </TouchableOpacity>
+            <Text style={styles.modalStubSub}>Creates real DB expense (SS-020 complete)</Text>
           </View>
         </View>
       </Modal>
@@ -330,12 +361,22 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 18, fontWeight: '600', color: '#141414' },
   modalClose: { fontSize: 18, color: '#6B6B6B', padding: 4 },
   modalBody: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  modalStub: {
-    fontSize: 18,
+  testButton: {
+    height: 48,
+    paddingHorizontal: 32,
+    backgroundColor: '#141414',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  testButtonDisabled: {
+    backgroundColor: '#6B6B6B',
+  },
+  testButtonText: {
+    fontSize: 14,
     fontWeight: '600',
-    color: '#141414',
-    textAlign: 'center',
-    marginBottom: 8,
+    color: '#FFFFFF',
   },
   modalStubSub: {
     fontSize: 14,
