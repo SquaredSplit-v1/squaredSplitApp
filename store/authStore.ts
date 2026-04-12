@@ -4,6 +4,7 @@ import { create } from 'zustand'
 import { supabase } from '@/lib/supabase/client'
 import { useContactsStore } from '@/store/contactsStore'
 import { useCurrencyStore } from '@/store/currencyStore'
+import { useHomeStore } from '@/store/homeStore'
 
 interface ProfileRow {
   has_onboarded: boolean
@@ -56,6 +57,7 @@ export const useAuthStore = create<AuthState>(set => ({
     useCurrencyStore.getState().reset()
     useContactsStore.getState().reset()
     await supabase.auth.signOut()
+    useHomeStore.getState().reset()
   },
 
   initialize: () => {
