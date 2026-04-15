@@ -60,15 +60,19 @@ export default function HomeScreen() {
 
     setCreatingExpense(true)
     try {
+      console.log('[SS-020] handleTestExpense user', user.id)
       const expense = await createExpense({
         amount: 100,
         description: 'Test pizza from SS-020 ✅',
         participants: [user.id], // Use current user as sole participant for test
       })
+      console.log('[SS-020] created expense', expense)
       Alert.alert('Success', `Created expense: ${expense.id.slice(0, 8)}...`)
       setAddExpenseVisible(false)
     } catch (error: unknown) {
-      Alert.alert('Error', (error as Error).message || 'Failed to create expense')
+      console.error('[SS-020] createExpense error', error)
+      const message = error instanceof Error ? error.message : 'Failed to create expense'
+      Alert.alert('Error', message)
     } finally {
       setCreatingExpense(false)
     }

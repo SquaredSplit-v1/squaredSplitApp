@@ -1,9 +1,12 @@
+// app/(auth)/authloading.tsx
+
 import { useRouter } from 'expo-router'
 import * as SplashScreen from 'expo-splash-screen'
 import LottieView from 'lottie-react-native'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { StyleSheet, View } from 'react-native'
 
+import { supabase } from '@/lib/supabase/index'
 import { useAuthStore } from '@/store/authStore'
 
 SplashScreen.preventAutoHideAsync()
@@ -25,7 +28,7 @@ export default function AuthLoadingScreen() {
     }
   }, [lottieReady])
 
-  // Navigate when both animation and auth are ready
+  // Navigate when both animation and auth state are ready
   useEffect(() => {
     if (!animationDone || isLoading) return
     if (user) {
@@ -34,11 +37,6 @@ export default function AuthLoadingScreen() {
       router.replace('/(auth)/login')
     }
   }, [animationDone, isLoading, user, router])
-
-  // Animation values
-  // const _blobTranslateY = useSharedValue(0)
-  // const _slashProgress = useSharedValue(0)
-  // const _contentOpacity = useSharedValue(1)
 
   const onAnimationFinish = useCallback((isCancelled: boolean) => {
     if (!isCancelled) setAnimationDone(true)

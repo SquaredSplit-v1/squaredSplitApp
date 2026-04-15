@@ -46,6 +46,7 @@ export default function RootLayout() {
             </Stack.Protected>
 
             <Stack.Protected guard={!session}>
+              <Stack.Screen name="(auth)/authloading" />
               <Stack.Screen name="(auth)/login" />
               <Stack.Screen name="(auth)/verify-otp" />
             </Stack.Protected>
