@@ -6,7 +6,6 @@ import LottieView from 'lottie-react-native'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { StyleSheet, View } from 'react-native'
 
-import { supabase } from '@/lib/supabase/index'
 import { useAuthStore } from '@/store/authStore'
 
 SplashScreen.preventAutoHideAsync()

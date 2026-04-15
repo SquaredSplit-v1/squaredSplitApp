@@ -1,72 +1,64 @@
 // lib/api/createExpense.ts
-import { z } from 'zod'
-
 import { supabase } from '@/lib/supabase'
 
-const createExpenseSchema = z.object({
-  amount: z.number().positive(),
-  description: z.string().min(1).max(500),
-  participants: z.array(z.string()).min(1).max(10),
-})
+export interface CreateExpensePayload {
+  title: string
+  amount: number
+  paid_by: string
+  participants: string[] // must include paid_by, min 2, max 10
+  category?: string
+  split_type?: 'equally' | 'exact' | 'percentage'
+  note?: string | null
+  date?: string // YYYY-MM-DD, defaults to today
+  due_date?: string | null
+  group_id?: string | null
+  exact_amounts?: Record<string, number>
+  percentages?: Record<string, number>
+}
 
-export type CreateExpenseInput = z.infer<typeof createExpenseSchema>
+export interface ExpenseSplit {
+  id: string
+  user_id: string
+  amount: number
+  is_settled: boolean
+}
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const db = supabase as any
+export interface CreatedExpense {
+  id: string
+  title: string
+  amount: number
+  category: string
+  split_type: string
+  paid_by: string
+  group_id: string | null
+  date: string
+  due_date: string | null
+  note: string | null
+  status: string
+  created_by: string
+  created_at: string
+  splits: ExpenseSplit[]
+}
 
-export async function createExpense(input: CreateExpenseInput) {
-  const data = createExpenseSchema.parse(input)
+export async function createExpense(payload: CreateExpensePayload): Promise<CreatedExpense> {
+  const { data, error } = await supabase.functions.invoke('create-expense', {
+    body: {
+      title: payload.title,
+      amount: payload.amount,
+      paid_by: payload.paid_by,
+      participants: payload.participants,
+      category: payload.category ?? 'general',
+      split_type: payload.split_type ?? 'equally',
+      note: payload.note ?? null,
+      date: payload.date ?? new Date().toISOString().split('T')[0],
+      due_date: payload.due_date ?? null,
+      group_id: payload.group_id ?? null,
+      exact_amounts: payload.exact_amounts ?? null,
+      percentages: payload.percentages ?? null,
+    },
+  })
 
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
-
-  if (authError) throw new Error(authError.message)
-  if (!user) throw new Error('Unauthorized')
-
-  const numParticipants = data.participants.length
-  const totalPaise = Math.round(data.amount * 100)
-  const basePaise = Math.floor(totalPaise / numParticipants)
-  const remainder = totalPaise % numParticipants
-  const sharesPaise = Array<number>(numParticipants).fill(basePaise)
-  for (let i = 0; i < remainder; i += 1) sharesPaise[i] += 1
-  const shareAmounts = sharesPaise.map(p => p / 100)
-
-  const { data: expense, error: expenseError } = await db
-    .from('expenses')
-    .insert({
-      amount: data.amount,
-      description: data.description,
-      paid_by: user.id,
-      created_by: user.id,
-      split_type: 'equal',
-    })
-    .select('*')
-    .single()
-
-  if (expenseError || !expense) {
-    throw new Error(expenseError?.message ?? 'Failed to create expense')
-  }
-
-  const participantRows = data.participants.map((userId: string, index: number) => ({
-    expense_id: expense.id,
-    user_id: userId,
-    share_amount: shareAmounts[index],
-    is_settled: false,
-  }))
-
-  const { error: participantsError } = await db.from('expense_participants').insert(participantRows)
-
-  if (participantsError) {
-    await db.from('expenses').delete().match({ id: expense.id })
-    throw new Error(participantsError.message)
-  }
-
-  return {
-    id: expense.id as string,
-    amount: expense.amount as number,
-    description: expense.description as string,
-    participants: participantRows,
-  }
+  if (error) throw new Error(error.message ?? 'Failed to create expense')
+  if (!data) throw new Error('No data returned from create-expense')
+  return data as CreatedExpense
 }
