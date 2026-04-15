@@ -1,20 +1,19 @@
+// app/(tabs)/index.tsx
 import { useRouter } from 'expo-router'
 import React, { useCallback, useEffect, useState } from 'react'
 import {
   ActivityIndicator,
-  Modal,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
-  Alert,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Svg, { Path } from 'react-native-svg'
 
-import { createExpense } from '@/lib/api/createExpense'
+import AddExpenseModal from '@/components/AddExpenseModal'
 import { formatAmount } from '@/lib/currency'
 import { useAuthStore } from '@/store/authStore'
 import { useCurrencyStore } from '@/store/currencyStore'
@@ -41,7 +40,6 @@ export default function HomeScreen() {
   const { current: currency } = useCurrencyStore()
   const { balance, activity, isLoading, isRefreshing, fetch, refresh, reset } = useHomeStore()
   const [addExpenseVisible, setAddExpenseVisible] = useState(false)
-  const [creatingExpense, setCreatingExpense] = useState(false)
 
   useEffect(() => {
     if (user) fetch(user.id)
@@ -52,31 +50,9 @@ export default function HomeScreen() {
     if (user) refresh(user.id)
   }, [user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleTestExpense = async () => {
-    if (!user) {
-      Alert.alert('Error', 'Please sign in first')
-      return
-    }
-
-    setCreatingExpense(true)
-    try {
-      console.log('[SS-020] handleTestExpense user', user.id)
-      const expense = await createExpense({
-        amount: 100,
-        description: 'Test pizza from SS-020 ✅',
-        participants: [user.id], // Use current user as sole participant for test
-      })
-      console.log('[SS-020] created expense', expense)
-      Alert.alert('Success', `Created expense: ${expense.id.slice(0, 8)}...`)
-      setAddExpenseVisible(false)
-    } catch (error: unknown) {
-      console.error('[SS-020] createExpense error', error)
-      const message = error instanceof Error ? error.message : 'Failed to create expense'
-      Alert.alert('Error', message)
-    } finally {
-      setCreatingExpense(false)
-    }
-  }
+  const handleExpenseCreated = useCallback(() => {
+    if (user) refresh(user.id)
+  }, [user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const isEmpty = !isLoading && activity.length === 0 && balance.netBalance === 0
 
@@ -93,7 +69,7 @@ export default function HomeScreen() {
           <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor="#141414" />
         }
       >
-        {/* ── Nav bar ── */}
+        {/* Nav bar */}
         <View style={styles.navBar}>
           <TouchableOpacity style={styles.navIcon} onPress={() => router.push('/notifications')}>
             <BellIcon />
@@ -124,7 +100,7 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* ── Balance card ── */}
+        {/* Balance card */}
         {isLoading ? (
           <View style={styles.loadingCard}>
             <ActivityIndicator color="#141414" />
@@ -146,7 +122,6 @@ export default function HomeScreen() {
                 {balance.netBalance > 0 ? 'You are owed overall' : 'You owe overall'}
               </Text>
             )}
-
             <View style={styles.balanceRow}>
               <View style={styles.balanceStat}>
                 <Text style={styles.balanceStatLabel}>You are owed</Text>
@@ -165,7 +140,7 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* ── Activity or empty state ── */}
+        {/* Activity / empty state */}
         {isEmpty ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyEmoji}>🤝</Text>
@@ -190,7 +165,7 @@ export default function HomeScreen() {
         )}
       </ScrollView>
 
-      {/* ── FAB ── */}
+      {/* FAB */}
       <TouchableOpacity
         style={[styles.fab, { bottom: insets.bottom + 24 }]}
         onPress={() => setAddExpenseVisible(true)}
@@ -200,34 +175,12 @@ export default function HomeScreen() {
         <Text style={styles.fabIcon}>+</Text>
       </TouchableOpacity>
 
-      {/* ── Add Expense modal ── */}
-      <Modal
+      {/* Add Expense Modal — SS-021 */}
+      <AddExpenseModal
         visible={addExpenseVisible}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setAddExpenseVisible(false)}
-      >
-        <View style={[styles.modalContainer, { paddingTop: insets.top + 24 }]}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Add Expense</Text>
-            <TouchableOpacity onPress={() => setAddExpenseVisible(false)}>
-              <Text style={styles.modalClose}>✕</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.modalBody}>
-            <TouchableOpacity
-              style={[styles.testButton, creatingExpense && styles.testButtonDisabled]}
-              onPress={handleTestExpense}
-              disabled={creatingExpense}
-            >
-              <Text style={styles.testButtonText}>
-                {creatingExpense ? 'Creating...' : '🧪 TEST CREATE EXPENSE (₹100)'}
-              </Text>
-            </TouchableOpacity>
-            <Text style={styles.modalStubSub}>Creates real DB expense (SS-020 complete)</Text>
-          </View>
-        </View>
-      </Modal>
+        onClose={() => setAddExpenseVisible(false)}
+        onSuccess={handleExpenseCreated}
+      />
     </View>
   )
 }
@@ -252,12 +205,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 16,
   },
-  balanceCard: {
-    backgroundColor: '#141414',
-    borderRadius: 20,
-    padding: 24,
-    marginTop: 16,
-  },
+  balanceCard: { backgroundColor: '#141414', borderRadius: 20, padding: 24, marginTop: 16 },
   balanceLabel: {
     fontSize: 12,
     color: '#9CA3AF',
@@ -265,12 +213,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginBottom: 4,
   },
-  balanceAmount: {
-    fontSize: 36,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    marginBottom: 4,
-  },
+  balanceAmount: { fontSize: 36, fontWeight: '700', color: '#FFFFFF', marginBottom: 4 },
   balanceSubtext: { fontSize: 13, color: '#9CA3AF', marginBottom: 20 },
   positive: { color: '#34D399' },
   negative: { color: '#F87171' },
@@ -285,19 +228,9 @@ const styles = StyleSheet.create({
   balanceStatLabel: { fontSize: 11, color: '#9CA3AF', marginBottom: 4 },
   balanceStatAmount: { fontSize: 16, fontWeight: '600' },
   balanceDivider: { width: 1, backgroundColor: '#2A2A2A' },
-  emptyState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 80,
-  },
+  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80 },
   emptyEmoji: { fontSize: 48, marginBottom: 16 },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#141414',
-    marginBottom: 8,
-  },
+  emptyTitle: { fontSize: 20, fontWeight: '700', color: '#141414', marginBottom: 8 },
   emptySubtitle: {
     fontSize: 14,
     color: '#6B6B6B',
@@ -314,18 +247,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  emptyActionText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
+  emptyActionText: { fontSize: 14, fontWeight: '600', color: '#FFFFFF' },
   activitySection: { marginTop: 24 },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#141414',
-    marginBottom: 12,
-  },
+  sectionTitle: { fontSize: 16, fontWeight: '600', color: '#141414', marginBottom: 12 },
   activityItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -351,41 +275,4 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   fabIcon: { fontSize: 28, color: '#FFFFFF', lineHeight: 32 },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 24,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 32,
-  },
-  modalTitle: { fontSize: 18, fontWeight: '600', color: '#141414' },
-  modalClose: { fontSize: 18, color: '#6B6B6B', padding: 4 },
-  modalBody: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  testButton: {
-    height: 48,
-    paddingHorizontal: 32,
-    backgroundColor: '#141414',
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  testButtonDisabled: {
-    backgroundColor: '#6B6B6B',
-  },
-  testButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  modalStubSub: {
-    fontSize: 14,
-    color: '#6B6B6B',
-    textAlign: 'center',
-    lineHeight: 21,
-  },
 })
