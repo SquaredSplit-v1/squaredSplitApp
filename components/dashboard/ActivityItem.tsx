@@ -1,20 +1,20 @@
-import React from "react";
-import { Image, StyleSheet, Text, View } from "react-native";
+import React from 'react'
+import { Image, ImageSourcePropType, StyleSheet, Text, View } from 'react-native'
 
 export interface ActivitySegment {
-  text: string;
-  bold?: boolean;
+  text: string
+  bold?: boolean
 }
 
 export interface Activity {
-  id: string;
-  avatar: any; // require(...) image source
-  segments: ActivitySegment[];
-  timeAgo: string;
+  id: string
+  avatar: ImageSourcePropType
+  segments: ActivitySegment[]
+  timeAgo: string
 }
 
 interface ActivityItemProps {
-  item: Activity;
+  item: Activity
 }
 
 export default function ActivityItem({ item }: ActivityItemProps) {
@@ -32,19 +32,19 @@ export default function ActivityItem({ item }: ActivityItemProps) {
               <Text key={i} style={styles.regular}>
                 {seg.text}
               </Text>
-            ),
+            )
           )}
         </Text>
         <Text style={styles.timeText}>{item.timeAgo}</Text>
       </View>
     </View>
-  );
+  )
 }
 
 const styles = StyleSheet.create({
   container: {
-    flexDirection: "row",
-    alignItems: "flex-start",
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     paddingVertical: 12,
   },
   avatar: {
@@ -57,27 +57,27 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   message: {
-    flexWrap: "wrap",
+    flexWrap: 'wrap',
   },
   bold: {
-    color: "#141414",
-    fontFamily: "Nunito_700Bold",
+    color: '#141414',
+    fontFamily: 'Nunito_700Bold',
     fontSize: 16,
-    fontWeight: "700",
+    fontWeight: '700',
     lineHeight: 17.6,
   },
   regular: {
-    color: "#6B6B6B",
-    fontFamily: "Nunito_400Regular",
+    color: '#6B6B6B',
+    fontFamily: 'Nunito_400Regular',
     fontSize: 16,
-    fontWeight: "400",
+    fontWeight: '400',
     lineHeight: 17.6,
   },
   timeText: {
-    color: "#9CA3AF",
-    fontFamily: "Nunito_400Regular",
+    color: '#9CA3AF',
+    fontFamily: 'Nunito_400Regular',
     fontSize: 12,
     marginTop: 4,
     lineHeight: 16,
   },
-});
+})

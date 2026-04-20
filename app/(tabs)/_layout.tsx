@@ -1,10 +1,11 @@
-import { useAuthStore } from '@/stores/authStore'
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { Redirect, Tabs } from 'expo-router'
 import React from 'react'
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Svg, { Path } from 'react-native-svg'
+
+import { useAuthStore } from '@/store/authStore'
 
 const akAvatar = require('../../assets/dashboard/ak.png')
 
@@ -150,14 +151,14 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 /* ─── Layout with auth guard ────────────────────────────── */
 
 export default function TabLayout() {
-  const session = useAuthStore((s) => s.session)
-  const isLoading = useAuthStore((s) => s.isLoading)
+  const session = useAuthStore(s => s.session)
+  const isLoading = useAuthStore(s => s.isLoading)
 
   if (isLoading) return null
   if (!session) return <Redirect href="/(auth)/login" />
 
   return (
-    <Tabs tabBar={(props) => <CustomTabBar {...props} />} screenOptions={{ headerShown: false }}>
+    <Tabs tabBar={props => <CustomTabBar {...props} />} screenOptions={{ headerShown: false }}>
       <Tabs.Screen name="index" options={{ title: 'Home' }} />
       <Tabs.Screen name="groups" options={{ title: 'Groups' }} />
       <Tabs.Screen name="ai" options={{ title: 'AI Assist' }} />

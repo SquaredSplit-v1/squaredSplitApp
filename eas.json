@@ -26,6 +26,7 @@
     "staging": {
       "distribution": "internal",
       "channel": "staging",
+      "environment": "preview",
       "env": {
         "APP_ENV": "staging"
       },
