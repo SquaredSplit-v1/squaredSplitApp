@@ -1,17 +1,23 @@
+// app/(tabs)/index.tsx
 import { useRouter } from 'expo-router'
-import React, { useState } from 'react'
-import { StyleSheet, TouchableOpacity, View } from 'react-native'
+import React, { useCallback, useEffect, useState } from 'react'
+import {
+  ActivityIndicator,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Svg, { Path } from 'react-native-svg'
 
-import type { FilterOption, Friend } from '@/components/dashboard'
-import {
-  AddExpenseButton,
-  BalanceSummary,
-  FilterModal,
-  FriendsList,
-  SquaredUpSection,
-} from '@/components/dashboard'
+import AddExpenseModal from '@/components/AddExpenseModal'
+import { formatAmount } from '@/lib/currency'
+import { useAuthStore } from '@/store/authStore'
+import { useCurrencyStore } from '@/store/currencyStore'
+import { useHomeStore } from '@/store/homeStore'
 
 function BellIcon() {
   return (
@@ -27,74 +33,43 @@ function BellIcon() {
   )
 }
 
-const akAvatar = require('../../assets/dashboard/ak.png')
-
-const MOCK_FRIENDS: Friend[] = [
-  {
-    id: '1',
-    name: 'AJ',
-    avatar: akAvatar,
-    subtitle: 'Due on 1 Jan',
-    subtitleType: 'default',
-    balanceType: 'owes_you',
-    amount: 10.0,
-  },
-  {
-    id: '2',
-    name: 'Praneeth Reddy\nRamesh',
-    avatar: null,
-    subtitle: 'Alert!',
-    subtitleType: 'alert',
-    balanceType: 'you_owe',
-    amount: 2420.0,
-  },
-  {
-    id: '3',
-    name: 'AJ',
-    avatar: akAvatar,
-    subtitle: 'Due on 1 Jan',
-    subtitleType: 'default',
-    balanceType: 'owes_you',
-    amount: 10.0,
-  },
-  {
-    id: '4',
-    name: 'Sarah Paul',
-    avatar: akAvatar,
-    subtitle: 'Upcoming due',
-    subtitleType: 'upcoming',
-    balanceType: 'owes_you',
-    amount: 370.5,
-  },
-  {
-    id: '5',
-    name: 'Seshwath Hegde',
-    avatar: akAvatar,
-    subtitle: "8 Dec'25",
-    subtitleType: 'default',
-    balanceType: 'owes_you',
-    amount: 500.0,
-  },
-]
-
 export default function HomeScreen() {
   const insets = useSafeAreaInsets()
   const router = useRouter()
-  const [filterVisible, setFilterVisible] = useState(false)
-  const [selectedFilter, setSelectedFilter] = useState<FilterOption>('none')
+  const user = useAuthStore(s => s.user)
+  const { current: currency } = useCurrencyStore()
+  const { balance, activity, isLoading, isRefreshing, fetch, refresh, reset } = useHomeStore()
+  const [addExpenseVisible, setAddExpenseVisible] = useState(false)
 
-  const handleFilterSelect = (filter: FilterOption) => {
-    setSelectedFilter(filter)
-    setFilterVisible(false)
-  }
+  useEffect(() => {
+    if (user) fetch(user.id)
+    return () => reset()
+  }, [user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleShowSquaredUp = () => {
-    console.log('Show squared-up friends')
-  }
+  const handleRefresh = useCallback(() => {
+    if (user) refresh(user.id)
+  }, [user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleExpenseCreated = useCallback(() => {
+    if (user) refresh(user.id)
+  }, [user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const isEmpty = !isLoading && activity.length === 0 && balance.netBalance === 0
 
   return (
     <View style={styles.container}>
-      <View style={[styles.content, { paddingTop: insets.top + 8 }]}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 100 },
+        ]}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor="#141414" />
+        }
+      >
+        {/* Nav bar */}
         <View style={styles.navBar}>
           <TouchableOpacity style={styles.navIcon} onPress={() => router.push('/notifications')}>
             <BellIcon />
@@ -125,25 +100,86 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        <BalanceSummary
-          balanceToSquare={20.0}
-          youAreOwed={2575.0}
-          youOwe={2575.0}
-          onFilterPress={() => setFilterVisible(true)}
-        />
+        {/* Balance card */}
+        {isLoading ? (
+          <View style={styles.loadingCard}>
+            <ActivityIndicator color="#141414" />
+          </View>
+        ) : (
+          <View style={styles.balanceCard}>
+            <Text style={styles.balanceLabel}>Net balance</Text>
+            <Text
+              style={[
+                styles.balanceAmount,
+                balance.netBalance > 0 && styles.positive,
+                balance.netBalance < 0 && styles.negative,
+              ]}
+            >
+              {formatAmount(Math.abs(balance.netBalance), currency)}
+            </Text>
+            {balance.netBalance !== 0 && (
+              <Text style={styles.balanceSubtext}>
+                {balance.netBalance > 0 ? 'You are owed overall' : 'You owe overall'}
+              </Text>
+            )}
+            <View style={styles.balanceRow}>
+              <View style={styles.balanceStat}>
+                <Text style={styles.balanceStatLabel}>You are owed</Text>
+                <Text style={[styles.balanceStatAmount, styles.positive]}>
+                  {formatAmount(balance.youAreOwed, currency)}
+                </Text>
+              </View>
+              <View style={styles.balanceDivider} />
+              <View style={styles.balanceStat}>
+                <Text style={styles.balanceStatLabel}>You owe</Text>
+                <Text style={[styles.balanceStatAmount, styles.negative]}>
+                  {formatAmount(balance.youOwe, currency)}
+                </Text>
+              </View>
+            </View>
+          </View>
+        )}
 
-        <FriendsList friends={MOCK_FRIENDS} />
+        {/* Activity / empty state */}
+        {isEmpty ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyEmoji}>🤝</Text>
+            <Text style={styles.emptyTitle}>No expenses yet</Text>
+            <Text style={styles.emptySubtitle}>
+              Add your first expense to start splitting with friends
+            </Text>
+            <TouchableOpacity style={styles.emptyAction} onPress={() => setAddExpenseVisible(true)}>
+              <Text style={styles.emptyActionText}>Add an expense</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.activitySection}>
+            <Text style={styles.sectionTitle}>Recent activity</Text>
+            {activity.map(item => (
+              <View key={item.id} style={styles.activityItem}>
+                <Text style={styles.activityDescription}>{item.description}</Text>
+                <Text style={styles.activityAmount}>{formatAmount(item.amount, currency)}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+      </ScrollView>
 
-        <SquaredUpSection onPress={handleShowSquaredUp} />
-      </View>
+      {/* FAB */}
+      <TouchableOpacity
+        style={[styles.fab, { bottom: insets.bottom + 24 }]}
+        onPress={() => setAddExpenseVisible(true)}
+        accessibilityRole="button"
+        accessibilityLabel="Add expense"
+      >
+        <Text style={styles.fabIcon}>+</Text>
+      </TouchableOpacity>
 
-      <AddExpenseButton onPress={() => console.log('Add expense')} />
-
-      <FilterModal
-        visible={filterVisible}
-        selectedFilter={selectedFilter}
-        onSelect={handleFilterSelect}
-        onClose={() => setFilterVisible(false)}
+      {/* Add Expense Modal — SS-021 */}
+      <AddExpenseModal
+        visible={addExpenseVisible}
+        onClose={() => setAddExpenseVisible(false)}
+        onSuccess={handleExpenseCreated}
       />
     </View>
   )
@@ -151,7 +187,8 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFFFFF' },
-  content: { flex: 1, paddingHorizontal: 20 },
+  scroll: { flex: 1 },
+  content: { paddingHorizontal: 20 },
   navBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -160,4 +197,82 @@ const styles = StyleSheet.create({
   },
   navIcon: { padding: 8 },
   navRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  loadingCard: {
+    height: 160,
+    backgroundColor: '#F3F4F5',
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  balanceCard: { backgroundColor: '#141414', borderRadius: 20, padding: 24, marginTop: 16 },
+  balanceLabel: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  balanceAmount: { fontSize: 36, fontWeight: '700', color: '#FFFFFF', marginBottom: 4 },
+  balanceSubtext: { fontSize: 13, color: '#9CA3AF', marginBottom: 20 },
+  positive: { color: '#34D399' },
+  negative: { color: '#F87171' },
+  balanceRow: {
+    flexDirection: 'row',
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#2A2A2A',
+  },
+  balanceStat: { flex: 1, alignItems: 'center' },
+  balanceStatLabel: { fontSize: 11, color: '#9CA3AF', marginBottom: 4 },
+  balanceStatAmount: { fontSize: 16, fontWeight: '600' },
+  balanceDivider: { width: 1, backgroundColor: '#2A2A2A' },
+  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80 },
+  emptyEmoji: { fontSize: 48, marginBottom: 16 },
+  emptyTitle: { fontSize: 20, fontWeight: '700', color: '#141414', marginBottom: 8 },
+  emptySubtitle: {
+    fontSize: 14,
+    color: '#6B6B6B',
+    textAlign: 'center',
+    lineHeight: 21,
+    marginBottom: 24,
+    paddingHorizontal: 32,
+  },
+  emptyAction: {
+    height: 48,
+    paddingHorizontal: 32,
+    backgroundColor: '#141414',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyActionText: { fontSize: 14, fontWeight: '600', color: '#FFFFFF' },
+  activitySection: { marginTop: 24 },
+  sectionTitle: { fontSize: 16, fontWeight: '600', color: '#141414', marginBottom: 12 },
+  activityItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F5',
+  },
+  activityDescription: { fontSize: 14, color: '#141414' },
+  activityAmount: { fontSize: 14, fontWeight: '600', color: '#141414' },
+  fab: {
+    position: 'absolute',
+    right: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#141414',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  fabIcon: { fontSize: 28, color: '#FFFFFF', lineHeight: 32 },
 })

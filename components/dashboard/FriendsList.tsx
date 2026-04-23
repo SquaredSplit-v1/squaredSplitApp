@@ -1,24 +1,25 @@
-import React from "react";
-import { FlatList, StyleSheet, View } from "react-native";
-import FriendItem from "./FriendItem";
-import type { Friend } from "./types";
+import React from 'react'
+import { FlatList, StyleSheet, View } from 'react-native'
+
+import FriendItem from './FriendItem'
+import type { Friend } from './types'
 
 interface FriendsListProps {
-  friends: Friend[];
+  friends: Friend[]
 }
 
 export default function FriendsList({ friends }: FriendsListProps) {
   return (
     <FlatList
       data={friends}
-      keyExtractor={(item) => item.id}
+      keyExtractor={item => item.id}
       renderItem={({ item }) => <FriendItem friend={item} />}
       ItemSeparatorComponent={() => <View style={styles.separator} />}
       showsVerticalScrollIndicator={false}
       style={styles.list}
       contentContainerStyle={styles.listContent}
     />
-  );
+  )
 }
 
 const styles = StyleSheet.create({
@@ -30,7 +31,7 @@ const styles = StyleSheet.create({
   },
   separator: {
     height: 1,
-    backgroundColor: "#F3F4F5",
+    backgroundColor: '#F3F4F5',
     marginLeft: 56,
   },
-});
+})

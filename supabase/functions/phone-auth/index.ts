@@ -1,318 +1,278 @@
-// Follow this setup guide to integrate the Deno language server with your editor:
-// https://deno.land/manual/getting_started/setup_your_environment
-// This enables autocomplete, go to definition, etc.
-
 // Setup type definitions for built-in Supabase Runtime APIs
-import "@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "@supabase/supabase-js";
+import "@supabase/functions-js/edge-runtime.d.ts"
+import { createClient } from "@supabase/supabase-js"
 
-// Initialize Supabase client with service role (server-side only - never expose to frontend)
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-);
-
-// Phone number validation regex (E.164 format)
-const PHONE_REGEX = /^\+[1-9]\d{6,14}$/;
+)
 
 // ============================================================================
 // E.164 Phone Normalization
 // ============================================================================
 
-/**
- * Normalizes and validates phone number to E.164 format.
- * - Strips all non-digit characters except leading +
- * - Rejects local formats (must start with +)
- * - Returns null if invalid
- */
+const PHONE_REGEX = /^\+[1-9]\d{6,14}$/
+
 function normalizePhoneE164(phone: string | undefined | null): string | null {
-  if (!phone || typeof phone !== "string") {
-    return null;
-  }
-
-  // Trim whitespace
-  let normalized = phone.trim();
-
-  // Must start with + (reject local formats)
-  if (!normalized.startsWith("+")) {
-    return null;
-  }
-
-  // Remove all non-digit characters except the leading +
-  normalized = "+" + normalized.slice(1).replace(/\D/g, "");
-
-  // Validate against E.164 regex
-  if (!PHONE_REGEX.test(normalized)) {
-    return null;
-  }
-
-  return normalized;
+  if (!phone || typeof phone !== "string") return null
+  let normalized = phone.trim()
+  if (!normalized.startsWith("+")) return null
+  normalized = "+" + normalized.slice(1).replace(/\D/g, "")
+  if (!PHONE_REGEX.test(normalized)) return null
+  return normalized
 }
 
 // ============================================================================
-// Rate Limiting (In-memory - acceptable for now, consider Redis/KV for prod)
+// Rate Limiting Constants
 // ============================================================================
 
-interface RateLimitEntry {
-  count: number;
-  firstRequest: number;
-  lastRequest: number;
+const OTP_SEND_LIMIT  = 5                      // 5 sends per window
+const OTP_WINDOW_MS   = 10 * 60 * 1000         // 10 min rolling window
+const OTP_COOLDOWN_MS = 30 * 1000              // 30s between sends
+const LOCKOUT_MS      = 10 * 60 * 1000         // 10 min lockout after limit hit
+
+const VERIFY_MAX_ATTEMPTS = 5                  // 5 wrong OTPs before lockout
+const VERIFY_LOCKOUT_MS   = 10 * 60 * 1000     // 10 min lockout after failed verifies
+
+// ============================================================================
+// Rate Limiting — Send OTP
+// ============================================================================
+
+async function checkAndIncrementRateLimit(
+  phone: string
+): Promise<{ allowed: boolean; retryAfter?: number }> {
+  const now = new Date()
+  const windowStart = new Date(now.getTime() - OTP_WINDOW_MS)
+
+  const { data: existing } = await supabase
+    .from("otp_rate_limits")
+    .select("*")
+    .eq("phone", phone)
+    .single()
+
+  // First ever attempt — insert and allow
+  if (!existing) {
+    await supabase.from("otp_rate_limits").insert({
+      phone,
+      attempt_count: 1,
+      window_start: now.toISOString(),
+      last_attempt: now.toISOString(),
+    })
+    return { allowed: true }
+  }
+
+  // Active lockout
+  if (existing.locked_until && new Date(existing.locked_until) > now) {
+    const retryAfter = Math.ceil(
+      (new Date(existing.locked_until).getTime() - now.getTime()) / 1000
+    )
+    return { allowed: false, retryAfter }
+  }
+
+  // Expired window — reset and allow
+  if (new Date(existing.window_start) < windowStart) {
+    await supabase
+      .from("otp_rate_limits")
+      .update({
+        attempt_count: 1,
+        window_start: now.toISOString(),
+        last_attempt: now.toISOString(),
+        locked_until: null,
+      })
+      .eq("phone", phone)
+    return { allowed: true }
+  }
+
+  // Cooldown between individual sends
+  const timeSinceLast = now.getTime() - new Date(existing.last_attempt).getTime()
+  if (timeSinceLast < OTP_COOLDOWN_MS) {
+    const retryAfter = Math.ceil((OTP_COOLDOWN_MS - timeSinceLast) / 1000)
+    return { allowed: false, retryAfter }
+  }
+
+  // ✅ Check limit BEFORE incrementing — prevents off-by-one lockout
+  if (existing.attempt_count >= OTP_SEND_LIMIT) {
+    const lockedUntil = new Date(now.getTime() + LOCKOUT_MS)
+    await supabase
+      .from("otp_rate_limits")
+      .update({ locked_until: lockedUntil.toISOString() })
+      .eq("phone", phone)
+    return { allowed: false, retryAfter: Math.ceil(LOCKOUT_MS / 1000) }
+  }
+
+  // Under limit — increment and allow
+  await supabase
+    .from("otp_rate_limits")
+    .update({
+      attempt_count: existing.attempt_count + 1,
+      last_attempt: now.toISOString(),
+    })
+    .eq("phone", phone)
+
+  return { allowed: true }
 }
 
-interface VerifyAttemptEntry {
-  attempts: number;
-  lockedUntil: number;
+// ============================================================================
+// Rate Limiting — Verify OTP
+// ============================================================================
+
+async function checkVerifyAttempts(
+  phone: string
+): Promise<{ allowed: boolean; retryAfter?: number }> {
+  const now = new Date()
+
+  const { data: existing } = await supabase
+    .from("otp_rate_limits")
+    .select("verify_attempts, verify_locked_until")
+    .eq("phone", phone)
+    .single()
+
+  if (!existing) return { allowed: true }
+
+  if (existing.verify_locked_until && new Date(existing.verify_locked_until) > now) {
+    const retryAfter = Math.ceil(
+      (new Date(existing.verify_locked_until).getTime() - now.getTime()) / 1000
+    )
+    return { allowed: false, retryAfter }
+  }
+
+  return { allowed: true }
 }
 
-// Rate limit stores
-const otpSendByPhone = new Map<string, RateLimitEntry>();
-const otpSendByIP = new Map<string, RateLimitEntry>();
-const verifyAttempts = new Map<string, VerifyAttemptEntry>();
+async function recordFailedVerify(phone: string): Promise<void> {
+  const now = new Date()
 
-// Rate limit constants
-const OTP_SEND_LIMIT_PER_PHONE = 5;    // Max 5 OTPs per phone
-const OTP_SEND_LIMIT_PER_IP = 10;       // Max 10 OTPs per IP
-const OTP_SEND_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
-const OTP_SEND_COOLDOWN_MS = 30 * 1000;    // 30 seconds between sends
+  const { data: existing } = await supabase
+    .from("otp_rate_limits")
+    .select("verify_attempts")
+    .eq("phone", phone)
+    .single()
 
-const VERIFY_MAX_ATTEMPTS = 5;          // Max 5 verify attempts
-const VERIFY_LOCKOUT_MS = 15 * 60 * 1000; // 15 minute lockout after failures
+  const newAttempts = (existing?.verify_attempts ?? 0) + 1
+  const lockedUntil = newAttempts >= VERIFY_MAX_ATTEMPTS
+    ? new Date(now.getTime() + VERIFY_LOCKOUT_MS).toISOString()
+    : null
 
-// Helper: Get client IP
-function getClientIP(req: Request): string {
-  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-         req.headers.get("x-real-ip") ||
-         "unknown";
+  await supabase
+    .from("otp_rate_limits")
+    .upsert({
+      phone,
+      verify_attempts: newAttempts,
+      verify_locked_until: lockedUntil,
+      window_start: now.toISOString(),
+      last_attempt: now.toISOString(),
+    })
 }
 
-// Helper: Check and update rate limit
-function checkRateLimit(
-  store: Map<string, RateLimitEntry>,
-  key: string,
-  limit: number,
-  windowMs: number,
-  cooldownMs: number
-): { allowed: boolean; retryAfter?: number } {
-  const now = Date.now();
-  const entry = store.get(key);
-
-  if (!entry) {
-    store.set(key, { count: 1, firstRequest: now, lastRequest: now });
-    return { allowed: true };
-  }
-
-  // Reset if window expired
-  if (now - entry.firstRequest > windowMs) {
-    store.set(key, { count: 1, firstRequest: now, lastRequest: now });
-    return { allowed: true };
-  }
-
-  // Check cooldown
-  if (now - entry.lastRequest < cooldownMs) {
-    return { allowed: false, retryAfter: Math.ceil((cooldownMs - (now - entry.lastRequest)) / 1000) };
-  }
-
-  // Check limit
-  if (entry.count >= limit) {
-    const retryAfter = Math.ceil((windowMs - (now - entry.firstRequest)) / 1000);
-    return { allowed: false, retryAfter };
-  }
-
-  // Update entry
-  entry.count++;
-  entry.lastRequest = now;
-  return { allowed: true };
+async function clearVerifyAttempts(phone: string): Promise<void> {
+  await supabase
+    .from("otp_rate_limits")
+    .update({ verify_attempts: 0, verify_locked_until: null })
+    .eq("phone", phone)
 }
 
-// Helper: Check verify attempts
-function checkVerifyAttempts(phone: string): { allowed: boolean; retryAfter?: number } {
-  const now = Date.now();
-  const entry = verifyAttempts.get(phone);
-
-  if (!entry) {
-    return { allowed: true };
-  }
-
-  // Check if locked out
-  if (entry.lockedUntil > now) {
-    return { allowed: false, retryAfter: Math.ceil((entry.lockedUntil - now) / 1000) };
-  }
-
-  // Reset if lockout expired
-  if (entry.lockedUntil <= now && entry.attempts >= VERIFY_MAX_ATTEMPTS) {
-    verifyAttempts.delete(phone);
-    return { allowed: true };
-  }
-
-  return { allowed: true };
-}
-
-// Helper: Record failed verify attempt
-function recordFailedVerify(phone: string): void {
-  const now = Date.now();
-  const entry = verifyAttempts.get(phone);
-
-  if (!entry) {
-    verifyAttempts.set(phone, { attempts: 1, lockedUntil: 0 });
-    return;
-  }
-
-  entry.attempts++;
-
-  // Lock if max attempts reached
-  if (entry.attempts >= VERIFY_MAX_ATTEMPTS) {
-    entry.lockedUntil = now + VERIFY_LOCKOUT_MS;
-  }
-}
-
-// Helper: Clear verify attempts on success
-function clearVerifyAttempts(phone: string): void {
-  verifyAttempts.delete(phone);
-}
+// ============================================================================
+// CORS
+// ============================================================================
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+}
+
+// ============================================================================
+// Main Handler
+// ============================================================================
 
 Deno.serve(async (req: Request) => {
-  // Handle CORS preflight
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: corsHeaders })
   }
 
-  const url = new URL(req.url);
-  const path = url.pathname.replace("/phone-auth", "");
+  const url = new URL(req.url)
+  const path = url.pathname.replace("/phone-auth", "")
 
   try {
-    // POST /send-otp - Send OTP to phone number
+    // ── POST /send-otp ───────────────────────────────────────────────────────
     if (req.method === "POST" && path === "/send-otp") {
-      const { phone: rawPhone } = await req.json();
+      const { phone: rawPhone } = await req.json()
 
-      // Normalize and validate phone to E.164 (rejects local formats)
-      const phone = normalizePhoneE164(rawPhone);
+      const phone = normalizePhoneE164(rawPhone)
       if (!phone) {
         return new Response(
-          JSON.stringify({ success: false, error: "Invalid phone format. Use E.164 format (e.g., +14155551234)" }),
+          JSON.stringify({ success: false, error: "Invalid phone format. Use E.164 (e.g. +919876543210)" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        )
       }
 
-      // Rate limit by phone number (uses normalized phone)
-      const phoneLimit = checkRateLimit(
-        otpSendByPhone,
-        phone,
-        OTP_SEND_LIMIT_PER_PHONE,
-        OTP_SEND_WINDOW_MS,
-        OTP_SEND_COOLDOWN_MS
-      );
-      if (!phoneLimit.allowed) {
+      const rateLimit = await checkAndIncrementRateLimit(phone)
+      if (!rateLimit.allowed) {
         return new Response(
-          JSON.stringify({ error: "Too many attempts. Try again later.", retryAfter: phoneLimit.retryAfter }),
+          JSON.stringify({ error: "Too many attempts. Try again later.", retryAfter: rateLimit.retryAfter }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        )
       }
 
-      // Rate limit by IP
-      const clientIP = getClientIP(req);
-      const ipLimit = checkRateLimit(
-        otpSendByIP,
-        clientIP,
-        OTP_SEND_LIMIT_PER_IP,
-        OTP_SEND_WINDOW_MS,
-        OTP_SEND_COOLDOWN_MS
-      );
-      if (!ipLimit.allowed) {
-        return new Response(
-          JSON.stringify({ error: "Too many attempts. Try again later.", retryAfter: ipLimit.retryAfter }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+      await supabase.auth.signInWithOtp({ phone })
 
-      // Send OTP via Supabase Auth
-      await supabase.auth.signInWithOtp({ phone });
-
-      // Always return generic success (no user existence checks)
       return new Response(
         JSON.stringify({ success: true }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      )
     }
 
-    // POST /verify-otp - Verify OTP and create session (handles both sign-up and sign-in)
+    // ── POST /verify-otp ─────────────────────────────────────────────────────
     if (req.method === "POST" && path === "/verify-otp") {
-      const { phone: rawPhone, otp } = await req.json();
+      const { phone: rawPhone, otp } = await req.json()
 
-      // Normalize and validate phone to E.164
-      const phone = normalizePhoneE164(rawPhone);
+      const phone = normalizePhoneE164(rawPhone)
       if (!phone || !otp) {
         return new Response(
           JSON.stringify({ error: "Invalid request" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        )
       }
 
-      // Check rate limit for verify attempts (uses normalized phone)
-      const verifyLimit = checkVerifyAttempts(phone);
+      const verifyLimit = await checkVerifyAttempts(phone)
       if (!verifyLimit.allowed) {
         return new Response(
           JSON.stringify({ error: "Too many attempts. Try again later.", retryAfter: verifyLimit.retryAfter }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        )
       }
 
-      // Verify OTP via Supabase Auth (uses normalized phone)
       const { data, error } = await supabase.auth.verifyOtp({
         phone,
         token: otp,
         type: "sms",
-      });
+      })
 
       if (error) {
-        // Record failed attempt
-        recordFailedVerify(phone);
-        // Do NOT expose raw Supabase/Twilio errors
+        await recordFailedVerify(phone)
         return new Response(
           JSON.stringify({ error: "Invalid or expired OTP" }),
           { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        )
       }
 
-      // Clear verify attempts on success
-      clearVerifyAttempts(phone);
+      await clearVerifyAttempts(phone)
 
-      // Return session + user to frontend
       return new Response(
-        JSON.stringify({
-          session: data.session,
-          user: data.user,
-        }),
+        JSON.stringify({ session: data.session, user: data.user }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      )
     }
 
-    // Not found
+    // ── 404 ──────────────────────────────────────────────────────────────────
     return new Response(
       JSON.stringify({ error: "Not found" }),
       { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    )
+
   } catch (_error) {
-    // Generic error response (no detailed error messages)
     return new Response(
       JSON.stringify({ success: false, error: "Request failed" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    )
   }
 })
-
-/* To invoke locally:
-
-  1. Run `supabase start` (see: https://supabase.com/docs/reference/cli/supabase-start)
-  2. Make an HTTP request:
-
-  curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/phone-auth' \
-    --header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0' \
-    --header 'Content-Type: application/json' \
-    --data '{"name":"Functions"}'
-
-*/

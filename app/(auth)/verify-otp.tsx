@@ -1,7 +1,5 @@
-import { resendOtp as resendOtpApi, verifyOtp as verifyOtpApi } from '@/lib/auth'
-import { supabase } from '@/lib/supabase'
 import { Ionicons } from '@expo/vector-icons'
-import AsyncStorage from '@react-native-async-storage/async-storage'
+import * as Haptics from 'expo-haptics'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import React, { useEffect, useRef, useState } from 'react'
 import {
@@ -17,9 +15,13 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-const ONBOARDING_COMPLETE_KEY = '@squaredsplit/onboarding_complete'
+import { resendOtp as resendOtpApi, verifyOtp as verifyOtpApi } from '@/lib/auth'
+
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const OTP_LENGTH = 6
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function VerifyOTPScreen() {
   const insets = useSafeAreaInsets()
@@ -32,62 +34,23 @@ export default function VerifyOTPScreen() {
   const [otpError, setOtpError] = useState<string | null>(null)
   const inputRefs = useRef<(TextInput | null)[]>([])
 
+  // Focus first input on mount
   useEffect(() => {
-    // Focus first input on mount
     inputRefs.current[0]?.focus()
   }, [])
 
+  // Countdown timer for resend button
   useEffect(() => {
-    // Countdown timer for resend
     if (resendTimer > 0) {
       const timer = setTimeout(() => setResendTimer(resendTimer - 1), 1000)
       return () => clearTimeout(timer)
     }
   }, [resendTimer])
 
-  const handleOtpChange = (value: string, index: number) => {
-    // Clear error when user starts editing
-    if (otpError) setOtpError(null)
-    // Only allow digits
-    if (value && !/^\d+$/.test(value)) return
+  // ─── Core verify logic — shared by button tap and auto-submit ──────────────
 
-    const newOtp = [...otp]
-
-    // Handle paste
-    if (value.length > 1) {
-      const digits = value.slice(0, OTP_LENGTH).split('')
-      digits.forEach((digit, i) => {
-        if (index + i < OTP_LENGTH) {
-          newOtp[index + i] = digit
-        }
-      })
-      setOtp(newOtp)
-      const nextIndex = Math.min(index + digits.length, OTP_LENGTH - 1)
-      inputRefs.current[nextIndex]?.focus()
-      return
-    }
-
-    newOtp[index] = value
-    setOtp(newOtp)
-
-    // Move to next input
-    if (value && index < OTP_LENGTH - 1) {
-      inputRefs.current[index + 1]?.focus()
-    }
-  }
-
-  const handleKeyPress = (key: string, index: number) => {
-    if (key === 'Backspace' && !otp[index] && index > 0) {
-      inputRefs.current[index - 1]?.focus()
-    }
-  }
-
-  const verifyOtp = async () => {
-    const otpCode = otp.join('')
-    if (otpCode.length !== OTP_LENGTH) {
-      setOtpError('Please enter the complete verification code')
-      return
-    }
+  const handleVerifyWithOtp = async (otpCode: string) => {
+    if (otpCode.length !== OTP_LENGTH) return
 
     if (!phone) {
       Alert.alert('Error', 'Phone number not found. Please go back and try again.')
@@ -101,34 +64,71 @@ export default function VerifyOTPScreen() {
       const result = await verifyOtpApi(phone, otpCode)
 
       if (!result.success) {
-        // Wrong / expired OTP — surface inline so the user can resend
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
         setOtpError(result.error ?? 'Incorrect code. Please try again or resend a new one.')
-        // Clear the entered digits and refocus first cell
         setOtp(new Array(OTP_LENGTH).fill(''))
         inputRefs.current[0]?.focus()
         return
       }
 
-      // Session is hydrated by supabase.auth.verifyOtp automatically.
-      // Check per-user onboarding flag from AsyncStorage.
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      const userId = session?.user?.id ?? ''
-      const onboardingValue = await AsyncStorage.getItem(`${ONBOARDING_COMPLETE_KEY}:${userId}`)
-      const hasCompletedOnboarding = onboardingValue === 'true'
-
-      if (hasCompletedOnboarding) {
-        router.replace('/(tabs)')
-      } else {
-        router.replace('/onboarding')
-      }
+      // ✅ Haptic success feedback
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+      // RootNavigator handles redirect — do not navigate manually
     } catch {
       Alert.alert('Error', 'Something went wrong. Please try again.')
     } finally {
       setIsLoading(false)
     }
   }
+
+  // Verify button tap
+  const handleVerify = () => handleVerifyWithOtp(otp.join(''))
+
+  // ─── Input handlers ────────────────────────────────────────────────────────
+
+  const handleOtpChange = (value: string, index: number) => {
+    if (otpError) setOtpError(null)
+    if (value && !/^\d+$/.test(value)) return
+
+    const newOtp = [...otp]
+
+    // Handle paste — fill from current index forward
+    if (value.length > 1) {
+      const digits = value.slice(0, OTP_LENGTH).split('')
+      digits.forEach((digit, i) => {
+        if (index + i < OTP_LENGTH) newOtp[index + i] = digit
+      })
+      setOtp(newOtp)
+      inputRefs.current[Math.min(index + digits.length, OTP_LENGTH - 1)]?.focus()
+
+      // Auto-submit if paste fills all 6 digits
+      if (newOtp.filter(d => d !== '').length === OTP_LENGTH) {
+        handleVerifyWithOtp(newOtp.join(''))
+      }
+      return
+    }
+
+    newOtp[index] = value
+    setOtp(newOtp)
+
+    if (value && index < OTP_LENGTH - 1) {
+      // Advance to next box
+      inputRefs.current[index + 1]?.focus()
+    }
+
+    // Auto-submit on 6th digit
+    if (value && index === OTP_LENGTH - 1) {
+      handleVerifyWithOtp(newOtp.join(''))
+    }
+  }
+
+  const handleKeyPress = (key: string, index: number) => {
+    if (key === 'Backspace' && !otp[index] && index > 0) {
+      inputRefs.current[index - 1]?.focus()
+    }
+  }
+
+  // ─── Resend ────────────────────────────────────────────────────────────────
 
   const handleResendOtp = async () => {
     if (resendTimer > 0 || !phone) return
@@ -155,10 +155,9 @@ export default function VerifyOTPScreen() {
     }
   }
 
-  const formatPhoneDisplay = (phoneNumber: string) => {
-    // Format phone for display
-    return phoneNumber || ''
-  }
+  // ─── Render ─────────────────────────────────────────────────────────────────
+
+  const isOtpComplete = otp.join('').length === OTP_LENGTH
 
   return (
     <KeyboardAvoidingView
@@ -168,8 +167,13 @@ export default function VerifyOTPScreen() {
       <View
         style={[styles.content, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 20 }]}
       >
-        {/* Back Button */}
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        {/* Back button */}
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
           <Text style={styles.backButtonText}>← Back</Text>
         </TouchableOpacity>
 
@@ -177,15 +181,15 @@ export default function VerifyOTPScreen() {
         <Text style={styles.title}>
           Please enter the verification code sent to your mobile number
         </Text>
-        <Text style={styles.phoneDisplay}>{formatPhoneDisplay(phone || '')}</Text>
+        <Text style={styles.phoneDisplay}>{phone ?? ''}</Text>
 
-        {/* OTP Input */}
+        {/* OTP inputs */}
         <Text style={styles.otpLabel}>Verification code</Text>
         <View style={styles.otpContainer}>
           {otp.map((digit, index) => (
             <TextInput
               key={index}
-              ref={(ref) => {
+              ref={ref => {
                 inputRefs.current[index] = ref
               }}
               style={[
@@ -194,11 +198,13 @@ export default function VerifyOTPScreen() {
                 otpError ? styles.otpInputError : null,
               ]}
               value={digit}
-              onChangeText={(value) => handleOtpChange(value, index)}
+              onChangeText={value => handleOtpChange(value, index)}
               onKeyPress={({ nativeEvent }) => handleKeyPress(nativeEvent.key, index)}
               keyboardType="number-pad"
               maxLength={1}
               selectTextOnFocus
+              editable={!isLoading}
+              accessibilityLabel={`OTP digit ${index + 1}`}
             />
           ))}
         </View>
@@ -206,11 +212,13 @@ export default function VerifyOTPScreen() {
         {/* Inline error */}
         {otpError ? <Text style={styles.errorText}>{otpError}</Text> : null}
 
-        {/* Send again */}
+        {/* Resend button */}
         <TouchableOpacity
           style={styles.sendAgainButton}
           onPress={handleResendOtp}
           disabled={resendTimer > 0 || isLoading}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: resendTimer > 0 || isLoading }}
         >
           <Ionicons
             name="refresh-circle"
@@ -222,14 +230,17 @@ export default function VerifyOTPScreen() {
           </Text>
         </TouchableOpacity>
 
-        {/* Save changes Button */}
+        {/* Verify button */}
         <TouchableOpacity
           style={[
             styles.verifyButton,
-            otp.join('').length !== OTP_LENGTH && styles.verifyButtonDisabled,
+            (!isOtpComplete || isLoading) && styles.verifyButtonDisabled,
           ]}
-          onPress={verifyOtp}
-          disabled={isLoading || otp.join('').length !== OTP_LENGTH}
+          onPress={handleVerify}
+          disabled={!isOtpComplete || isLoading}
+          accessibilityRole="button"
+          accessibilityLabel="Verify code"
+          accessibilityState={{ disabled: !isOtpComplete || isLoading }}
         >
           {isLoading ? (
             <ActivityIndicator color="#FFFFFF" />
@@ -241,6 +252,8 @@ export default function VerifyOTPScreen() {
     </KeyboardAvoidingView>
   )
 }
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: {
@@ -302,9 +315,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.04,
     shadowRadius: 4,
     elevation: 0,
-  },
-  otpInputFocused: {
-    borderColor: '#141414',
   },
   otpInputError: {
     borderColor: '#EF4444',

@@ -1,4 +1,3 @@
-import { useAuthStore } from '@/stores/authStore'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useRouter } from 'expo-router'
 import React, { useEffect, useState } from 'react'
@@ -61,6 +60,8 @@ const slides = [
 
 const SLIDE_COUNT = slides.length
 
+// ─── FloatingImages ───────────────────────────────────────────────────────────
+
 function FloatingImages() {
   return (
     <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
@@ -88,6 +89,8 @@ function FloatingImages() {
   )
 }
 
+// ─── SlideContent ─────────────────────────────────────────────────────────────
+
 interface SlideContentProps {
   slide: (typeof slides)[number]
   isActive: boolean
@@ -102,16 +105,13 @@ function SlideContent({ slide, isLast, insets, onAction, activeIndex }: SlideCon
 
   const inner = (
     <>
-      {/* Floating images — only on slide 1 */}
       {slide.bg === 'gradient-images' && <FloatingImages />}
 
-      {/* Header */}
       <View style={[styles.headerContainer, { paddingTop: insets.top + 16 }]}>
         <Text style={[styles.welcomeLight, isPhoto && styles.textWhite]}>Welcome to</Text>
         <Text style={[styles.welcomeBold, isPhoto && styles.textWhite]}>SquaredSplit</Text>
       </View>
 
-      {/* Bottom section */}
       <View style={[styles.bottomSection, { paddingBottom: insets.bottom + 16 }]}>
         <Text style={[styles.pageTitle, isPhoto && styles.textWhite]}>{slide.title}</Text>
         <Text style={[styles.pageDescription, isPhoto && styles.descriptionWhite]}>
@@ -128,7 +128,6 @@ function SlideContent({ slide, isLast, insets, onAction, activeIndex }: SlideCon
           </Text>
         </TouchableOpacity>
 
-        {/* Pagination dots */}
         <View style={styles.paginationContainer}>
           {slides.map((_, dotIndex) => (
             <View
@@ -174,13 +173,14 @@ function SlideContent({ slide, isLast, insets, onAction, activeIndex }: SlideCon
     )
   }
 
-  // gradient-plain
   return (
     <LinearGradient colors={['#D4E7FF', '#FFFFFF']} locations={[0.0337, 1]} style={styles.slide}>
       {inner}
     </LinearGradient>
   )
 }
+
+// ─── FadeSlide ────────────────────────────────────────────────────────────────
 
 interface FadeSlideProps {
   slide: (typeof slides)[number]
@@ -221,21 +221,23 @@ function FadeSlide({ slide, index, activeIndex, isLast, insets, onAction }: Fade
   )
 }
 
+// ─── Screen ───────────────────────────────────────────────────────────────────
+
 export default function OnboardingScreen() {
   const insets = useSafeAreaInsets()
   const router = useRouter()
-  const completeOnboarding = useAuthStore((s) => s.completeOnboarding)
-
   const [activeIndex, setActiveIndex] = useState(0)
 
   const handleScreenTap = () => {
     if (activeIndex < SLIDE_COUNT - 1) {
-      setActiveIndex((prev) => prev + 1)
+      setActiveIndex(prev => prev + 1)
     }
   }
 
-  const handleAction = async () => {
-    await completeOnboarding()
+  // ✅ Do NOT call completeOnboarding() here — profile.tsx handles it
+  // Calling it here would set hasCompletedOnboarding: true and redirect
+  // RootNavigator to /(tabs) before profile setup is done
+  const handleAction = () => {
     router.replace('/onboarding/profile')
   }
 
@@ -259,6 +261,8 @@ export default function OnboardingScreen() {
     </TouchableWithoutFeedback>
   )
 }
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: {
