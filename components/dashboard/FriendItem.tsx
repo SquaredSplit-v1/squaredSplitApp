@@ -1,12 +1,13 @@
 import React from "react";
-import { Image, StyleSheet, Text, View } from "react-native";
+import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import type { Friend } from "./types";
 
 interface FriendItemProps {
   friend: Friend;
+  onPress?: () => void;
 }
 
-export default function FriendItem({ friend }: FriendItemProps) {
+export default function FriendItem({ friend, onPress }: FriendItemProps) {
   const isOwedToYou = friend.balanceType === "owes_you";
 
   const formatAmount = (amount: number) =>
@@ -38,7 +39,12 @@ export default function FriendItem({ friend }: FriendItemProps) {
   };
 
   return (
-    <View style={styles.container}>
+    <TouchableOpacity
+      style={styles.container}
+      onPress={onPress}
+      activeOpacity={onPress ? 0.7 : 1}
+      disabled={!onPress}
+    >
       {/* Avatar */}
       <View style={styles.avatarContainer}>
         {friend.avatar ? (
@@ -77,7 +83,7 @@ export default function FriendItem({ friend }: FriendItemProps) {
           {formatAmount(friend.amount)}
         </Text>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 

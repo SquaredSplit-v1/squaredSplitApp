@@ -8,6 +8,7 @@ export default function DashboardLayout() {
       }}
     >
       <Stack.Screen name="dashboard" />
+      <Stack.Screen name="expense/[id]" />
     </Stack>
   );
 }

@@ -5,14 +5,15 @@ import type { Group } from "./types";
 
 interface GroupsListProps {
   groups: Group[];
+  onGroupPress?: () => void;
 }
 
-export default function GroupsList({ groups }: GroupsListProps) {
+export default function GroupsList({ groups, onGroupPress }: GroupsListProps) {
   return (
     <FlatList
       data={groups}
       keyExtractor={(item) => item.id}
-      renderItem={({ item }) => <GroupItem group={item} />}
+      renderItem={({ item }) => <GroupItem group={item} onPress={onGroupPress} />}
       ItemSeparatorComponent={() => <View style={styles.separator} />}
       showsVerticalScrollIndicator={false}
       style={styles.list}

@@ -1,14 +1,15 @@
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { ExpenseProvider } from "@/lib/store/expense-store";
 import {
-  Nunito_400Regular,
-  Nunito_600SemiBold,
-  Nunito_700Bold,
-  useFonts,
+    Nunito_400Regular,
+    Nunito_600SemiBold,
+    Nunito_700Bold,
+    useFonts,
 } from "@expo-google-fonts/nunito";
 import {
-  DarkTheme,
-  DefaultTheme,
-  ThemeProvider,
+    DarkTheme,
+    DefaultTheme,
+    ThemeProvider,
 } from "@react-navigation/native";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -85,10 +86,12 @@ export default function RootLayout() {
 
   return (
     <AuthProvider>
-      <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-        <RootNavigator />
-        <StatusBar style="auto" />
-      </ThemeProvider>
+      <ExpenseProvider>
+        <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+          <RootNavigator />
+          <StatusBar style="auto" />
+        </ThemeProvider>
+      </ExpenseProvider>
     </AuthProvider>
   );
 }

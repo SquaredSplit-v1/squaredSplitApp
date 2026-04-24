@@ -5,6 +5,7 @@ import type { Group } from "./types";
 
 interface GroupItemProps {
   group: Group;
+  onPress?: () => void;
 }
 
 function ExpandArrow({ expanded }: { expanded: boolean }) {
@@ -23,7 +24,7 @@ function ExpandArrow({ expanded }: { expanded: boolean }) {
   );
 }
 
-export default function GroupItem({ group }: GroupItemProps) {
+export default function GroupItem({ group, onPress }: GroupItemProps) {
   const [expanded, setExpanded] = useState(false);
   const isOwedToYou = group.balanceType === "owes_you";
   const hasMembers = group.members && group.members.length > 0;
@@ -38,8 +39,8 @@ export default function GroupItem({ group }: GroupItemProps) {
     <View>
       <TouchableOpacity
         style={styles.container}
-        onPress={() => hasMembers && setExpanded(!expanded)}
-        activeOpacity={hasMembers ? 0.7 : 1}
+        onPress={onPress ?? (() => hasMembers && setExpanded(!expanded))}
+        activeOpacity={0.7}
       >
         {/* Avatar */}
         <View style={styles.avatarContainer}>

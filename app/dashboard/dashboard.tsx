@@ -1,23 +1,24 @@
 import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { StyleSheet, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 
 import type {
-  FilterOption,
-  Friend,
-  Group,
-  TabName,
+    FilterOption,
+    Friend,
+    Group,
+    TabName,
 } from "@/components/dashboard";
 import {
-  AddExpenseButton,
-  BalanceSummary,
-  BottomTabBar,
-  FilterModal,
-  FriendsList,
-  GroupsList,
-  SquaredUpSection,
+    AddExpenseButton,
+    BalanceSummary,
+    BottomTabBar,
+    FilterModal,
+    FriendsList,
+    GroupsList,
+    SquaredUpSection,
 } from "@/components/dashboard";
 
 // Notification bell icon (replaces wallet)
@@ -118,6 +119,7 @@ const MOCK_GROUPS: Group[] = [
 ];
 
 export default function DashboardScreen() {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<TabName>("home");
   const [filterVisible, setFilterVisible] = useState(false);
@@ -136,6 +138,10 @@ export default function DashboardScreen() {
   const handleShowSquaredUp = () => {
     // TODO: Toggle squared-up friends visibility
     console.log("Show squared-up friends");
+  };
+
+  const handleExpensePress = () => {
+    router.push("/dashboard/expense/paid-for-car" as never);
   };
 
   return (
@@ -190,9 +196,9 @@ export default function DashboardScreen() {
 
         {/* Tab content */}
         {activeTab === "groups" ? (
-          <GroupsList groups={MOCK_GROUPS} />
+          <GroupsList groups={MOCK_GROUPS} onGroupPress={handleExpensePress} />
         ) : (
-          <FriendsList friends={MOCK_FRIENDS} />
+          <FriendsList friends={MOCK_FRIENDS} onFriendPress={handleExpensePress} />
         )}
 
         {/* Show squared-up friends */}
