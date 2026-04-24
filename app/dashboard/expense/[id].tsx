@@ -146,7 +146,6 @@ export default function ExpenseDetailScreen() {
         </View>
 
         
-        {/*
         <View style={styles.actionStack}>
           <TouchableOpacity style={styles.primaryAction} onPress={() => {}}>
             <Text style={styles.primaryActionText}>Settle expense</Text>
@@ -160,7 +159,6 @@ export default function ExpenseDetailScreen() {
             <Text style={styles.dangerActionText}>Delete expense</Text>
           </TouchableOpacity>
         </View>
-        */}
       </ScrollView>
     </View>
   );
