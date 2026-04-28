@@ -130,6 +130,44 @@ const INITIAL_EXPENSES: ExpenseDetail[] = [
     ],
     isSettled: false,
   },
+  {
+    id: "taxi",
+    title: "Taxi",
+    amount: 9.24,
+    currency: "USD",
+    date: "5 mins ago",
+    description: "Taxi ride from the station.",
+    notes: "Shared after the ride to the station.",
+    splitType: "exact",
+    paidByName: "You",
+    paidByAvatar: akAvatar,
+    createdBy: CURRENT_USER_ID,
+    participants: [
+      {
+        id: CURRENT_USER_ID,
+        name: "You",
+        amount: 0,
+        splitType: "exact",
+        settled: true,
+        isCurrentUser: true,
+      },
+      {
+        id: "user-sarah",
+        name: "Sarah Paul",
+        amount: 9.24,
+        splitType: "exact",
+        settled: false,
+      },
+    ],
+    terms: [
+      "Taxi costs are split equally unless changed before settlement.",
+      "Any adjustment should be recorded as a new expense.",
+      "Settlement marks the current share as paid.",
+      "The creator can delete this record.",
+      "All times are shown in the payer's local timezone.",
+    ],
+    isSettled: false,
+  },
 ];
 
 const ExpenseStoreContext = createContext<ExpenseStoreContextValue | undefined>(

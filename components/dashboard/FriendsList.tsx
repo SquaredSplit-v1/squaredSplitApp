@@ -5,7 +5,7 @@ import type { Friend } from "./types";
 
 interface FriendsListProps {
   friends: Friend[];
-  onFriendPress?: () => void;
+  onFriendPress?: (friend: Friend) => void;
 }
 
 export default function FriendsList({ friends, onFriendPress }: FriendsListProps) {
@@ -13,7 +13,9 @@ export default function FriendsList({ friends, onFriendPress }: FriendsListProps
     <FlatList
       data={friends}
       keyExtractor={(item) => item.id}
-      renderItem={({ item }) => <FriendItem friend={item} onPress={onFriendPress} />}
+      renderItem={({ item }) => (
+        <FriendItem friend={item} onPress={onFriendPress} />
+      )}
       ItemSeparatorComponent={() => <View style={styles.separator} />}
       showsVerticalScrollIndicator={false}
       style={styles.list}

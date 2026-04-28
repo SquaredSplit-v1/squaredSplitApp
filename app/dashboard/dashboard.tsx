@@ -5,20 +5,15 @@ import { StyleSheet, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 
-import type {
-    FilterOption,
-    Friend,
-    Group,
-    TabName,
-} from "@/components/dashboard";
+import type { FilterOption, Friend, Group, TabName } from "@/components/dashboard";
 import {
-    AddExpenseButton,
-    BalanceSummary,
-    BottomTabBar,
-    FilterModal,
-    FriendsList,
-    GroupsList,
-    SquaredUpSection,
+  AddExpenseButton,
+  BalanceSummary,
+  BottomTabBar,
+  FilterModal,
+  FriendsList,
+  GroupsList,
+  SquaredUpSection,
 } from "@/components/dashboard";
 
 // Notification bell icon (replaces wallet)
@@ -140,8 +135,11 @@ export default function DashboardScreen() {
     console.log("Show squared-up friends");
   };
 
-  const handleExpensePress = () => {
-    router.push("/dashboard/expense/paid-for-car" as never);
+  const handleFriendPress = (friend: Friend) => {
+    router.push({
+      pathname: "/dashboard/friend",
+      params: { friendId: friend.id },
+    } as never);
   };
 
   return (
@@ -196,9 +194,9 @@ export default function DashboardScreen() {
 
         {/* Tab content */}
         {activeTab === "groups" ? (
-          <GroupsList groups={MOCK_GROUPS} onGroupPress={handleExpensePress} />
+          <GroupsList groups={MOCK_GROUPS} onGroupPress={() => {}} />
         ) : (
-          <FriendsList friends={MOCK_FRIENDS} onFriendPress={handleExpensePress} />
+          <FriendsList friends={MOCK_FRIENDS} onFriendPress={handleFriendPress} />
         )}
 
         {/* Show squared-up friends */}

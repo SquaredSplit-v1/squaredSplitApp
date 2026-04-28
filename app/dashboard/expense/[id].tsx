@@ -2,12 +2,12 @@ import { Asset } from "expo-asset";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useMemo } from "react";
 import {
-    Image,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SvgUri } from "react-native-svg";
 
@@ -22,7 +22,6 @@ const senderSignatureUri = Asset.fromModule(
 const receiverSignatureUri = Asset.fromModule(
   require("../../../assets/expense-screen/reciever-signature.svg"),
 ).uri;
-
 function formatCurrency(amount: number) {
   return `$${amount.toLocaleString("en-US", {
     minimumFractionDigits: 2,
@@ -145,7 +144,7 @@ export default function ExpenseDetailScreen() {
           </View>
         </View>
 
-        
+        {/*
         <View style={styles.actionStack}>
           <TouchableOpacity style={styles.primaryAction} onPress={() => {}}>
             <Text style={styles.primaryActionText}>Settle expense</Text>
@@ -159,6 +158,7 @@ export default function ExpenseDetailScreen() {
             <Text style={styles.dangerActionText}>Delete expense</Text>
           </TouchableOpacity>
         </View>
+        */}
       </ScrollView>
     </View>
   );

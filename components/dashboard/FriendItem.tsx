@@ -4,7 +4,7 @@ import type { Friend } from "./types";
 
 interface FriendItemProps {
   friend: Friend;
-  onPress?: () => void;
+  onPress?: (friend: Friend) => void;
 }
 
 export default function FriendItem({ friend, onPress }: FriendItemProps) {
@@ -41,7 +41,7 @@ export default function FriendItem({ friend, onPress }: FriendItemProps) {
   return (
     <TouchableOpacity
       style={styles.container}
-      onPress={onPress}
+      onPress={() => onPress?.(friend)}
       activeOpacity={onPress ? 0.7 : 1}
       disabled={!onPress}
     >
