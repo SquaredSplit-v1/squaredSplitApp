@@ -7,9 +7,9 @@ const envConfig = {
     name: 'SquaredSplit (Dev)',
     bundleIdentifier: 'com.squaredsplit.app.dev',
     androidPackage: 'com.squaredsplit.app.dev',
-    supabaseUrl: 'https://jwtqxvxkrgqcdzsgwucd.supabase.co',
+    supabaseUrl: 'https://bwkgphgnrrwczxkfeanz.supabase.co',
     supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '',
-    phoneAuthUrl: 'https://jwtqxvxkrgqcdzsgwucd.supabase.co/functions/v1/phone-auth',
+    phoneAuthUrl: 'https://bwkgphgnrrwczxkfeanz.supabase.co/functions/v1/phone-auth',
     icon: './assets/icon-dev.png',
   },
   preview: {

@@ -17,11 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { resendOtp as resendOtpApi, verifyOtp as verifyOtpApi } from '@/lib/auth'
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
 const OTP_LENGTH = 6
-
-// ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function VerifyOTPScreen() {
   const insets = useSafeAreaInsets()
@@ -34,24 +30,19 @@ export default function VerifyOTPScreen() {
   const [otpError, setOtpError] = useState<string | null>(null)
   const inputRefs = useRef<(TextInput | null)[]>([])
 
-  // Focus first input on mount
   useEffect(() => {
     inputRefs.current[0]?.focus()
   }, [])
 
-  // Countdown timer for resend button
   useEffect(() => {
     if (resendTimer > 0) {
-      const timer = setTimeout(() => setResendTimer(resendTimer - 1), 1000)
+      const timer = setTimeout(() => setResendTimer(t => t - 1), 1000)
       return () => clearTimeout(timer)
     }
   }, [resendTimer])
 
-  // ─── Core verify logic — shared by button tap and auto-submit ──────────────
-
   const handleVerifyWithOtp = async (otpCode: string) => {
     if (otpCode.length !== OTP_LENGTH) return
-
     if (!phone) {
       Alert.alert('Error', 'Phone number not found. Please go back and try again.')
       return
@@ -71,9 +62,9 @@ export default function VerifyOTPScreen() {
         return
       }
 
-      // ✅ Haptic success feedback
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-      // RootNavigator handles redirect — do not navigate manually
+      // ✅ setSession triggers onAuthStateChange → fetchProfile → store update
+      // Stack.Protected in _layout.tsx navigates automatically — no router.replace needed
     } catch {
       Alert.alert('Error', 'Something went wrong. Please try again.')
     } finally {
@@ -81,10 +72,7 @@ export default function VerifyOTPScreen() {
     }
   }
 
-  // Verify button tap
   const handleVerify = () => handleVerifyWithOtp(otp.join(''))
-
-  // ─── Input handlers ────────────────────────────────────────────────────────
 
   const handleOtpChange = (value: string, index: number) => {
     if (otpError) setOtpError(null)
@@ -92,7 +80,6 @@ export default function VerifyOTPScreen() {
 
     const newOtp = [...otp]
 
-    // Handle paste — fill from current index forward
     if (value.length > 1) {
       const digits = value.slice(0, OTP_LENGTH).split('')
       digits.forEach((digit, i) => {
@@ -100,8 +87,6 @@ export default function VerifyOTPScreen() {
       })
       setOtp(newOtp)
       inputRefs.current[Math.min(index + digits.length, OTP_LENGTH - 1)]?.focus()
-
-      // Auto-submit if paste fills all 6 digits
       if (newOtp.filter(d => d !== '').length === OTP_LENGTH) {
         handleVerifyWithOtp(newOtp.join(''))
       }
@@ -110,16 +95,8 @@ export default function VerifyOTPScreen() {
 
     newOtp[index] = value
     setOtp(newOtp)
-
-    if (value && index < OTP_LENGTH - 1) {
-      // Advance to next box
-      inputRefs.current[index + 1]?.focus()
-    }
-
-    // Auto-submit on 6th digit
-    if (value && index === OTP_LENGTH - 1) {
-      handleVerifyWithOtp(newOtp.join(''))
-    }
+    if (value && index < OTP_LENGTH - 1) inputRefs.current[index + 1]?.focus()
+    if (value && index === OTP_LENGTH - 1) handleVerifyWithOtp(newOtp.join(''))
   }
 
   const handleKeyPress = (key: string, index: number) => {
@@ -128,23 +105,17 @@ export default function VerifyOTPScreen() {
     }
   }
 
-  // ─── Resend ────────────────────────────────────────────────────────────────
-
   const handleResendOtp = async () => {
     if (resendTimer > 0 || !phone) return
-
     setIsLoading(true)
     setOtpError(null)
     setOtp(new Array(OTP_LENGTH).fill(''))
-
     try {
       const result = await resendOtpApi(phone)
-
       if (!result.success) {
         Alert.alert('Error', result.error ?? 'Failed to resend code.')
         return
       }
-
       setResendTimer(60)
       inputRefs.current[0]?.focus()
       Alert.alert('Code sent', 'A new verification code has been sent.')
@@ -154,8 +125,6 @@ export default function VerifyOTPScreen() {
       setIsLoading(false)
     }
   }
-
-  // ─── Render ─────────────────────────────────────────────────────────────────
 
   const isOtpComplete = otp.join('').length === OTP_LENGTH
 
@@ -167,7 +136,6 @@ export default function VerifyOTPScreen() {
       <View
         style={[styles.content, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 20 }]}
       >
-        {/* Back button */}
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
@@ -177,13 +145,11 @@ export default function VerifyOTPScreen() {
           <Text style={styles.backButtonText}>← Back</Text>
         </TouchableOpacity>
 
-        {/* Header */}
         <Text style={styles.title}>
           Please enter the verification code sent to your mobile number
         </Text>
         <Text style={styles.phoneDisplay}>{phone ?? ''}</Text>
 
-        {/* OTP inputs */}
         <Text style={styles.otpLabel}>Verification code</Text>
         <View style={styles.otpContainer}>
           {otp.map((digit, index) => (
@@ -209,10 +175,8 @@ export default function VerifyOTPScreen() {
           ))}
         </View>
 
-        {/* Inline error */}
         {otpError ? <Text style={styles.errorText}>{otpError}</Text> : null}
 
-        {/* Resend button */}
         <TouchableOpacity
           style={styles.sendAgainButton}
           onPress={handleResendOtp}
@@ -230,7 +194,6 @@ export default function VerifyOTPScreen() {
           </Text>
         </TouchableOpacity>
 
-        {/* Verify button */}
         <TouchableOpacity
           style={[
             styles.verifyButton,
@@ -253,48 +216,15 @@ export default function VerifyOTPScreen() {
   )
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F3F4F5',
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 24,
-  },
-  backButton: {
-    marginBottom: 32,
-  },
-  backButtonText: {
-    fontSize: 16,
-    color: '#6B6B6B',
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: '500',
-    color: '#141414',
-    lineHeight: 30,
-    marginBottom: 8,
-  },
-  phoneDisplay: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#F97316',
-    marginBottom: 32,
-  },
-  otpLabel: {
-    fontSize: 13,
-    color: '#9CA3AF',
-    marginBottom: 10,
-  },
-  otpContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 32,
-    gap: 8,
-  },
+  container: { flex: 1, backgroundColor: '#F3F4F5' },
+  content: { flex: 1, paddingHorizontal: 24 },
+  backButton: { marginBottom: 32 },
+  backButtonText: { fontSize: 16, color: '#6B6B6B' },
+  title: { fontSize: 22, fontWeight: '500', color: '#141414', lineHeight: 30, marginBottom: 8 },
+  phoneDisplay: { fontSize: 16, fontWeight: '600', color: '#F97316', marginBottom: 32 },
+  otpLabel: { fontSize: 13, color: '#9CA3AF', marginBottom: 10 },
+  otpContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 32, gap: 8 },
   otpInput: {
     flex: 1,
     height: 56,
@@ -316,29 +246,11 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 0,
   },
-  otpInputError: {
-    borderColor: '#EF4444',
-  },
-  errorText: {
-    fontSize: 13,
-    color: '#EF4444',
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  sendAgainButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 24,
-  },
-  sendAgainText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#3B82F6',
-  },
-  sendAgainTextDisabled: {
-    color: '#9CA3AF',
-  },
+  otpInputError: { borderColor: '#EF4444' },
+  errorText: { fontSize: 13, color: '#EF4444', textAlign: 'center', marginBottom: 12 },
+  sendAgainButton: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 24 },
+  sendAgainText: { fontSize: 14, fontWeight: '500', color: '#3B82F6' },
+  sendAgainTextDisabled: { color: '#9CA3AF' },
   verifyButton: {
     height: 52,
     backgroundColor: '#141414',
@@ -347,12 +259,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 24,
   },
-  verifyButtonDisabled: {
-    backgroundColor: '#9CA3AF',
-  },
-  verifyButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
+  verifyButtonDisabled: { backgroundColor: '#9CA3AF' },
+  verifyButtonText: { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
 })

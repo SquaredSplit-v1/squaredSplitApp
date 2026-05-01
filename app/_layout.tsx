@@ -25,11 +25,11 @@ export default function RootLayout() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!isLoading) {
-      SplashScreen.hideAsync()
-    }
+    if (!isLoading) SplashScreen.hideAsync()
   }, [isLoading])
 
+  // Hold render until auth state is resolved — prevents
+  // Stack.Protected from flashing the wrong screen on boot
   if (isLoading) return <View style={{ flex: 1, backgroundColor: '#F3F4F5' }} />
 
   return (
@@ -37,21 +37,23 @@ export default function RootLayout() {
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider>
           <Stack screenOptions={{ headerShown: false }}>
+            {/* Authenticated + onboarded → home */}
             <Stack.Protected guard={!!session && hasOnboarded}>
               <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="notifications" />
             </Stack.Protected>
 
+            {/* Authenticated + not onboarded → setup profile */}
             <Stack.Protected guard={!!session && !hasOnboarded}>
+              <Stack.Screen name="onboarding" />
               <Stack.Screen name="(auth)/setup-profile" />
             </Stack.Protected>
 
+            {/* Not authenticated → auth screens */}
             <Stack.Protected guard={!session}>
-              <Stack.Screen name="(auth)/authloading" />
-              <Stack.Screen name="(auth)/login" />
-              <Stack.Screen name="(auth)/verify-otp" />
+              <Stack.Screen name="(auth)" />
             </Stack.Protected>
           </Stack>
-
           <Toast />
         </SafeAreaProvider>
       </GestureHandlerRootView>
