@@ -1,8 +1,13 @@
+import { SUPABASE_ANON_KEY, PHONE_AUTH_URL } from '@/lib/env'
 import { useAuthStore } from '@/store/authStore'
 
 import { supabase } from './supabase/client'
 
-const PHONE_AUTH_URL = process.env.EXPO_PUBLIC_SUPABASE_PHONE_AUTH_URL!
+const SUPABASE_HEADERS = {
+  'Content-Type': 'application/json',
+  Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+  apikey: SUPABASE_ANON_KEY,
+}
 
 export interface SendOtpResult {
   success: boolean
@@ -23,7 +28,7 @@ export async function sendOtp(phone: string): Promise<SendOtpResult> {
   try {
     const res = await fetch(`${PHONE_AUTH_URL}/send-otp`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: SUPABASE_HEADERS,
       body: JSON.stringify({ phone }),
     })
 
@@ -53,7 +58,7 @@ export async function verifyOtp(phone: string, otp: string): Promise<VerifyOtpRe
   try {
     const res = await fetch(`${PHONE_AUTH_URL}/verify-otp`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: SUPABASE_HEADERS,
       body: JSON.stringify({ phone, otp }),
     })
 
