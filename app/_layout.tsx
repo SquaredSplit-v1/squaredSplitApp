@@ -1,61 +1,95 @@
-import { SplashScreen, Stack } from 'expo-router'
-import { useEffect, useRef } from 'react'
-import { View } from 'react-native'
-import { GestureHandlerRootView } from 'react-native-gesture-handler'
-import { SafeAreaProvider } from 'react-native-safe-area-context'
-import Toast from 'react-native-toast-message'
+import { ExpenseProvider } from '@/lib/store/expense-store'
 
-import { ErrorBoundary } from '@/components/ErrorBoundary'
-import { useAppUpdates } from '@/hooks/useAppUpdates'
-import { useGlobalErrorHandler } from '@/hooks/useGlobalErrorHandler'
-import { useAuthStore } from '@/store/authStore'
+import {
+  Nunito_400Regular,
+  Nunito_600SemiBold,
+  Nunito_700Bold,
+  useFonts,
+} from '@expo-google-fonts/nunito'
+import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native'
+import { Stack, useRouter, useSegments } from 'expo-router'
+import * as SplashScreen from 'expo-splash-screen'
+import { StatusBar } from 'expo-status-bar'
+import React, { useEffect } from 'react'
 
+import { AuthProvider, useAuth } from '@/contexts/AuthContext'
+import 'react-native-reanimated'
+import '../global.css'
+
+import { useColorScheme } from '@/hooks/use-color-scheme'
+
+// Keep splash screen visible while fonts load
 SplashScreen.preventAutoHideAsync()
 
-export default function RootLayout() {
-  useAppUpdates()
-  useGlobalErrorHandler()
+export const unstable_settings = {
+  initialRouteName: '(auth)',
+}
 
-  const { session, hasOnboarded, isLoading, initialize } = useAuthStore()
-  const unsubRef = useRef<(() => void) | null>(null)
+/**
+ * Inner navigator that reacts to auth state changes and redirects
+ * the user to the correct route group.
+ */
+function RootNavigator() {
+  const { user, isLoading, hasCompletedOnboarding } = useAuth()
+  const router = useRouter()
+  const segments = useSegments()
 
   useEffect(() => {
-    unsubRef.current = initialize()
-    return () => unsubRef.current?.()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    // Don't redirect while we're still fetching the session
+    if (isLoading) return
 
-  useEffect(() => {
-    if (!isLoading) SplashScreen.hideAsync()
-  }, [isLoading])
+    const inAuthGroup = segments[0] === '(auth)'
 
-  // Hold render until auth state is resolved — prevents
-  // Stack.Protected from flashing the wrong screen on boot
-  if (isLoading) return <View style={{ flex: 1, backgroundColor: '#F3F4F5' }} />
+    if (!user && !inAuthGroup) {
+      // Not signed in → go to auth loading / login
+      router.replace('/(auth)/authloading')
+    } else if (user && inAuthGroup) {
+      // Signed in but still on an auth screen → go to dashboard
+      // (skip if we're on onboarding and haven't finished it yet)
+      const onOnboarding = (segments as string[])[1] === 'onboarding'
+      if (!onOnboarding || hasCompletedOnboarding) {
+        router.replace('/dashboard/dashboard')
+      }
+    }
+  }, [user, isLoading, segments, hasCompletedOnboarding, router])
 
   return (
-    <ErrorBoundary>
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <SafeAreaProvider>
-          <Stack screenOptions={{ headerShown: false }}>
-            {/* Authenticated + onboarded → home */}
-            <Stack.Protected guard={!!session && hasOnboarded}>
-              <Stack.Screen name="(tabs)" />
-              <Stack.Screen name="notifications" />
-            </Stack.Protected>
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="(auth)" />
+      <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="dashboard" />
+      <Stack.Screen
+        name="modal"
+        options={{ presentation: 'modal', title: 'Modal', headerShown: true }}
+      />
+    </Stack>
+  )
+}
 
-            {/* Authenticated + not onboarded → setup profile */}
-            <Stack.Protected guard={!!session && !hasOnboarded}>
-              <Stack.Screen name="onboarding" />
-            </Stack.Protected>
+export default function RootLayout() {
+  const colorScheme = useColorScheme()
+  const [fontsLoaded] = useFonts({
+    Nunito_400Regular,
+    Nunito_600SemiBold,
+    Nunito_700Bold,
+  })
 
-            {/* Not authenticated → auth screens */}
-            <Stack.Protected guard={!session}>
-              <Stack.Screen name="(auth)" />
-            </Stack.Protected>
-          </Stack>
-          <Toast />
-        </SafeAreaProvider>
-      </GestureHandlerRootView>
-    </ErrorBoundary>
+  useEffect(() => {
+    if (fontsLoaded) {
+      SplashScreen.hideAsync()
+    }
+  }, [fontsLoaded])
+
+  if (!fontsLoaded) return null
+
+  return (
+    <AuthProvider>
+      <ExpenseProvider>
+        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+          <RootNavigator />
+          <StatusBar style="auto" />
+        </ThemeProvider>
+      </ExpenseProvider>
+    </AuthProvider>
   )
 }
