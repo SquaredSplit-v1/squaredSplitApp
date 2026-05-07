@@ -1,0 +1,584 @@
+// components/AddExpenseModal.tsx
+import React, { useCallback, useMemo } from 'react'
+import {
+  ActivityIndicator,
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View,
+} from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+
+import { createExpense } from '@/lib/api/createExpense'
+import { formatAmount } from '@/lib/currency'
+import type { MatchedContact } from '@/lib/supabase/contacts'
+import { useAddExpenseStore } from '@/store/addExpenseStore'
+import { useAuthStore } from '@/store/authStore'
+import { useContactsStore } from '@/store/contactsStore'
+import { useCurrencyStore } from '@/store/currencyStore'
+
+interface Props {
+  visible: boolean
+  onClose: () => void
+  onSuccess: () => void
+}
+
+// Derive a stable id + display name from MatchedContact
+function deriveContactId(c: MatchedContact): string {
+  return (c as any).user_id ?? (c as any).id ?? (c as any).uid ?? ''
+}
+
+function deriveContactName(c: MatchedContact): string {
+  return (
+    (c as any).name ??
+    (c as any).full_name ??
+    (c as any).display_name ??
+    (c as any).contact_name ??
+    'Friend'
+  )
+}
+
+// Equal split helper (integer cents)
+function calcEqualSplits(amount: number, ids: string[]): Record<string, number> {
+  const n = ids.length
+  if (!n) return {}
+  const cents = Math.round(amount * 100)
+  const base = Math.floor(cents / n)
+  const rem = cents - base * n
+  const result: Record<string, number> = {}
+  ids.forEach((id, i) => {
+    result[id] = i === 0 ? (base + rem) / 100 : base / 100
+  })
+  return result
+}
+
+export default function AddExpenseModal({ visible, onClose, onSuccess }: Props) {
+  const insets = useSafeAreaInsets()
+  const user = useAuthStore(s => s.user)
+  const { current: currency } = useCurrencyStore()
+
+  const matchedContacts = useContactsStore(s => s.matched) as MatchedContact[]
+
+  const {
+    amount,
+    title,
+    paidBy,
+    participants,
+    splitType,
+    exactAmounts,
+    percentages,
+    isSubmitting,
+    setAmount,
+    setTitle,
+    setPaidBy,
+    toggleParticipant,
+    setSplitType,
+    setExactAmount,
+    setPercentage,
+    setSubmitting,
+    reset,
+  } = useAddExpenseStore()
+
+  const myId = user?.id ?? ''
+
+  const allParticipants = useMemo(
+    () => (participants.includes(myId) ? participants : [myId, ...participants]),
+    [participants, myId]
+  )
+
+  const effectivePaidBy = paidBy ?? myId
+  const amountFloat = parseFloat(amount) || 0
+
+  const splitPreview = useMemo<Record<string, number>>(() => {
+    if (!allParticipants.length || amountFloat <= 0) return {}
+
+    if (splitType === 'equally') {
+      return calcEqualSplits(amountFloat, allParticipants)
+    }
+
+    if (splitType === 'exact') {
+      const r: Record<string, number> = {}
+      allParticipants.forEach(id => {
+        r[id] = parseFloat(exactAmounts[id] ?? '0') || 0
+      })
+      return r
+    }
+
+    if (splitType === 'percentage') {
+      const r: Record<string, number> = {}
+      allParticipants.forEach(id => {
+        const pct = parseFloat(percentages[id] ?? '0') || 0
+        r[id] = Math.round(((amountFloat * pct) / 100) * 100) / 100
+      })
+      return r
+    }
+
+    return {}
+  }, [splitType, allParticipants, amountFloat, exactAmounts, percentages])
+
+  const exactSumOk =
+    splitType !== 'exact' ||
+    Math.abs(Object.values(splitPreview).reduce((a, b) => a + b, 0) - amountFloat) < 0.02
+
+  const pctSumOk =
+    splitType !== 'percentage' ||
+    Math.abs(
+      allParticipants.reduce((a, id) => a + (parseFloat(percentages[id] ?? '0') || 0), 0) - 100
+    ) < 0.5
+
+  const canSubmit =
+    amountFloat > 0 &&
+    title.trim().length > 0 &&
+    allParticipants.length >= 2 &&
+    !isSubmitting &&
+    exactSumOk &&
+    pctSumOk
+
+  const nameFor = useCallback(
+    (id: string): string => {
+      if (id === myId) return 'You'
+      const m = matchedContacts.find((mc: MatchedContact) => deriveContactId(mc) === id)
+      return m ? deriveContactName(m) : id.slice(0, 8)
+    },
+    [myId, matchedContacts]
+  )
+
+  const handleSubmit = useCallback(async () => {
+    if (!canSubmit || !user) return
+    Keyboard.dismiss()
+    setSubmitting(true)
+    try {
+      await createExpense({
+        title: title.trim(),
+        amount: amountFloat,
+        paid_by: effectivePaidBy,
+        participants: allParticipants,
+        split_type: splitType,
+        exact_amounts: splitType === 'exact' ? { ...splitPreview } : undefined,
+        percentages:
+          splitType === 'percentage'
+            ? Object.fromEntries(
+                allParticipants.map(id => [id, parseFloat(percentages[id] ?? '0') || 0])
+              )
+            : undefined,
+      })
+      reset()
+      onSuccess()
+      onClose()
+    } catch (err: unknown) {
+      console.error('[SS-021] createExpense', err instanceof Error ? err.message : err)
+    } finally {
+      setSubmitting(false)
+    }
+  }, [
+    canSubmit,
+    user,
+    title,
+    amountFloat,
+    effectivePaidBy,
+    allParticipants,
+    splitType,
+    splitPreview,
+    percentages,
+    reset,
+    onSuccess,
+    onClose,
+    setSubmitting,
+  ])
+
+  const handleClose = useCallback(() => {
+    reset()
+    onClose()
+  }, [reset, onClose])
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={handleClose}
+    >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <View style={[s.root, { paddingTop: insets.top + 16 }]}>
+            {/* Header */}
+            <View style={s.header}>
+              <Text style={s.headerTitle}>Add Expense</Text>
+              <TouchableOpacity onPress={handleClose} hitSlop={12}>
+                <Text style={s.closeBtn}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              style={s.scroll}
+              contentContainerStyle={[s.scrollContent, { paddingBottom: insets.bottom + 100 }]}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              {/* Amount */}
+              <View style={s.amountRow}>
+                <Text style={s.currencySymbol}>{currency.symbol}</Text>
+                <TextInput
+                  style={s.amountInput}
+                  value={amount}
+                  onChangeText={v => {
+                    if (/^\d*\.?\d{0,2}$/.test(v)) setAmount(v)
+                  }}
+                  placeholder="0.00"
+                  placeholderTextColor="#C7C7C7"
+                  keyboardType="decimal-pad"
+                  returnKeyType="done"
+                  accessibilityLabel="Expense amount"
+                />
+              </View>
+
+              {/* Description */}
+              <View style={s.section}>
+                <Text style={s.label}>Description</Text>
+                <TextInput
+                  style={s.textInput}
+                  value={title}
+                  onChangeText={setTitle}
+                  placeholder="e.g. Dinner at Nobu"
+                  placeholderTextColor="#C7C7C7"
+                  maxLength={100}
+                  returnKeyType="done"
+                  accessibilityLabel="Expense description"
+                />
+              </View>
+
+              {/* Paid by */}
+              <View style={s.section}>
+                <Text style={s.label}>Paid by</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={s.pillRow}>
+                    {[myId, ...allParticipants.filter(id => id !== myId)].map(id => (
+                      <Pressable
+                        key={id}
+                        style={[s.pill, effectivePaidBy === id && s.pillActive]}
+                        onPress={() => setPaidBy(id)}
+                      >
+                        <Text style={[s.pillText, effectivePaidBy === id && s.pillTextActive]}>
+                          {nameFor(id)}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </ScrollView>
+              </View>
+
+              {/* Participants */}
+              <View style={s.section}>
+                <Text style={s.label}>
+                  Participants
+                  <Text style={s.labelSub}> · {allParticipants.length} selected</Text>
+                </Text>
+
+                {/* You */}
+                <View style={[s.contactRow, { opacity: 0.5 }]}>
+                  <View style={s.avatar}>
+                    <Text style={s.avatarText}>
+                      {(user?.user_metadata?.full_name ?? 'Y')[0].toUpperCase()}
+                    </Text>
+                  </View>
+                  <Text style={s.contactName}>You (always included)</Text>
+                  <View style={[s.checkbox, s.checkboxChecked]}>
+                    <Text style={s.checkmark}>✓</Text>
+                  </View>
+                </View>
+
+                {matchedContacts.length === 0 ? (
+                  <Text style={s.noContacts}>
+                    No SquaredSplit friends found — sync contacts first
+                  </Text>
+                ) : (
+                  matchedContacts.map((mc: MatchedContact) => {
+                    const contactId = deriveContactId(mc)
+                    const contactName = deriveContactName(mc)
+                    const selected = allParticipants.includes(contactId)
+
+                    if (!contactId) return null
+
+                    return (
+                      <Pressable
+                        key={contactId}
+                        style={s.contactRow}
+                        onPress={() => toggleParticipant(contactId)}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: selected }}
+                      >
+                        <View style={s.avatar}>
+                          <Text style={s.avatarText}>{contactName[0].toUpperCase()}</Text>
+                        </View>
+                        <Text style={s.contactName}>{contactName}</Text>
+                        <View style={[s.checkbox, selected && s.checkboxChecked]}>
+                          {selected && <Text style={s.checkmark}>✓</Text>}
+                        </View>
+                      </Pressable>
+                    )
+                  })
+                )}
+              </View>
+
+              {/* Split toggle */}
+              <View style={s.section}>
+                <Text style={s.label}>Split</Text>
+                <View style={s.splitToggle}>
+                  {(['equally', 'exact', 'percentage'] as const).map(t => (
+                    <Pressable
+                      key={t}
+                      style={[s.splitOption, splitType === t && s.splitOptionActive]}
+                      onPress={() => setSplitType(t)}
+                    >
+                      <Text style={[s.splitOptionText, splitType === t && s.splitOptionTextActive]}>
+                        {{ equally: 'Equally', exact: 'Exact ₹', percentage: 'By %' }[t]}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+
+              {/* Preview */}
+              {allParticipants.length >= 2 && amountFloat > 0 && (
+                <View style={s.section}>
+                  <Text style={s.label}>Preview</Text>
+                  {allParticipants.map(id => (
+                    <View key={id} style={s.previewRow}>
+                      <View style={s.previewAvatar}>
+                        <Text style={s.previewAvatarText}>{nameFor(id)[0].toUpperCase()}</Text>
+                      </View>
+                      <Text style={s.previewName}>{nameFor(id)}</Text>
+
+                      {splitType === 'equally' && (
+                        <Text style={s.previewAmount}>
+                          {formatAmount(splitPreview[id] ?? 0, currency)}
+                        </Text>
+                      )}
+
+                      {splitType === 'exact' && (
+                        <TextInput
+                          style={s.splitInput}
+                          value={exactAmounts[id] ?? ''}
+                          onChangeText={v => {
+                            if (/^\d*\.?\d{0,2}$/.test(v)) setExactAmount(id, v)
+                          }}
+                          placeholder="0.00"
+                          placeholderTextColor="#C7C7C7"
+                          keyboardType="decimal-pad"
+                          accessibilityLabel={`Amount for ${nameFor(id)}`}
+                        />
+                      )}
+
+                      {splitType === 'percentage' && (
+                        <View style={s.pctRow}>
+                          <TextInput
+                            style={[s.splitInput, { width: 64 }]}
+                            value={percentages[id] ?? ''}
+                            onChangeText={v => {
+                              if (/^\d{0,3}(\.\d{0,1})?$/.test(v)) setPercentage(id, v)
+                            }}
+                            placeholder="0"
+                            placeholderTextColor="#C7C7C7"
+                            keyboardType="decimal-pad"
+                            accessibilityLabel={`Percentage for ${nameFor(id)}`}
+                          />
+                          <Text style={s.pctSymbol}>%</Text>
+                          <Text style={s.previewAmount}>
+                            ≈ {formatAmount(splitPreview[id] ?? 0, currency)}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  ))}
+
+                  {splitType === 'exact' && !exactSumOk && (
+                    <Text style={s.validationError}>
+                      Total must equal {formatAmount(amountFloat, currency)}
+                    </Text>
+                  )}
+                  {splitType === 'percentage' && !pctSumOk && (
+                    <Text style={s.validationError}>Percentages must sum to 100%</Text>
+                  )}
+                </View>
+              )}
+
+              {allParticipants.length < 2 && (
+                <Text style={s.hint}>Select at least 1 friend to split with</Text>
+              )}
+            </ScrollView>
+
+            {/* Submit */}
+            <View style={[s.footer, { paddingBottom: insets.bottom + 16 }]}>
+              <TouchableOpacity
+                style={[s.submitBtn, !canSubmit && s.submitBtnDisabled]}
+                onPress={handleSubmit}
+                disabled={!canSubmit}
+              >
+                {isSubmitting ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={s.submitBtnText}>
+                    {amountFloat > 0
+                      ? `Add ${formatAmount(amountFloat, currency)} expense`
+                      : 'Add Expense'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </TouchableWithoutFeedback>
+    </Modal>
+  )
+}
+
+const s = StyleSheet.create({
+  root: { flex: 1, backgroundColor: '#FFFFFF' },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    marginBottom: 8,
+  },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: '#141414' },
+  closeBtn: { fontSize: 18, color: '#6B6B6B', padding: 4 },
+  scroll: { flex: 1 },
+  scrollContent: { paddingHorizontal: 24, paddingTop: 16 },
+  amountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: '#141414',
+    marginBottom: 28,
+    paddingBottom: 8,
+  },
+  currencySymbol: { fontSize: 32, fontWeight: '300', color: '#141414', marginRight: 4 },
+  amountInput: {
+    flex: 1,
+    fontSize: 48,
+    fontWeight: '700',
+    color: '#141414',
+    padding: 0,
+    includeFontPadding: false,
+  },
+  section: { marginBottom: 24 },
+  label: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B6B6B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 10,
+  },
+  labelSub: {
+    fontSize: 11,
+    fontWeight: '400',
+    color: '#9CA3AF',
+    textTransform: 'none',
+    letterSpacing: 0,
+  },
+  textInput: {
+    height: 48,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    fontSize: 15,
+    color: '#141414',
+  },
+  pillRow: { flexDirection: 'row', gap: 8 },
+  pill: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+  },
+  pillActive: { borderColor: '#141414', backgroundColor: '#141414' },
+  pillText: { fontSize: 13, fontWeight: '500', color: '#6B6B6B' },
+  pillTextActive: { color: '#FFFFFF' },
+  contactRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, gap: 12 },
+  avatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F3F4F5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarText: { fontSize: 14, fontWeight: '600', color: '#141414' },
+  contactName: { flex: 1, fontSize: 15, color: '#141414' },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: '#D1D5DB',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkboxChecked: { backgroundColor: '#141414', borderColor: '#141414' },
+  checkmark: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
+  noContacts: { fontSize: 14, color: '#9CA3AF', paddingVertical: 12 },
+  splitToggle: { flexDirection: 'row', backgroundColor: '#F3F4F5', borderRadius: 10, padding: 3 },
+  splitOption: { flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: 'center' },
+  splitOptionActive: { backgroundColor: '#141414' },
+  splitOptionText: { fontSize: 13, fontWeight: '500', color: '#6B6B6B' },
+  splitOptionTextActive: { color: '#FFFFFF' },
+  previewRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, gap: 10 },
+  previewAvatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#F3F4F5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  previewAvatarText: { fontSize: 12, fontWeight: '600', color: '#141414' },
+  previewName: { flex: 1, fontSize: 14, color: '#141414' },
+  previewAmount: { fontSize: 14, fontWeight: '600', color: '#141414' },
+  splitInput: {
+    width: 80,
+    height: 36,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    fontSize: 14,
+    color: '#141414',
+    textAlign: 'right',
+  },
+  pctRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  pctSymbol: { fontSize: 14, color: '#6B6B6B' },
+  validationError: { fontSize: 12, color: '#EF4444', marginTop: 6 },
+  hint: { fontSize: 13, color: '#9CA3AF', textAlign: 'center', marginTop: 8 },
+  footer: {
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F5',
+    backgroundColor: '#FFFFFF',
+  },
+  submitBtn: {
+    height: 52,
+    backgroundColor: '#141414',
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  submitBtnDisabled: { backgroundColor: '#D1D5DB' },
+  submitBtnText: { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
+})

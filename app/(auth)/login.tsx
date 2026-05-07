@@ -1,12 +1,11 @@
-import { BoxIcon, TickIcon } from "@/components/svg";
-import { sendOtp } from "@/lib/auth";
-import { Asset } from "expo-asset";
-import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { Ionicons } from '@expo/vector-icons'
+import { useRouter } from 'expo-router'
+import React, { useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
-  Alert,
+  FlatList,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -14,165 +13,244 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-} from "react-native";
+} from 'react-native'
 import Animated, {
   Easing,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
   withTiming,
-} from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { SvgUri } from "react-native-svg";
+} from 'react-native-reanimated'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-const logoUri = Asset.fromModule(require("../../assets/app-icon.svg")).uri;
-const loginBgUri = Asset.fromModule(
-  require("../../assets/auth/Blur-Ellipse.svg"),
-).uri;
+import { sendOtp } from '@/lib/auth'
 
-const MARQUEE_ITEM_WIDTH = 88;
-const MARQUEE_GAP = 20;
-const MARQUEE_TOTAL_WIDTH = (MARQUEE_ITEM_WIDTH + MARQUEE_GAP) * 4; // 4 items
+import AppIcon from '../../assets/app-icon.svg'
+import BlurEllipse from '../../assets/auth/Blur-Ellipse.svg'
+import Lightning from '../../assets/auth/lightning.svg'
+import Love from '../../assets/auth/love.svg'
+import Man from '../../assets/auth/man.svg'
+import Woman from '../../assets/auth/woman.svg'
 
-// Gradient blob for login page background with blur
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const MARQUEE_ITEM_WIDTH = 88
+const MARQUEE_GAP = 2
+const MARQUEE_TOTAL_WIDTH = (MARQUEE_ITEM_WIDTH + MARQUEE_GAP) * 4
+
+const COUNTRY_CODES = [
+  { code: '+91', country: 'IN', name: 'India' },
+  { code: '+1', country: 'US', name: 'United States' },
+  { code: '+1', country: 'CA', name: 'Canada' },
+  { code: '+44', country: 'GB', name: 'United Kingdom' },
+  { code: '+61', country: 'AU', name: 'Australia' },
+  { code: '+65', country: 'SG', name: 'Singapore' },
+  { code: '+971', country: 'AE', name: 'UAE' },
+  { code: '+60', country: 'MY', name: 'Malaysia' },
+  { code: '+49', country: 'DE', name: 'Germany' },
+  { code: '+33', country: 'FR', name: 'France' },
+  { code: '+81', country: 'JP', name: 'Japan' },
+  { code: '+82', country: 'KR', name: 'South Korea' },
+  { code: '+55', country: 'BR', name: 'Brazil' },
+  { code: '+52', country: 'MX', name: 'Mexico' },
+  { code: '+27', country: 'ZA', name: 'South Africa' },
+  { code: '+234', country: 'NG', name: 'Nigeria' },
+  { code: '+254', country: 'KE', name: 'Kenya' },
+  { code: '+92', country: 'PK', name: 'Pakistan' },
+  { code: '+880', country: 'BD', name: 'Bangladesh' },
+  { code: '+94', country: 'LK', name: 'Sri Lanka' },
+  { code: '+977', country: 'NP', name: 'Nepal' },
+  { code: '+31', country: 'NL', name: 'Netherlands' },
+  { code: '+46', country: 'SE', name: 'Sweden' },
+  { code: '+47', country: 'NO', name: 'Norway' },
+  { code: '+45', country: 'DK', name: 'Denmark' },
+  { code: '+41', country: 'CH', name: 'Switzerland' },
+  { code: '+34', country: 'ES', name: 'Spain' },
+  { code: '+39', country: 'IT', name: 'Italy' },
+  { code: '+7', country: 'RU', name: 'Russia' },
+  { code: '+86', country: 'CN', name: 'China' },
+]
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
 function LoginGradientBlob() {
   return (
     <View style={styles.gradientBlobContainer}>
-      <SvgUri width="100%" height="100%" uri={loginBgUri} />
+      <BlurEllipse width="100%" height="100%" />
     </View>
-  );
+  )
 }
 
-// Small version of the logo for login screen
 function SmallLogo() {
   return (
-    <View style={{ width: 140, height: 100 }}>
-      <SvgUri width="100%" height="100%" uri={logoUri} />
+    <View style={styles.logoWrapper}>
+      <AppIcon width="100%" height="100%" />
     </View>
-  );
+  )
 }
 
-// Marquee component
 function Marquee() {
-  const translateX = useSharedValue(0);
+  const translateX = useSharedValue(0)
 
   useEffect(() => {
     translateX.value = withRepeat(
-      withTiming(-MARQUEE_TOTAL_WIDTH, {
-        duration: 8000,
-        easing: Easing.linear,
-      }),
+      withTiming(-MARQUEE_TOTAL_WIDTH, { duration: 8000, easing: Easing.linear }),
       -1,
-      false,
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+      false
+    )
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
-  }));
+  }))
 
-  const items = [
-    { type: "box" },
-    { type: "tick" },
-    { type: "box" },
-    { type: "tick" },
-    { type: "box" },
-    { type: "tick" },
-    { type: "box" },
-    { type: "tick" },
-  ];
+  const items = [Lightning, Woman, Love, Man, Lightning, Woman, Love, Man]
 
   return (
     <View style={styles.marqueeContainer}>
       <Animated.View style={[styles.marqueeContent, animatedStyle]}>
-        {items.map((item, index) => (
+        {items.map((SvgComponent, index) => (
           <View key={index} style={styles.marqueeItem}>
-            {item.type === "box" ? (
-              <BoxIcon width={88} height={88} />
-            ) : (
-              <TickIcon width={88} height={88} />
-            )}
+            <SvgComponent width={88} height={88} />
           </View>
         ))}
       </Animated.View>
     </View>
-  );
+  )
 }
 
+// ─── Country Picker Modal ─────────────────────────────────────────────────────
+
+interface CountryPickerModalProps {
+  visible: boolean
+  selected: (typeof COUNTRY_CODES)[number]
+  onSelect: (item: (typeof COUNTRY_CODES)[number]) => void
+  onClose: () => void
+}
+
+function CountryPickerModal({ visible, selected, onSelect, onClose }: CountryPickerModalProps) {
+  const insets = useSafeAreaInsets()
+  const [search, setSearch] = useState('')
+
+  const filtered = useMemo(
+    () =>
+      COUNTRY_CODES.filter(
+        c =>
+          c.name.toLowerCase().includes(search.toLowerCase()) ||
+          c.code.includes(search) ||
+          c.country.toLowerCase().includes(search.toLowerCase())
+      ),
+    [search]
+  )
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}
+    >
+      <View style={[styles.modalContainer, { paddingTop: insets.top + 16 }]}>
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalTitle}>Select Country</Text>
+          <TouchableOpacity onPress={onClose} accessibilityRole="button" accessibilityLabel="Close">
+            <Ionicons name="close" size={24} color="#141414" />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.searchContainer}>
+          <Ionicons name="search" size={16} color="#9CA3AF" style={{ marginRight: 8 }} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search country or code"
+            placeholderTextColor="#9CA3AF"
+            value={search}
+            onChangeText={setSearch}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+        </View>
+
+        <FlatList
+          data={filtered}
+          keyExtractor={(item, index) => `${item.country}-${index}`}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={[
+                styles.countryRow,
+                selected.country === item.country && styles.countryRowSelected,
+              ]}
+              onPress={() => {
+                onSelect(item)
+                onClose()
+              }}
+            >
+              <Text style={styles.countryName}>{item.name}</Text>
+              <Text style={styles.countryCode}>{item.code}</Text>
+            </TouchableOpacity>
+          )}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+        />
+      </View>
+    </Modal>
+  )
+}
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
+
 export default function LoginScreen() {
-  const insets = useSafeAreaInsets();
-  const router = useRouter();
-  const [phoneNumber, setPhoneNumber] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const insets = useSafeAreaInsets()
+  const router = useRouter()
 
-  const formatPhoneNumber = (text: string) => {
-    // Remove all non-numeric characters
-    const cleaned = text.replace(/\D/g, "");
-
-    // Format as +XXX XXX XXX XXXX (supports 3-digit country code and up to 12-digit phone)
-    let formatted = "";
-    if (cleaned.length > 0) {
-      // Country code: up to 3 digits
-      formatted = "+" + cleaned.substring(0, Math.min(3, cleaned.length));
-    }
-    if (cleaned.length > 3) {
-      formatted += " " + cleaned.substring(3, 6);
-    }
-    if (cleaned.length > 6) {
-      formatted += " " + cleaned.substring(6, 9);
-    }
-    if (cleaned.length > 9) {
-      formatted += " " + cleaned.substring(9, 15);
-    }
-
-    return formatted;
-  };
+  const [selectedCountry, setSelectedCountry] = useState(COUNTRY_CODES[0])
+  const [phoneNumber, setPhoneNumber] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [showPicker, setShowPicker] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
 
   const handlePhoneChange = (text: string) => {
-    setPhoneNumber(formatPhoneNumber(text));
-  };
+    if (errorMessage) setErrorMessage('')
+    setPhoneNumber(text.replace(/\D/g, ''))
+  }
 
   const handleGetStarted = async () => {
-    // Format phone number for Supabase (remove spaces)
-    const formattedPhone = phoneNumber.replace(/\s/g, "");
-
-    if (formattedPhone.length < 10) {
-      Alert.alert("Invalid Phone Number", "Please enter a valid phone number");
-      return;
+    if (phoneNumber.length < 7) {
+      setErrorMessage('Please enter a valid phone number.')
+      return
     }
 
-    setIsLoading(true);
+    const fullPhone = `${selectedCountry.code}${phoneNumber}`
+    setIsLoading(true)
+    setErrorMessage('')
 
     try {
-      const result = await sendOtp(formattedPhone);
+      const result = await sendOtp(fullPhone)
 
       if (!result.success) {
-        const msg = result.retryAfter
-          ? `Too many attempts. Try again in ${result.retryAfter}s.`
-          : result.error ?? "Failed to send code.";
-        Alert.alert("Error", msg);
-        return;
+        setErrorMessage(result.error ?? 'Failed to send code.')
+        return
       }
 
-      // Navigate to OTP verification screen
       router.push({
-        pathname: "/(auth)/verify-otp",
-        params: { phone: formattedPhone },
-      });
+        pathname: '/(auth)/verify-otp',
+        params: { phone: fullPhone },
+      })
     } catch {
-      Alert.alert("Error", "Something went wrong. Please try again.");
+      setErrorMessage('Something went wrong. Please try again.')
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
+  }
+
+  const isValid = phoneNumber.length >= 7
 
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      {/* Blurred gradient blob */}
       <LoginGradientBlob />
 
       <ScrollView
@@ -184,40 +262,49 @@ export default function LoginScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Logo */}
         <View style={styles.logoContainer}>
           <SmallLogo />
         </View>
 
-        {/* Tagline */}
-        <Text style={styles.tagline}>
-          Track your expenses and{"\n"}settle up with ease
-        </Text>
+        <Text style={styles.tagline}>Track your expenses and{'\n'}settle up with ease</Text>
 
-        {/* Marquee */}
         <Marquee />
 
-        {/* Input section */}
+        {/* Phone input with country picker */}
         <View style={styles.inputSection}>
-          <Text style={styles.inputLabel}>
-            Enter your mobile number to continue
-          </Text>
-          <TextInput
-            style={styles.input}
-            placeholder="+1 XXX XXX XXXX"
-            placeholderTextColor="#9CA3AF"
-            value={phoneNumber}
-            onChangeText={handlePhoneChange}
-            keyboardType="number-pad"
-            maxLength={20}
-          />
+          <Text style={styles.inputLabel}>Enter your mobile number to continue</Text>
+          <View style={styles.phoneRow}>
+            <TouchableOpacity
+              style={styles.countryPicker}
+              onPress={() => setShowPicker(true)}
+              accessibilityRole="button"
+              accessibilityLabel={`Country code ${selectedCountry.code}`}
+            >
+              <Text style={styles.countryFlag}>{selectedCountry.country}</Text>
+              <Text style={styles.countryCodeText}>{selectedCountry.code}</Text>
+              <Ionicons name="chevron-down" size={14} color="#6B6B6B" />
+            </TouchableOpacity>
+
+            <TextInput
+              style={[styles.phoneInput, !!errorMessage && styles.phoneInputError]}
+              placeholder="XXX XXX XXXX"
+              placeholderTextColor="#9CA3AF"
+              value={phoneNumber}
+              onChangeText={handlePhoneChange}
+              keyboardType="number-pad"
+              maxLength={15}
+              autoFocus={false}
+            />
+          </View>
+
+          {/* ← inline error — fixes the unused vars warning */}
+          {!!errorMessage && <Text style={styles.errorText}>{errorMessage}</Text>}
         </View>
 
-        {/* Get Started Button */}
         <TouchableOpacity
-          style={[styles.button, isLoading && styles.buttonDisabled]}
+          style={[styles.button, (!isValid || isLoading) && styles.buttonDisabled]}
           onPress={handleGetStarted}
-          disabled={isLoading}
+          disabled={!isValid || isLoading}
         >
           {isLoading ? (
             <ActivityIndicator color="#FFFFFF" />
@@ -226,40 +313,42 @@ export default function LoginScreen() {
           )}
         </TouchableOpacity>
 
-        {/* Footer links */}
         <View style={styles.footerLinks}>
-          <TouchableOpacity>
+          <TouchableOpacity accessibilityRole="link">
             <Text style={styles.footerLink}>Privacy policy</Text>
           </TouchableOpacity>
-          <TouchableOpacity>
+          <TouchableOpacity accessibilityRole="link">
             <Text style={styles.footerLink}>Terms of service</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      <CountryPickerModal
+        visible={showPicker}
+        selected={selectedCountry}
+        onSelect={setSelectedCountry}
+        onClose={() => setShowPicker(false)}
+      />
     </KeyboardAvoidingView>
-  );
+  )
 }
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F3F4F5",
+    backgroundColor: '#F3F4F5',
   },
   gradientBlobContainer: {
-    position: "absolute",
+    position: 'absolute',
     top: -80,
-    left: "50%",
+    left: '50%',
     marginLeft: -320,
     width: 680,
     height: 680,
     borderRadius: 500,
-    overflow: "hidden",
-  },
-  blurContainer: {
-    width: 700,
-    height: 700,
-    borderRadius: 500,
-    overflow: "hidden",
+    overflow: 'hidden',
   },
   scrollView: {
     flex: 1,
@@ -268,13 +357,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   logoContainer: {
-    alignItems: "flex-start",
+    alignItems: 'flex-start',
     marginBottom: 8,
+  },
+  logoWrapper: {
+    width: 140,
+    height: 100,
   },
   tagline: {
     fontSize: 24,
-    fontWeight: "300",
-    color: "#6B6B6B",
+    fontWeight: '300',
+    color: '#6B6B6B',
     lineHeight: 32,
     letterSpacing: -0.48,
     paddingBottom: 90,
@@ -282,13 +375,13 @@ const styles = StyleSheet.create({
   },
   marqueeContainer: {
     height: 100,
-    overflow: "hidden",
+    overflow: 'hidden',
     marginBottom: 56,
     marginHorizontal: -24,
   },
   marqueeContent: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 24,
   },
   marqueeItem: {
@@ -296,56 +389,144 @@ const styles = StyleSheet.create({
     height: MARQUEE_ITEM_WIDTH,
     marginRight: MARQUEE_GAP,
     borderRadius: 16,
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   inputSection: {
     marginBottom: 16,
   },
   inputLabel: {
     fontSize: 14,
-    fontWeight: "400",
-    color: "#9CA3AF",
+    fontWeight: '400',
+    color: '#9CA3AF',
     lineHeight: 21,
     marginBottom: 8,
   },
-  input: {
+  phoneRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  countryPicker: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    height: 52,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+  },
+  countryFlag: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#141414',
+  },
+  countryCodeText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#141414',
+  },
+  phoneInput: {
+    flex: 1,
     height: 52,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: '#E5E7EB',
     borderRadius: 8,
     paddingHorizontal: 16,
     fontSize: 16,
-    color: "#141414",
-    backgroundColor: "#FFFFFF",
+    color: '#141414',
+    backgroundColor: '#FFFFFF',
+  },
+  phoneInputError: {
+    borderColor: '#EF4444',
+  },
+  errorText: {
+    fontSize: 13,
+    color: '#EF4444',
+    marginTop: 6,
   },
   button: {
     height: 52,
-    backgroundColor: "#141414",
+    backgroundColor: '#141414',
     borderRadius: 8,
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 24,
   },
   buttonDisabled: {
-    backgroundColor: "#9CA3AF",
+    backgroundColor: '#9CA3AF',
   },
   buttonText: {
     fontSize: 16,
-    fontWeight: "600",
-    color: "#FFFFFF",
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   footerLinks: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     paddingHorizontal: 8,
     paddingTop: 50,
   },
   footerLink: {
     fontSize: 14,
-    fontWeight: "400",
-    color: "#6B6B6B",
+    fontWeight: '400',
+    color: '#6B6B6B',
     lineHeight: 16.8,
     letterSpacing: -0.28,
   },
-});
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#141414',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 44,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#F3F4F5',
+    marginBottom: 12,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: '#141414',
+  },
+  countryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F5',
+  },
+  countryRowSelected: {
+    backgroundColor: '#F9F0BF',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+  },
+  countryName: {
+    fontSize: 16,
+    color: '#141414',
+  },
+  countryCode: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#6B6B6B',
+  },
+})

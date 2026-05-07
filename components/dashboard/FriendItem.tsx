@@ -1,59 +1,52 @@
-import React from "react";
-import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import type { Friend } from "./types";
+import React from 'react'
+import { Image, StyleSheet, Text, View } from 'react-native'
+
+import type { Friend } from './types'
 
 interface FriendItemProps {
-  friend: Friend;
-  onPress?: (friend: Friend) => void;
+  friend: Friend
 }
 
-export default function FriendItem({ friend, onPress }: FriendItemProps) {
-  const isOwedToYou = friend.balanceType === "owes_you";
+export default function FriendItem({ friend }: FriendItemProps) {
+  const isOwedToYou = friend.balanceType === 'owes_you'
 
   const formatAmount = (amount: number) =>
-    `$${amount.toLocaleString("en-US", {
+    `$${amount.toLocaleString('en-US', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    })}`;
+    })}`
 
   const getSubtitleStyle = () => {
     switch (friend.subtitleType) {
-      case "alert":
-        return styles.subtitleAlert;
-      case "upcoming":
-        return styles.subtitleUpcoming;
+      case 'alert':
+        return styles.subtitleAlert
+      case 'upcoming':
+        return styles.subtitleUpcoming
       default:
-        return styles.subtitle;
+        return styles.subtitle
     }
-  };
+  }
 
   const getSubtitlePrefix = () => {
     switch (friend.subtitleType) {
-      case "alert":
-        return "⚠ ";
-      case "upcoming":
-        return "⚠ ";
+      case 'alert':
+        return '⚠ '
+      case 'upcoming':
+        return '⚠ '
       default:
-        return "";
+        return ''
     }
-  };
+  }
 
   return (
-    <TouchableOpacity
-      style={styles.container}
-      onPress={() => onPress?.(friend)}
-      activeOpacity={onPress ? 0.7 : 1}
-      disabled={!onPress}
-    >
+    <View style={styles.container}>
       {/* Avatar */}
       <View style={styles.avatarContainer}>
         {friend.avatar ? (
           <Image source={friend.avatar} style={styles.avatar} />
         ) : (
           <View style={[styles.avatar, styles.avatarPlaceholder]}>
-            <Text style={styles.avatarInitial}>
-              {friend.name.charAt(0).toUpperCase()}
-            </Text>
+            <Text style={styles.avatarInitial}>{friend.name.charAt(0).toUpperCase()}</Text>
           </View>
         )}
       </View>
@@ -71,26 +64,19 @@ export default function FriendItem({ friend, onPress }: FriendItemProps) {
 
       {/* Amount */}
       <View style={styles.amountContainer}>
-        <Text style={styles.owesLabel}>
-          {isOwedToYou ? "owes you" : "you owe"}
-        </Text>
-        <Text
-          style={[
-            styles.amount,
-            isOwedToYou ? styles.amountGreen : styles.amountOrange,
-          ]}
-        >
+        <Text style={styles.owesLabel}>{isOwedToYou ? 'owes you' : 'you owe'}</Text>
+        <Text style={[styles.amount, isOwedToYou ? styles.amountGreen : styles.amountOrange]}>
           {formatAmount(friend.amount)}
         </Text>
       </View>
-    </TouchableOpacity>
-  );
+    </View>
+  )
 }
 
 const styles = StyleSheet.create({
   container: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingVertical: 12,
     paddingHorizontal: 4,
   },
@@ -103,71 +89,71 @@ const styles = StyleSheet.create({
     borderRadius: 22,
   },
   avatarPlaceholder: {
-    backgroundColor: "#3273CD",
-    justifyContent: "center",
-    alignItems: "center",
+    backgroundColor: '#3273CD',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   avatarInitial: {
-    color: "#FFFFFF",
-    fontFamily: "Nunito_700Bold",
+    color: '#FFFFFF',
+    fontFamily: 'Nunito_700Bold',
     fontSize: 18,
-    fontWeight: "700",
+    fontWeight: '700',
   },
   infoContainer: {
     flex: 1,
-    justifyContent: "center",
+    justifyContent: 'center',
   },
   name: {
-    color: "#141414",
-    fontFamily: "Nunito_400Regular",
+    color: '#141414',
+    fontFamily: 'Nunito_400Regular',
     fontSize: 16,
-    fontWeight: "400",
+    fontWeight: '400',
     lineHeight: 16,
   },
   subtitle: {
-    color: "#9CA3AF",
-    fontFamily: "Nunito_400Regular",
+    color: '#9CA3AF',
+    fontFamily: 'Nunito_400Regular',
     fontSize: 10,
-    fontWeight: "400",
+    fontWeight: '400',
     lineHeight: 15,
     marginTop: 2,
   },
   subtitleAlert: {
-    color: "#D48D4F",
-    fontFamily: "Nunito_400Regular",
+    color: '#D48D4F',
+    fontFamily: 'Nunito_400Regular',
     fontSize: 10,
-    fontWeight: "400",
+    fontWeight: '400',
     lineHeight: 15,
     marginTop: 2,
   },
   subtitleUpcoming: {
-    color: "#D48D4F",
-    fontFamily: "Nunito_400Regular",
+    color: '#D48D4F',
+    fontFamily: 'Nunito_400Regular',
     fontSize: 10,
-    fontWeight: "400",
+    fontWeight: '400',
     lineHeight: 15,
     marginTop: 2,
   },
   amountContainer: {
-    alignItems: "flex-end",
+    alignItems: 'flex-end',
   },
   owesLabel: {
-    color: "#9CA3AF",
-    fontFamily: "Nunito_400Regular",
+    color: '#9CA3AF',
+    fontFamily: 'Nunito_400Regular',
     fontSize: 12,
-    fontWeight: "400",
+    fontWeight: '400',
     lineHeight: 18,
   },
   amount: {
-    fontFamily: "Nunito_700Bold",
+    fontFamily: 'Nunito_700Bold',
     fontSize: 16,
-    fontWeight: "700",
+    fontWeight: '700',
     lineHeight: 24,
   },
   amountGreen: {
-    color: "#44BB73",
+    color: '#44BB73',
   },
   amountOrange: {
-    color: "#D48D4F",
+    color: '#D48D4F',
   },
-});
+})

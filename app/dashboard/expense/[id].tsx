@@ -10,18 +10,13 @@ import {
   View,
 } from "react-native";
 import { SvgUri } from "react-native-svg";
+import TrainIcon from "../../../assets/expense-screen/train.svg";
+import SenderSignature from "../../../assets/expense-screen/sender-signature.svg";
+import ReceiverSignature from "../../../assets/expense-screen/reciever-signature.svg";
 
 import { useExpenseStore } from "@/lib/store/expense-store";
 
-const trainIconUri = Asset.fromModule(
-  require("../../../assets/expense-screen/train.svg"),
-).uri;
-const senderSignatureUri = Asset.fromModule(
-  require("../../../assets/expense-screen/sender-signature.svg"),
-).uri;
-const receiverSignatureUri = Asset.fromModule(
-  require("../../../assets/expense-screen/reciever-signature.svg"),
-).uri;
+// SVGs imported as components via metro transformer
 function formatCurrency(amount: number) {
   return `$${amount.toLocaleString("en-US", {
     minimumFractionDigits: 2,
@@ -65,8 +60,8 @@ export default function ExpenseDetailScreen() {
         </View>
 
         <View style={styles.titleRow}>
-          <View style={styles.iconShell}>
-            <SvgUri width="100%" height="100%" uri={trainIconUri} />
+            <View style={styles.iconShell}>
+            <TrainIcon width="100%" height="100%" />
           </View>
           <Text style={styles.expenseTitle}>{expense.title}</Text>
         </View>
@@ -130,15 +125,15 @@ export default function ExpenseDetailScreen() {
           <View style={styles.signatureRow}>
             <View style={styles.signatureBlock}>
               <Text style={styles.signatureLabel}>Sender&apos;s signature</Text>
-              <View style={styles.signatureGraphic}>
-                <SvgUri width="100%" height="100%" uri={senderSignatureUri} />
+                <View style={styles.signatureGraphic}>
+                <SenderSignature width="100%" height="100%" />
               </View>
             </View>
 
             <View style={styles.signatureBlock}>
               <Text style={styles.signatureLabel}>Receiver&apos;s signature</Text>
-              <View style={styles.signatureGraphic}>
-                <SvgUri width="100%" height="100%" uri={receiverSignatureUri} />
+                <View style={styles.signatureGraphic}>
+                <ReceiverSignature width="100%" height="100%" />
               </View>
             </View>
           </View>

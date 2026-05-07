@@ -10,19 +10,15 @@ import {
   View,
 } from "react-native";
 import { SvgUri } from "react-native-svg";
+import TrainIcon from "../../assets/expense-screen/train.svg";
+import SettingsIcon from "../../assets/settings.svg";
+import LikeIcon from "../../assets/like.svg";
+import CalendarIcon from "../../assets/calendar.svg";
 
 import { AddExpenseButton, BottomTabBar } from "@/components/dashboard";
 
-const trainIconUri = Asset.fromModule(
-  require("../../assets/expense-screen/train.svg"),
-).uri;
-const settingsIconUri = Asset.fromModule(
-  require("../../assets/settings.svg"),
-).uri;
-const likeIconUri = Asset.fromModule(require("../../assets/like.svg")).uri;
-const calendarIconUri = Asset.fromModule(
-  require("../../assets/calendar.svg"),
-).uri;
+// SVGs are imported as React components via react-native-svg-transformer
+// (metro config already handles .svg files). PNGs remain loaded via expo-asset.
 const profileImageOneUri = Asset.fromModule(
   require("../../assets/onboarding/1.png"),
 ).uri;
@@ -70,8 +66,8 @@ export default function FriendSummaryScreen() {
           <TouchableOpacity onPress={() => router.back()} hitSlop={12}>
             <Text style={styles.backText}>{"< Back"}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.settingsButton}>
-            <SvgUri width={21} height={21} uri={settingsIconUri} />
+            <TouchableOpacity style={styles.settingsButton}>
+            <SettingsIcon width={21} height={21} />
           </TouchableOpacity>
         </View>
 
@@ -97,7 +93,7 @@ export default function FriendSummaryScreen() {
             onPress={() => setActivePanel("square-up")}
             activeOpacity={0.85}
           >
-            <SvgUri width={12} height={14} uri={likeIconUri} />
+            <LikeIcon width={12} height={14} />
             <Text
               style={[
                 styles.chipText,
@@ -115,7 +111,7 @@ export default function FriendSummaryScreen() {
             onPress={() => setActivePanel("board")}
             activeOpacity={0.85}
           >
-            <SvgUri width={15} height={15} uri={calendarIconUri} />
+            <CalendarIcon width={15} height={15} />
             <Text
               style={[
                 styles.chipText,
@@ -159,7 +155,7 @@ export default function FriendSummaryScreen() {
             >
               <View style={styles.expenseRowLeft}>
                 <View style={styles.expenseIconBadge}>
-                  <SvgUri width="100%" height="100%" uri={trainIconUri} />
+                  <TrainIcon width="100%" height="100%" />
                 </View>
                 <View>
                   <Text style={styles.expenseRowTitle}>Taxi</Text>
