@@ -7,8 +7,5 @@ import { getExpense, type ExpenseDetail } from '@/lib/supabase/home'
 export async function fetchExpenseDetail(
   expenseId: string
 ): Promise<{ data: ExpenseDetail | null; error?: string }> {
-  console.log('[fetchExpenseDetail] Loading expense:', expenseId)
-  const result = await getExpense(expenseId)
-  console.log('[fetchExpenseDetail] Result:', result)
-  return result
+  return getExpense(expenseId)
 }

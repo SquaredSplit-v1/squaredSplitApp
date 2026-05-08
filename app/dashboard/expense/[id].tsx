@@ -1,410 +1,405 @@
-import { Asset } from "expo-asset";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useMemo } from "react";
+import { Image } from 'expo-image'
+import { useLocalSearchParams, useRouter } from 'expo-router'
+import React, { useCallback, useEffect, useState } from 'react'
 import {
-  Image,
+  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
-} from "react-native";
-import { SvgUri } from "react-native-svg";
-import TrainIcon from "../../../assets/expense-screen/train.svg";
-import SenderSignature from "../../../assets/expense-screen/sender-signature.svg";
-import ReceiverSignature from "../../../assets/expense-screen/reciever-signature.svg";
+} from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { useExpenseStore } from "@/lib/store/expense-store";
+import { fetchExpenseDetail } from '@/lib/api/getExpenseDetail'
+import { formatAmount } from '@/lib/currency'
+import type { ExpenseDetail } from '@/lib/supabase/home'
+import { useAuthStore } from '@/store/authStore'
+import { useCurrencyStore } from '@/store/currencyStore'
 
-// SVGs imported as components via metro transformer
-function formatCurrency(amount: number) {
-  return `$${amount.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+import TrainIcon from '../../../assets/expense-screen/train.svg'
+
+function CategoryIcon({ category }: { category: string | null }) {
+  const lower = (category ?? '').toLowerCase()
+  const isTransport =
+    lower.includes('transport') ||
+    lower.includes('taxi') ||
+    lower.includes('uber') ||
+    lower.includes('train') ||
+    lower.includes('travel')
+  if (isTransport) {
+    return (
+      <View style={styles.categoryIconWrap}>
+        <TrainIcon width={22} height={24} />
+      </View>
+    )
+  }
+  return (
+    <View style={styles.categoryIconWrap}>
+      <Text style={styles.categoryFallback}>$</Text>
+    </View>
+  )
+}
+
+function PaidAvatar({ uri }: { uri: string | null }) {
+  if (uri) {
+    return <Image source={{ uri }} style={styles.paidAvatar} contentFit="cover" />
+  }
+  return (
+    <View style={[styles.paidAvatar, styles.avatarPlaceholder]}>
+      <Text style={styles.avatarInitial}>?</Text>
+    </View>
+  )
 }
 
 export default function ExpenseDetailScreen() {
-  const router = useRouter();
-  const params = useLocalSearchParams<{ id?: string }>();
-  const { getExpenseById } = useExpenseStore();
+  const router = useRouter()
+  const insets = useSafeAreaInsets()
+  const params = useLocalSearchParams<{ id?: string }>()
+  const expenseId = Array.isArray(params.id) ? params.id[0] : params.id
+  const userId = useAuthStore(s => s.user?.id)
+  const { current: currency } = useCurrencyStore()
 
-  const expense = useMemo(() => {
-    const id = Array.isArray(params.id) ? params.id[0] : params.id;
-    return id ? getExpenseById(id) : undefined;
-  }, [getExpenseById, params.id]);
+  const [expense, setExpense] = useState<ExpenseDetail | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  if (!expense) {
+  const load = useCallback(async () => {
+    if (!expenseId) {
+      setExpense(null)
+      setLoading(false)
+      setError('Missing expense')
+      return
+    }
+    setLoading(true)
+    setError(null)
+    const { data, error: err } = await fetchExpenseDetail(expenseId)
+    if (err) setError(err)
+    setExpense(data)
+    setLoading(false)
+  }, [expenseId])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  if (loading) {
     return (
-      <View style={styles.emptyStateContainer}>
-        <Text style={styles.emptyStateTitle}>Expense not found</Text>
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => router.back()}
-        >
+      <View style={[styles.centered, { paddingTop: insets.top }]}>
+        <ActivityIndicator color="#141414" />
+      </View>
+    )
+  }
+
+  if (!userId) {
+    return (
+      <View style={[styles.centered, { paddingTop: insets.top }]}>
+        <ActivityIndicator color="#141414" />
+      </View>
+    )
+  }
+
+  if (!expense || error) {
+    return (
+      <View style={[styles.centered, { paddingTop: insets.top, paddingHorizontal: 24 }]}>
+        <Text style={styles.emptyTitle}>{error ?? 'Expense not found'}</Text>
+        <TouchableOpacity style={styles.actionButton} onPress={() => router.back()}>
           <Text style={styles.actionButtonText}>Go back</Text>
         </TouchableOpacity>
       </View>
-    );
+    )
   }
+
+  const payerParticipant = expense.participants.find(p => p.userId === expense.paidBy)
+  const payerName = payerParticipant?.fullName ?? 'Friend'
+  const payerAvatar = payerParticipant?.avatarUrl ?? null
+  const youPaid = expense.paidBy === userId
+
+  const yourShare = expense.participants.find(p => p.userId === userId)?.shareAmount ?? 0
+  const others = expense.participants.filter(p => p.userId !== userId)
 
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.topBar}>
-          <TouchableOpacity onPress={() => router.back()} hitSlop={12}>
-            <Text style={styles.backText}>{"< Back"}</Text>
+      <ScrollView
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24 },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.headerRow}>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => router.back()}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+          >
+            <Text style={styles.backChevron}>‹</Text>
+            <Text style={styles.backText}>Back</Text>
           </TouchableOpacity>
-          <Text style={styles.topTitle}>Expense detail</Text>
-          <View style={styles.topBarSpacer} />
+          <Text style={styles.headerTitle}>Expense detail</Text>
+          <View style={styles.headerSpacer} />
         </View>
 
-        <View style={styles.titleRow}>
-            <View style={styles.iconShell}>
-            <TrainIcon width="100%" height="100%" />
+        <View style={styles.titleBlock}>
+          <View style={styles.titleRow}>
+            <CategoryIcon category={expense.category} />
+            <Text style={styles.expenseTitle}>{expense.title}</Text>
           </View>
-          <Text style={styles.expenseTitle}>{expense.title}</Text>
         </View>
 
         <View style={styles.divider} />
 
-        <View style={styles.paidRow}>
-          <Image source={expense.paidByAvatar} style={styles.avatar} />
-          <View style={styles.paidTextBlock}>
-            <Text style={styles.paidText}>
-              You paid <Text style={styles.paidAmount}>{formatCurrency(expense.amount)}</Text>
-            </Text>
-            <Text style={styles.metaText}>
-              {expense.date} · {expense.description}
+        <View style={styles.paidBlock}>
+          <View style={styles.paidRow}>
+            <PaidAvatar uri={payerAvatar} />
+            <Text style={styles.paidLine}>
+              {youPaid ? (
+                <>
+                  <Text style={styles.paidPrefix}>You paid </Text>
+                  <Text style={styles.paidAmountBold}>
+                    {formatAmount(expense.amount, currency)}
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.paidPrefix}>{payerName} paid </Text>
+                  <Text style={styles.paidAmountBold}>
+                    {formatAmount(expense.amount, currency)}
+                  </Text>
+                </>
+              )}
             </Text>
           </View>
-        </View>
 
-        <View style={styles.shareList}>
-          {expense.participants.map((participant) => {
-            const owesYou = participant.amount > 0 && !participant.isCurrentUser;
-            const shareLabel = participant.isCurrentUser
-              ? "You owe"
-              : owesYou
-                ? `${participant.name} owes you`
-                : `${participant.name} owes nothing`;
-
-            return (
-              <View key={participant.id} style={styles.shareRow}>
-                <Text style={styles.shareBullet}>•</Text>
-                <Text style={styles.shareLabel}>{shareLabel}</Text>
-                <Text
-                  style={[
-                    styles.shareAmount,
-                    owesYou ? styles.shareOrange : styles.shareGreen,
-                  ]}
-                >
-                  {formatCurrency(participant.amount)}
+          <View style={styles.bulletBlock}>
+            {youPaid ? (
+              <>
+                <Text style={styles.bulletLine}>
+                  <Text style={styles.bulletDot}>• </Text>
+                  <Text style={styles.bulletGray}>You owe </Text>
+                  <Text style={styles.bulletGreen}>{formatAmount(yourShare, currency)}</Text>
                 </Text>
-              </View>
-            );
-          })}
-        </View>
-
-        <View style={styles.notePlainBlock}>
-          <Text style={styles.noteLabel}>NOTES</Text>
-          <Text style={styles.noteText}>{expense.notes}</Text>
-        </View>
-
-        <View style={styles.termsCard}>
-          <Text style={styles.termsTitle}>Terms &amp; Conditions</Text>
-          <View style={styles.termsList}>
-            {expense.terms.map((term, index) => (
-              <View key={`${term}-${index}`} style={styles.termRow}>
-                <Text style={styles.termIndex}>{index + 1}</Text>
-                <Text style={styles.termText}>{term}</Text>
-              </View>
-            ))}
-          </View>
-
-          <View style={styles.signatureRow}>
-            <View style={styles.signatureBlock}>
-              <Text style={styles.signatureLabel}>Sender&apos;s signature</Text>
-                <View style={styles.signatureGraphic}>
-                <SenderSignature width="100%" height="100%" />
-              </View>
-            </View>
-
-            <View style={styles.signatureBlock}>
-              <Text style={styles.signatureLabel}>Receiver&apos;s signature</Text>
-                <View style={styles.signatureGraphic}>
-                <ReceiverSignature width="100%" height="100%" />
-              </View>
-            </View>
+                {others.map(p => (
+                  <Text key={p.userId} style={styles.bulletLine}>
+                    <Text style={styles.bulletDot}>• </Text>
+                    <Text style={styles.bulletGray}>{p.fullName} owes you </Text>
+                    <Text style={styles.bulletOrange}>{formatAmount(p.shareAmount, currency)}</Text>
+                  </Text>
+                ))}
+              </>
+            ) : (
+              <Text style={styles.bulletLine}>
+                <Text style={styles.bulletDot}>• </Text>
+                <Text style={styles.bulletGray}>You owe </Text>
+                <Text style={styles.bulletGreen}>{formatAmount(yourShare, currency)}</Text>
+              </Text>
+            )}
           </View>
         </View>
 
-        {/*
-        <View style={styles.actionStack}>
-          <TouchableOpacity style={styles.primaryAction} onPress={() => {}}>
-            <Text style={styles.primaryActionText}>Settle expense</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.secondaryAction} onPress={() => {}}>
-            <Text style={styles.secondaryActionText}>Edit expense</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.dangerAction} onPress={() => {}}>
-            <Text style={styles.dangerActionText}>Delete expense</Text>
-          </TouchableOpacity>
-        </View>
-        */}
+        {expense.note ? (
+          <View style={styles.noteBox}>
+            <Text style={styles.noteText}>
+              <Text style={styles.noteLabelBold}>Note:</Text>
+              <Text style={styles.noteBody}> {expense.note}</Text>
+            </Text>
+          </View>
+        ) : null}
       </ScrollView>
     </View>
-  );
+  )
 }
 
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: '#FFFFFF',
   },
   scrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 28,
+    paddingHorizontal: 20,
   },
-  topBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 18,
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+  },
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    minWidth: 72,
+  },
+  backChevron: {
+    color: '#3273CD',
+    fontSize: 22,
+    fontWeight: '700',
+    marginTop: -2,
+    fontFamily: 'Nunito_700Bold',
   },
   backText: {
-    color: "#3B82F6",
-    fontFamily: "Nunito_600SemiBold",
+    color: '#3273CD',
     fontSize: 16,
+    fontFamily: 'Nunito_700Bold',
+    lineHeight: 24,
   },
-  topTitle: {
-    color: "#141414",
-    fontFamily: "Nunito_600SemiBold",
-    fontSize: 17,
+  headerTitle: {
+    color: '#141414',
+    fontSize: 16,
+    fontFamily: 'Nunito_600SemiBold',
+    lineHeight: 19.2,
   },
-  topBarSpacer: {
-    width: 52,
+  headerSpacer: {
+    width: 72,
+  },
+  titleBlock: {
+    marginBottom: 12,
   },
   titleRow: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 12,
-    paddingHorizontal: 4,
   },
-  iconShell: {
-    width: 32,
-    height: 32,
+  categoryIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#F9F0BF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  categoryFallback: {
+    fontSize: 18,
+    fontFamily: 'Nunito_700Bold',
+    color: '#141414',
   },
   expenseTitle: {
     flex: 1,
-    color: "#141414",
-    fontFamily: "Nunito_700Bold",
+    color: '#141414',
+    fontFamily: 'Nunito_700Bold',
     fontSize: 32,
-    lineHeight: 36,
+    lineHeight: 48,
   },
   divider: {
-    height: 1,
-    backgroundColor: "#ECE7D8",
-    marginVertical: 14,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#E5E7EB',
+    marginBottom: 12,
+  },
+  paidBlock: {
+    gap: 12,
   },
   paidRow: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
-  avatar: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    marginRight: 10,
+  paidAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
   },
-  paidTextBlock: {
+  avatarPlaceholder: {
+    backgroundColor: '#E5E7EB',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarInitial: {
+    fontFamily: 'Nunito_700Bold',
+    color: '#6B6B6B',
+  },
+  paidLine: {
     flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
   },
-  paidText: {
-    color: "#1F2937",
-    fontFamily: "Nunito_600SemiBold",
-    fontSize: 15,
-    lineHeight: 20,
-  },
-  paidAmount: {
-    color: "#141414",
-    fontFamily: "Nunito_700Bold",
-  },
-  metaText: {
-    marginTop: 2,
-    color: "#6B7280",
-    fontFamily: "Nunito_400Regular",
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  shareList: {
-    marginTop: 14,
-    gap: 6,
-  },
-  shareRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  shareBullet: {
-    color: "#7A7A7A",
+  paidPrefix: {
+    color: '#141414',
     fontSize: 18,
-    marginTop: -2,
+    fontFamily: 'Nunito_600SemiBold',
+    lineHeight: 18,
   },
-  shareLabel: {
-    flex: 1,
-    color: "#4B5563",
-    fontFamily: "Nunito_400Regular",
+  paidAmountBold: {
+    color: '#141414',
+    fontSize: 18,
+    fontFamily: 'Nunito_700Bold',
+    lineHeight: 18,
+  },
+  bulletBlock: {
+    gap: 8,
+    paddingLeft: 4,
+  },
+  bulletLine: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+  },
+  bulletDot: {
+    color: '#6B6B6B',
     fontSize: 14,
+    fontFamily: 'Nunito_400Regular',
+    lineHeight: 14,
   },
-  shareAmount: {
-    fontFamily: "Nunito_700Bold",
+  bulletGray: {
+    color: '#6B6B6B',
     fontSize: 14,
+    fontFamily: 'Nunito_400Regular',
+    lineHeight: 14,
   },
-  shareGreen: {
-    color: "#44BB73",
+  bulletGreen: {
+    color: '#44BB73',
+    fontSize: 14,
+    fontFamily: 'Nunito_700Bold',
+    lineHeight: 14,
   },
-  shareOrange: {
-    color: "#F28C28",
+  bulletOrange: {
+    color: '#E38F30',
+    fontSize: 14,
+    fontFamily: 'Nunito_700Bold',
+    lineHeight: 14,
   },
-  notePlainBlock: {
-    marginTop: 12,
-    paddingHorizontal: 4,
-  },
-  noteLabel: {
-    color: "#9CA3AF",
-    fontFamily: "Nunito_600SemiBold",
-    fontSize: 12,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-    marginBottom: 6,
+  noteBox: {
+    marginTop: 24,
+    padding: 12,
+    backgroundColor: '#F9F0BF',
+    borderRadius: 8,
   },
   noteText: {
-    color: "#141414",
-    fontFamily: "Nunito_400Regular",
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  termsCard: {
-    marginTop: 16,
-    borderRadius: 12,
-    backgroundColor: "#F9F0BF",
-    padding: 16,
-  },
-  termsTitle: {
-    textAlign: "center",
-    color: "#141414",
-    fontFamily: "Nunito_600SemiBold",
+    color: '#141414',
     fontSize: 16,
-    marginBottom: 10,
+    lineHeight: 19.2,
   },
-  termsList: {
-    gap: 10,
+  noteLabelBold: {
+    fontFamily: 'Nunito_700Bold',
   },
-  termRow: {
-    flexDirection: "row",
-    gap: 10,
-    alignItems: "flex-start",
+  noteBody: {
+    fontFamily: 'Nunito_400Regular',
   },
-  termIndex: {
-    width: 16,
-    color: "#6E6E6E",
-    fontFamily: "Nunito_600SemiBold",
-    fontSize: 14,
-    lineHeight: 18,
-  },
-  termText: {
-    flex: 1,
-    color: "#1E1E1E",
-    fontFamily: "Nunito_400Regular",
-    fontSize: 14,
-    lineHeight: 18,
-  },
-  signatureRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 16,
-    marginTop: 20,
-  },
-  signatureBlock: {
-    flex: 1,
-  },
-  signatureLabel: {
-    color: "#6E6E6E",
-    fontFamily: "Nunito_400Regular",
-    fontSize: 12,
-    marginBottom: 8,
-    textAlign: "center",
-  },
-  signatureGraphic: {
-    height: 70,
-  },
-  actionStack: {
-    marginTop: 18,
-    gap: 10,
-  },
-  primaryAction: {
-    backgroundColor: "#141414",
-    borderRadius: 14,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  primaryActionText: {
-    color: "#FFFFFF",
-    fontFamily: "Nunito_700Bold",
-    fontSize: 15,
-  },
-  secondaryAction: {
-    backgroundColor: "rgba(255,255,255,0.9)",
-    borderRadius: 14,
-    paddingVertical: 14,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-  },
-  secondaryActionText: {
-    color: "#141414",
-    fontFamily: "Nunito_600SemiBold",
-    fontSize: 15,
-  },
-  dangerAction: {
-    backgroundColor: "#FFF1F2",
-    borderRadius: 14,
-    paddingVertical: 14,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#FECACA",
-  },
-  dangerActionText: {
-    color: "#B91C1C",
-    fontFamily: "Nunito_700Bold",
-    fontSize: 15,
-  },
-  emptyStateContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 24,
-    backgroundColor: "#FFFFFF",
-  },
-  emptyStateTitle: {
-    color: "#141414",
-    fontFamily: "Nunito_700Bold",
+  emptyTitle: {
+    color: '#141414',
+    fontFamily: 'Nunito_700Bold',
     fontSize: 22,
     marginBottom: 16,
+    textAlign: 'center',
   },
   actionButton: {
-    backgroundColor: "#141414",
+    backgroundColor: '#141414',
     borderRadius: 12,
     paddingHorizontal: 20,
     paddingVertical: 12,
   },
   actionButtonText: {
-    color: "#FFFFFF",
-    fontFamily: "Nunito_600SemiBold",
+    color: '#FFFFFF',
+    fontFamily: 'Nunito_600SemiBold',
     fontSize: 14,
   },
-});
+})
