@@ -16,11 +16,14 @@ export interface AuthState {
   hasOnboarded: boolean
   isLoading: boolean
 
-  setHasOnboarded: (val: boolean) => void
-  hydrateSession: (session: Session, user: User) => Promise<void>
   completeOnboarding: () => void
   logout: () => Promise<void>
   initialize: () => () => void
+}
+
+async function fetchProfile(userId: string): Promise<boolean> {
+  const { data } = await supabase.from('profiles').select('has_onboarded').eq('id', userId).single()
+  return (data as ProfileRow | null)?.has_onboarded ?? false
 }
 
 export const useAuthStore = create<AuthState>(set => ({
@@ -29,68 +32,36 @@ export const useAuthStore = create<AuthState>(set => ({
   hasOnboarded: false,
   isLoading: true,
 
-  setHasOnboarded: val => set({ hasOnboarded: val }),
-
-  hydrateSession: async (session, user) => {
-    const { data } = await supabase
-      .from('profiles')
-      .select('has_onboarded')
-      .eq('id', user.id)
-      .single()
-
-    const profile = data as ProfileRow | null
-
-    set({
-      session,
-      user,
-      hasOnboarded: profile?.has_onboarded ?? false,
-      isLoading: false,
-    })
-
-    useCurrencyStore.getState().initialize(user.id)
-  },
-
   completeOnboarding: () => set({ hasOnboarded: true }),
 
   logout: async () => {
-    set({ session: null, user: null, hasOnboarded: false })
+    set({ session: null, user: null, hasOnboarded: false, isLoading: false })
     useCurrencyStore.getState().reset()
     useContactsStore.getState().reset()
-    await supabase.auth.signOut()
     useHomeStore.getState().reset()
+    await supabase.auth.signOut()
   },
 
   initialize: () => {
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_OUT') {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || !session) {
         set({ session: null, user: null, hasOnboarded: false, isLoading: false })
         useCurrencyStore.getState().reset()
         useContactsStore.getState().reset()
         return
       }
 
-      if (session) {
-        const { data } = await supabase
-          .from('profiles')
-          .select('has_onboarded')
-          .eq('id', session.user.id)
-          .single()
+      // Set session immediately so UI knows user is authed,
+      // then fetch profile in a separate microtask to avoid
+      // deadlocking the Supabase auth queue.
+      set({ session, user: session.user })
 
-        const profile = data as ProfileRow | null
-
-        set({
-          session,
-          user: session.user,
-          hasOnboarded: profile?.has_onboarded ?? false,
-          isLoading: false,
-        })
-
+      fetchProfile(session.user.id).then(hasOnboarded => {
+        set({ hasOnboarded, isLoading: false })
         useCurrencyStore.getState().initialize(session.user.id)
-      } else {
-        set({ session: null, user: null, hasOnboarded: false, isLoading: false })
-      }
+      })
     })
 
     return () => subscription.unsubscribe()

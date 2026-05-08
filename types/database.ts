@@ -89,6 +89,89 @@ export type Database = {
         }
         Relationships: []
       }
+      expense_participants: {
+        Row: {
+          id: string
+          expense_id: string
+          user_id: string
+          share_amount: number
+          is_settled: boolean | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          expense_id: string
+          user_id: string
+          share_amount: number
+          is_settled?: boolean | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          expense_id?: string
+          user_id?: string
+          share_amount?: number
+          is_settled?: boolean | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'expense_participants_expense_id_fkey'
+            columns: ['expense_id']
+            isOneToOne: false
+            referencedRelation: 'expenses'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      expenses: {
+        Row: {
+          id: string
+          amount: number
+          description: string
+          paid_by: string
+          group_id: string | null
+          split_type: string | null
+          created_by: string
+          created_at: string
+          updated_at: string | null
+          due_date: string | null
+          note: string | null
+          category: string | null
+        }
+        Insert: {
+          id?: string
+          amount: number
+          description: string
+          paid_by: string
+          group_id?: string | null
+          split_type?: string | null
+          created_by: string
+          created_at?: string | null
+          updated_at?: string | null
+          due_date?: string | null
+          note?: string | null
+          category?: string | null
+        }
+        Update: {
+          id?: string
+          amount?: number
+          description?: string
+          paid_by?: string
+          group_id?: string | null
+          split_type?: string | null
+          created_by?: string
+          created_at?: string | null
+          updated_at?: string | null
+          due_date?: string | null
+          note?: string | null
+          category?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -97,6 +180,7 @@ export type Database = {
           email: string | null
           full_name: string | null
           id: string
+          has_onboarded: boolean | null
           is_pro: boolean | null
           language: string | null
           onboarding_complete: boolean | null
@@ -112,6 +196,7 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id: string
+          has_onboarded?: boolean | null
           is_pro?: boolean | null
           language?: string | null
           onboarding_complete?: boolean | null
@@ -127,6 +212,7 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id?: string
+          has_onboarded?: boolean | null
           is_pro?: boolean | null
           language?: string | null
           onboarding_complete?: boolean | null

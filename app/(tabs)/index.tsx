@@ -1,8 +1,10 @@
 // app/(tabs)/index.tsx
+import { Image } from 'expo-image'
 import { useRouter } from 'expo-router'
 import React, { useCallback, useEffect, useState } from 'react'
 import {
   ActivityIndicator,
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -14,7 +16,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Svg, { Path } from 'react-native-svg'
 
 import AddExpenseModal from '@/components/AddExpenseModal'
-import { formatAmount } from '@/lib/currency'
+import { formatAmount, type Currency } from '@/lib/currency'
+import type { ActivityItem as HomeActivityItem } from '@/lib/supabase/home'
 import { useAuthStore } from '@/store/authStore'
 import { useCurrencyStore } from '@/store/currencyStore'
 import { useHomeStore } from '@/store/homeStore'
@@ -32,6 +35,114 @@ function BellIcon() {
     </Svg>
   )
 }
+
+function ActivityAvatar({ uri, name }: { uri: string | null; name: string }) {
+  const initial = (name.trim().slice(0, 1) || '?').toUpperCase()
+  if (uri) {
+    return <Image source={{ uri }} style={activityStyles.avatar} contentFit="cover" />
+  }
+  return (
+    <View style={[activityStyles.avatar, activityStyles.avatarPlaceholder]}>
+      <Text style={activityStyles.avatarInitial}>{initial}</Text>
+    </View>
+  )
+}
+
+function RecentActivityRow({
+  item,
+  currency,
+  onPress,
+}: {
+  item: HomeActivityItem
+  currency: Currency
+  onPress: () => void
+}) {
+  const owesYou = item.direction === 'owes_you'
+  const subtitleColor =
+    item.subtitleKind === 'overdue'
+      ? '#EF4444'
+      : item.subtitleKind === 'upcoming'
+        ? '#E38F30'
+        : '#9CA3AF'
+  const amountColor = owesYou ? '#44BB73' : '#E38F30'
+  const statusLabel = owesYou ? 'owes you' : 'you owe'
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [activityStyles.row, pressed && activityStyles.rowPressed]}
+      accessibilityRole="button"
+      accessibilityLabel={`${item.otherPartyName}, ${statusLabel} ${item.amount}`}
+    >
+      <View style={activityStyles.rowLeft}>
+        <ActivityAvatar uri={item.otherPartyAvatar} name={item.otherPartyName} />
+        <View style={activityStyles.nameBlock}>
+          <Text style={activityStyles.nameText}>{item.otherPartyName}</Text>
+          <Text style={[activityStyles.subtitleText, { color: subtitleColor }]}>
+            {item.subtitle}
+          </Text>
+        </View>
+      </View>
+      <View style={activityStyles.rowRight}>
+        <Text style={activityStyles.statusLabel}>{statusLabel}</Text>
+        <Text style={[activityStyles.amountText, { color: amountColor }]}>
+          {formatAmount(item.amount, currency)}
+        </Text>
+      </View>
+    </Pressable>
+  )
+}
+
+const activityStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+  },
+  rowPressed: { opacity: 0.7 },
+  rowLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 },
+  avatar: { width: 40, height: 40, borderRadius: 20 },
+  avatarPlaceholder: {
+    backgroundColor: '#E8F5E9',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarInitial: {
+    fontSize: 16,
+    fontFamily: 'Nunito_600SemiBold',
+    color: '#141414',
+  },
+  nameBlock: { flexDirection: 'column', justifyContent: 'center', gap: 4, flex: 1, minWidth: 0 },
+  nameText: {
+    color: '#141414',
+    fontSize: 18,
+    fontFamily: 'Nunito_400Regular',
+    lineHeight: 18,
+  },
+  subtitleText: {
+    fontSize: 12,
+    fontFamily: 'Nunito_500Medium',
+    lineHeight: 18,
+  },
+  rowRight: {
+    alignItems: 'flex-end',
+    justifyContent: 'flex-start',
+    gap: 4,
+    marginLeft: 8,
+  },
+  statusLabel: {
+    color: '#9CA3AF',
+    fontSize: 12,
+    fontFamily: 'Nunito_400Regular',
+    lineHeight: 18,
+  },
+  amountText: {
+    fontSize: 16,
+    fontFamily: 'Nunito_700Bold',
+    lineHeight: 24,
+  },
+})
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets()
@@ -155,12 +266,16 @@ export default function HomeScreen() {
         ) : (
           <View style={styles.activitySection}>
             <Text style={styles.sectionTitle}>Recent activity</Text>
-            {activity.map(item => (
-              <View key={item.id} style={styles.activityItem}>
-                <Text style={styles.activityDescription}>{item.description}</Text>
-                <Text style={styles.activityAmount}>{formatAmount(item.amount, currency)}</Text>
-              </View>
-            ))}
+            <View style={styles.activityList}>
+              {activity.map(item => (
+                <RecentActivityRow
+                  key={item.id}
+                  item={item}
+                  currency={currency}
+                  onPress={() => router.push(`/dashboard/expense/${item.id}`)}
+                />
+              ))}
+            </View>
           </View>
         )}
       </ScrollView>
@@ -250,15 +365,7 @@ const styles = StyleSheet.create({
   emptyActionText: { fontSize: 14, fontWeight: '600', color: '#FFFFFF' },
   activitySection: { marginTop: 24 },
   sectionTitle: { fontSize: 16, fontWeight: '600', color: '#141414', marginBottom: 12 },
-  activityItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F5',
-  },
-  activityDescription: { fontSize: 14, color: '#141414' },
-  activityAmount: { fontSize: 14, fontWeight: '600', color: '#141414' },
+  activityList: { gap: 12 },
   fab: {
     position: 'absolute',
     right: 24,
