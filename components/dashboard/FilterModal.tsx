@@ -86,24 +86,23 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(200, 200, 210, 0.55)',
   },
   sheet: {
-    backgroundColor: '#EADFEA',
+    backgroundColor: '#D4E7FF',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: 40,
-    // box-shadow: 2px -6px 81px 0 rgba(0,0,0,0.12)
+    paddingHorizontal: 20,
+    paddingTop: 32,
+    paddingBottom: 32,
     shadowColor: '#000',
     shadowOffset: { width: 2, height: -6 },
     shadowOpacity: 0.12,
-    shadowRadius: 40,
+    shadowRadius: 81,
     elevation: 16,
+    gap: 32,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 24,
+    alignItems: 'flex-start',
   },
   headerText: {
     color: '#6B6B6B',
@@ -111,16 +110,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     lineHeight: 16,
-    letterSpacing: -0.32,
   },
   optionsList: {
-    gap: 20,
+    gap: 24,
   },
   optionRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 4,
   },
   optionLabel: {
     color: '#141414',
@@ -128,7 +125,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '400',
     lineHeight: 20,
-    letterSpacing: -0.4,
     flex: 1,
   },
   optionLabelSelected: {
