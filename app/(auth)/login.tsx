@@ -38,6 +38,14 @@ const MARQUEE_ITEM_WIDTH = 88
 const MARQUEE_GAP = 2
 const MARQUEE_TOTAL_WIDTH = (MARQUEE_ITEM_WIDTH + MARQUEE_GAP) * 4
 
+/** ISO 3166-1 alpha-2 → regional indicator emoji (e.g. IN → 🇮🇳). */
+function countryCodeToEmoji(iso: string): string {
+  const code = iso.trim().toUpperCase()
+  if (code.length !== 2 || !/^[A-Z]{2}$/.test(code)) return '🌍'
+  const OFFSET = 0x1f1e6 - 65
+  return String.fromCodePoint(code.charCodeAt(0) + OFFSET, code.charCodeAt(1) + OFFSET)
+}
+
 const COUNTRY_CODES = [
   { code: '+91', country: 'IN', name: 'India' },
   { code: '+1', country: 'US', name: 'United States' },
@@ -174,6 +182,9 @@ function CountryPickerModal({ visible, selected, onSelect, onClose }: CountryPic
         <FlatList
           data={filtered}
           keyExtractor={(item, index) => `${item.country}-${index}`}
+          ListEmptyComponent={
+            <Text style={styles.countryListEmpty}>No countries match your search.</Text>
+          }
           renderItem={({ item }) => (
             <TouchableOpacity
               style={[
@@ -250,6 +261,7 @@ export default function LoginScreen() {
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
     >
       <LoginGradientBlob />
 
@@ -280,7 +292,7 @@ export default function LoginScreen() {
               accessibilityRole="button"
               accessibilityLabel={`Country code ${selectedCountry.code}`}
             >
-              <Text style={styles.countryFlag}>{selectedCountry.country}</Text>
+              <Text style={styles.countryFlag}>{countryCodeToEmoji(selectedCountry.country)}</Text>
               <Text style={styles.countryCodeText}>{selectedCountry.code}</Text>
               <Ionicons name="chevron-down" size={14} color="#6B6B6B" />
             </TouchableOpacity>
@@ -293,7 +305,8 @@ export default function LoginScreen() {
               onChangeText={handlePhoneChange}
               keyboardType="number-pad"
               maxLength={15}
-              autoFocus={false}
+              returnKeyType="done"
+              accessibilityLabel="Phone number"
             />
           </View>
 
@@ -314,11 +327,19 @@ export default function LoginScreen() {
         </TouchableOpacity>
 
         <View style={styles.footerLinks}>
-          <TouchableOpacity accessibilityRole="link">
-            <Text style={styles.footerLink}>Privacy policy</Text>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Privacy policy (coming soon)"
+            hitSlop={8}
+          >
+            <Text style={styles.footerLinkMuted}>Privacy policy</Text>
           </TouchableOpacity>
-          <TouchableOpacity accessibilityRole="link">
-            <Text style={styles.footerLink}>Terms of service</Text>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Terms of service (coming soon)"
+            hitSlop={8}
+          >
+            <Text style={styles.footerLinkMuted}>Terms of service</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -370,8 +391,8 @@ const styles = StyleSheet.create({
     color: '#6B6B6B',
     lineHeight: 32,
     letterSpacing: -0.48,
-    paddingBottom: 90,
-    marginBottom: 48,
+    paddingBottom: 48,
+    marginBottom: 32,
   },
   marqueeContainer: {
     height: 100,
@@ -418,9 +439,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   countryFlag: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#141414',
+    fontSize: 20,
+    lineHeight: 24,
   },
   countryCodeText: {
     fontSize: 15,
@@ -429,6 +449,7 @@ const styles = StyleSheet.create({
   },
   phoneInput: {
     flex: 1,
+    minWidth: 0,
     height: 52,
     borderWidth: 1,
     borderColor: '#E5E7EB',
@@ -466,12 +487,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 8,
-    paddingTop: 50,
+    paddingTop: 24,
   },
-  footerLink: {
+  footerLinkMuted: {
     fontSize: 14,
     fontWeight: '400',
-    color: '#6B6B6B',
+    color: '#9CA3AF',
     lineHeight: 16.8,
     letterSpacing: -0.28,
   },
@@ -528,5 +549,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '500',
     color: '#6B6B6B',
+  },
+  countryListEmpty: {
+    paddingVertical: 24,
+    fontSize: 15,
+    color: '#9CA3AF',
+    textAlign: 'center',
   },
 })
