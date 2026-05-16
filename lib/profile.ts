@@ -51,6 +51,7 @@ export async function saveProfile(
       .update({
         full_name: data.full_name.trim(),
         avatar_url: data.avatar_url ?? null,
+        has_onboarded: true,
         onboarding_complete: true,
         updated_at: new Date().toISOString(),
       })

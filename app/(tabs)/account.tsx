@@ -16,7 +16,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Toast from 'react-native-toast-message'
 
-import { deleteAccount, saveProfile, uploadAvatar } from '@/lib/supabase/profile'
+import { deleteAccount, getProfile, saveProfile, uploadAvatar } from '@/lib/supabase/profile'
 import { useAuthStore } from '@/store/authStore'
 import { useCurrencyStore } from '@/store/currencyStore'
 
@@ -41,16 +41,20 @@ export default function AccountScreen() {
   const logout = useAuthStore(s => s.logout)
   const { current, supported, setCurrency } = useCurrencyStore()
 
-  const [displayName, setDisplayName] = useState(user?.user_metadata?.full_name ?? '')
-  const [avatarUri, setAvatarUri] = useState<string | null>(user?.user_metadata?.avatar_url ?? null)
+  const [displayName, setDisplayName] = useState('')
+  const [avatarUri, setAvatarUri] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [showCurrencyModal, setShowCurrencyModal] = useState(false)
   const [nameEditing, setNameEditing] = useState(false)
 
   useEffect(() => {
-    setDisplayName(user?.user_metadata?.full_name ?? '')
-    setAvatarUri(user?.user_metadata?.avatar_url ?? null)
-  }, [user])
+    if (!user?.id) return
+    void getProfile(user.id).then(profile => {
+      if (!profile) return
+      if (profile.full_name) setDisplayName(profile.full_name)
+      if (profile.avatar_url) setAvatarUri(profile.avatar_url)
+    })
+  }, [user?.id])
 
   // ── Avatar ───────────────────────────────────────────────────────────────
 
@@ -109,7 +113,8 @@ export default function AccountScreen() {
     const uploadedUrl = await uploadAvatar(user.id, uri)
     if (!uploadedUrl) {
       Toast.show({ type: 'error', text1: 'Upload failed', text2: 'Could not update photo.' })
-      setAvatarUri(user.user_metadata?.avatar_url ?? null) // rollback
+      const profile = await getProfile(user.id)
+      setAvatarUri(profile?.avatar_url ?? null) // rollback
       setIsSaving(false)
       return
     }
@@ -117,7 +122,8 @@ export default function AccountScreen() {
     const { success, error } = await saveProfile(user.id, { avatar_url: uploadedUrl })
     if (!success) {
       Toast.show({ type: 'error', text1: 'Save failed', text2: error })
-      setAvatarUri(user.user_metadata?.avatar_url ?? null)
+      const profile = await getProfile(user.id)
+      setAvatarUri(profile?.avatar_url ?? null)
     } else {
       setAvatarUri(uploadedUrl)
       Toast.show({ type: 'success', text1: 'Photo updated' })
@@ -135,6 +141,8 @@ export default function AccountScreen() {
     if (!success) {
       Toast.show({ type: 'error', text1: 'Save failed', text2: error })
     } else {
+      const profile = await getProfile(user.id)
+      if (profile?.full_name) setDisplayName(profile.full_name)
       Toast.show({ type: 'success', text1: 'Name updated' })
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
     }
