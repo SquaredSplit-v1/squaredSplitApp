@@ -6,6 +6,7 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Linking,
+  Alert,
   Modal,
   Platform,
   Pressable,
@@ -183,7 +184,9 @@ export default function AddExpenseModal({ visible, onClose, onSuccess }: Props) 
       onSuccess()
       onClose()
     } catch (err: unknown) {
-      console.error('[SS-021] createExpense', err instanceof Error ? err.message : err)
+      const message = err instanceof Error ? err.message : 'Could not create expense'
+      console.error('[SS-021] createExpense', message)
+      Alert.alert('Could not create expense', message)
     } finally {
       setSubmitting(false)
     }

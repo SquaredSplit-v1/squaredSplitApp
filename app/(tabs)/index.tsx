@@ -71,6 +71,7 @@ interface AggregatedFriend {
   amount: number
   subtitleKind: ActivitySubtitleKind
   subtitle: string
+  latestCreatedAt: string
 }
 
 function roundMoney(n: number): number {
@@ -115,10 +116,11 @@ function aggregateByFriend(activity: ActivityItem[]): AggregatedFriend[] {
       amount,
       subtitleKind,
       subtitle,
+      latestCreatedAt: primary.createdAt,
     })
   }
 
-  out.sort((a, b) => a.otherPartyName.localeCompare(b.otherPartyName))
+  out.sort((a, b) => new Date(b.latestCreatedAt).getTime() - new Date(a.latestCreatedAt).getTime())
   return out
 }
 

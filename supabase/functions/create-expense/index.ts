@@ -41,7 +41,12 @@ const PercentageSchema = BaseSchema.extend({
   percentages: z.record(z.string().uuid(), z.number().nonnegative()),
 })
 
+const EqualSchema = BaseSchema.extend({
+  split_type: z.literal('equally'),
+})
+
 const Schema = z.discriminatedUnion('split_type', [
+  EqualSchema,
   ExactSchema,
   PercentageSchema,
 ])
@@ -106,7 +111,21 @@ serve(async (req: Request) => {
     const toCents = (n: number) => Math.round(n * 100)
     const fromCents = (c: number) => c / 100
 
-    // 3) Exact split
+    // 3) Equal split
+    if (input.split_type === 'equally') {
+      const totalCents = toCents(amount)
+      const n = participants.length
+      const base = Math.floor(totalCents / n)
+      const remainder = totalCents - base * n
+
+      splits = participants.map((id, i) => ({
+        user_id: id,
+        amount: fromCents(i === 0 ? base + remainder : base),
+        percentage: null,
+      }))
+    }
+
+    // 4) Exact split
     if (input.split_type === 'exact') {
       const exact = input.exact_amounts
 
@@ -143,7 +162,7 @@ serve(async (req: Request) => {
       }))
     }
 
-    // 4) Percentage split
+    // 5) Percentage split
     if (input.split_type === 'percentage') {
       const pctMap = input.percentages
 
@@ -204,30 +223,38 @@ serve(async (req: Request) => {
       percentage: s.percentage,
     }))
 
-    // 5) Call DB RPC
+    if (splits.length === 0) {
+      return json({ error: 'Could not compute expense splits' }, 400)
+    }
+
+    // 6) Call DB RPC
     const svcClient = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
 
     const { data, error: rpcErr } = await svcClient.rpc('create_expense_with_splits', {
-      p_title:      input.title,
-      p_amount:     input.amount,
-      p_category:   input.category,
-      p_paid_by:    input.paid_by,
-      p_group_id:   input.group_id  ?? null,
-      p_date:       input.date      ?? new Date().toISOString().split('T')[0],
-      p_due_date:   input.due_date  ?? null,
-      p_note:       input.note      ?? null,
-      p_created_by: user.id,
+      p_title:        input.title,
+      p_amount:       input.amount,
+      p_category:     input.category,
+      p_paid_by:      input.paid_by,
+      p_group_id:     input.group_id  ?? null,
+      p_date:         input.date      ?? new Date().toISOString().split('T')[0],
+      p_due_date:     input.due_date  ?? null,
+      p_note:         input.note      ?? null,
+      p_created_by:   user.id,
       p_splits,
+      p_split_type:   input.split_type,
     })
 
     if (rpcErr) {
       console.error('[create-expense] RPC error', rpcErr)
       const code = rpcErr.message?.match(/SS\d{3}/)?.[0]
       if (code && DB_ERRORS[code]) return json({ error: DB_ERRORS[code] }, 400)
-      throw rpcErr
+      return json(
+        { error: rpcErr.message ?? 'Database error while creating expense' },
+        500,
+      )
     }
 
     return json(data, 201)
