@@ -1,8 +1,6 @@
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: '14.1'
   }
@@ -228,7 +226,32 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_friend_balances: {
+        Args: {
+          p_user_id: string
+        }
+        Returns: {
+          friend_id: string
+          full_name: string | null
+          avatar_url: string | null
+          net_balance: number
+        }[]
+      }
+      get_shared_expenses: {
+        Args: {
+          p_user_id: string
+          p_friend_id: string
+        }
+        Returns: {
+          expense_id: string
+          description: string
+          amount: number
+          paid_by: string
+          share_amount: number
+          is_settled: boolean
+          created_at: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
@@ -240,7 +263,6 @@ export type Database = {
 }
 
 type DatabaseWithoutInternals = Omit<Database, '__InternalSupabase'>
-
 type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, 'public'>]
 
 export type Tables<
