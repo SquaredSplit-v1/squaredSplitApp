@@ -1,11 +1,10 @@
-import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
-import React, { useState } from "react";
-import { StyleSheet, TouchableOpacity, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, { Path } from "react-native-svg";
+import { LinearGradient } from 'expo-linear-gradient'
+import React, { useState } from 'react'
+import { StyleSheet, TouchableOpacity, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import Svg, { Path } from 'react-native-svg'
 
-import type { FilterOption, Friend, Group, TabName } from "@/components/dashboard";
+import type { FilterOption, Group, TabName } from '@/components/dashboard'
 import {
   AddExpenseButton,
   BalanceSummary,
@@ -14,7 +13,7 @@ import {
   FriendsList,
   GroupsList,
   SquaredUpSection,
-} from "@/components/dashboard";
+} from '@/components/dashboard'
 
 // Notification bell icon (replaces wallet)
 function BellIcon() {
@@ -28,125 +27,117 @@ function BellIcon() {
         strokeLinejoin="round"
       />
     </Svg>
-  );
+  )
 }
 
 // Mock data — replace with real data from your backend later
-const akAvatar = require("../../assets/dashboard/ak.png");
-const coconutAvatar = require("../../assets/dashboard/coconut.png");
+const akAvatar = require('../../assets/dashboard/ak.png')
+const coconutAvatar = require('../../assets/dashboard/coconut.png')
 
 const MOCK_FRIENDS: Friend[] = [
   {
-    id: "1",
-    name: "AJ",
+    id: '1',
+    name: 'AJ',
     avatar: akAvatar,
-    subtitle: "Due on 1 Jan",
-    subtitleType: "default",
-    balanceType: "owes_you",
+    subtitle: 'Due on 1 Jan',
+    subtitleType: 'default',
+    balanceType: 'owes_you',
     amount: 10.0,
   },
   {
-    id: "2",
-    name: "Praneeth Reddy\nRamesh",
+    id: '2',
+    name: 'Praneeth Reddy\nRamesh',
     avatar: null,
-    subtitle: "Alert!",
-    subtitleType: "alert",
-    balanceType: "you_owe",
+    subtitle: 'Alert!',
+    subtitleType: 'alert',
+    balanceType: 'you_owe',
     amount: 2420.0,
   },
   {
-    id: "3",
-    name: "AJ",
+    id: '3',
+    name: 'AJ',
     avatar: akAvatar,
-    subtitle: "Due on 1 Jan",
-    subtitleType: "default",
-    balanceType: "owes_you",
+    subtitle: 'Due on 1 Jan',
+    subtitleType: 'default',
+    balanceType: 'owes_you',
     amount: 10.0,
   },
   {
-    id: "4",
-    name: "Sarah Paul",
+    id: '4',
+    name: 'Sarah Paul',
     avatar: akAvatar,
-    subtitle: "Upcoming due",
-    subtitleType: "upcoming",
-    balanceType: "owes_you",
+    subtitle: 'Upcoming due',
+    subtitleType: 'upcoming',
+    balanceType: 'owes_you',
     amount: 370.5,
   },
   {
-    id: "5",
-    name: "Seshwath Hegde",
+    id: '5',
+    name: 'Seshwath Hegde',
     avatar: akAvatar,
     subtitle: "8 Dec'25",
-    subtitleType: "default",
-    balanceType: "owes_you",
+    subtitleType: 'default',
+    balanceType: 'owes_you',
     amount: 500.0,
   },
-];
+]
 
 const MOCK_GROUPS: Group[] = [
   {
-    id: "g1",
-    name: "Goa 2026",
+    id: 'g1',
+    name: 'Goa 2026',
     avatar: coconutAvatar,
-    emoji: "🌴",
-    balanceType: "owes_you",
+    emoji: '🌴',
+    balanceType: 'owes_you',
     amount: 10.0,
   },
   {
-    id: "g2",
-    name: "Beach House",
+    id: 'g2',
+    name: 'Beach House',
     avatar: coconutAvatar,
-    balanceType: "you_owe",
+    balanceType: 'you_owe',
     amount: 350.0,
   },
   {
-    id: "g3",
-    name: "Trip to Japan",
+    id: 'g3',
+    name: 'Trip to Japan',
     avatar: coconutAvatar,
-    balanceType: "you_owe",
+    balanceType: 'you_owe',
     amount: 1485.0,
     members: [
-      { name: "AJ", amount: 1485.0, balanceType: "owes_you" },
-      { name: "Deep.R", amount: 1485.0, balanceType: "owes_you" },
-      { name: "AJ", amount: 1485.0, balanceType: "owes_you" },
+      { name: 'AJ', amount: 1485.0, balanceType: 'owes_you' },
+      { name: 'Deep.R', amount: 1485.0, balanceType: 'owes_you' },
+      { name: 'AJ', amount: 1485.0, balanceType: 'owes_you' },
     ],
   },
-];
+]
 
 export default function DashboardScreen() {
-  const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const [activeTab, setActiveTab] = useState<TabName>("home");
-  const [filterVisible, setFilterVisible] = useState(false);
-  const [selectedFilter, setSelectedFilter] = useState<FilterOption>("none");
+  const insets = useSafeAreaInsets()
+  const [activeTab, setActiveTab] = useState<TabName>('home')
+  const [filterVisible, setFilterVisible] = useState(false)
+  const [selectedFilter, setSelectedFilter] = useState<FilterOption>('none')
 
   const handleAddExpense = () => {
     // TODO: Navigate to add expense
-    console.log("Add expense");
-  };
+    console.log('Add expense')
+  }
 
   const handleFilterSelect = (filter: FilterOption) => {
-    setSelectedFilter(filter);
-    setFilterVisible(false);
-  };
+    setSelectedFilter(filter)
+    setFilterVisible(false)
+  }
 
   const handleShowSquaredUp = () => {
     // TODO: Toggle squared-up friends visibility
-    console.log("Show squared-up friends");
-  };
-
-  const handleFriendPress = (friend: Friend) => {
-    router.push({
-      pathname: "/dashboard/friend",
-      params: { friendId: friend.id },
-    } as never);
-  };
+    console.log('Show squared-up friends')
+  }
 
   return (
     <View style={styles.container}>
       {/* Background gradient */}
       <LinearGradient
-        colors={["#FFFFFF", "#E8E1EC", "#C5C9D8"]}
+        colors={['#FFFFFF', '#E8E1EC', '#C5C9D8']}
         locations={[0, 0.65, 1]}
         style={styles.backgroundGradient}
       />
@@ -193,10 +184,10 @@ export default function DashboardScreen() {
         />
 
         {/* Tab content */}
-        {activeTab === "groups" ? (
-          <GroupsList groups={MOCK_GROUPS} onGroupPress={() => {}} />
+        {activeTab === 'groups' ? (
+          <GroupsList groups={MOCK_GROUPS} />
         ) : (
-          <FriendsList friends={MOCK_FRIENDS} onFriendPress={handleFriendPress} />
+          <FriendsList friends={MOCK_FRIENDS} />
         )}
 
         {/* Show squared-up friends */}
@@ -207,11 +198,7 @@ export default function DashboardScreen() {
       <AddExpenseButton onPress={handleAddExpense} />
 
       {/* Bottom tab bar */}
-      <BottomTabBar
-        activeTab={activeTab}
-        onTabPress={setActiveTab}
-        bottomInset={insets.bottom}
-      />
+      <BottomTabBar activeTab={activeTab} onTabPress={setActiveTab} bottomInset={insets.bottom} />
 
       {/* Filter modal */}
       <FilterModal
@@ -221,16 +208,16 @@ export default function DashboardScreen() {
         onClose={() => setFilterVisible(false)}
       />
     </View>
-  );
+  )
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: '#FFFFFF',
   },
   backgroundGradient: {
-    position: "absolute",
+    position: 'absolute',
     left: 0,
     right: 0,
     top: 0,
@@ -241,17 +228,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   navBar: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingVertical: 8,
   },
   navIcon: {
     padding: 8,
   },
   navRight: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
   },
-});
+})

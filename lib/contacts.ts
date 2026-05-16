@@ -1,3 +1,20 @@
+export interface RawContact {
+  id: string
+  name: string
+  phones: string[]
+}
+
+/** Prefer the name saved on the device for this phone, else the app profile name. */
+export function labelForMatchedPhone(
+  phone: string,
+  profileDisplayName: string,
+  raw: RawContact[]
+): string {
+  const c = raw.find(r => r.phones.includes(phone))
+  const local = c?.name?.trim()
+  return (local || profileDisplayName).trim()
+}
+
 /**
  * Normalizes a phone number to E.164 format for consistent matching.
  * Strips all non-digit characters, then prepends + if missing.
