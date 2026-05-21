@@ -245,7 +245,14 @@ export async function fetchRecentActivity(
           if (!best || Number(p.share_amount) > Number(best.share_amount)) return p
           return best
         }, null)
-        if (!pick) continue
+        if (!pick) {
+          console.warn(
+            '[fetchRecentActivity] Missing co-participant rows for expense',
+            expense.id,
+            '— check expense_participants RLS'
+          )
+          continue
+        }
         counterpartyId = pick.user_id
       } else {
         direction = 'you_owe'

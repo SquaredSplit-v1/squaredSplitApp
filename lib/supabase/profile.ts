@@ -12,10 +12,35 @@ export async function saveProfile(
   userId: string,
   updates: ProfileUpdate
 ): Promise<{ success: boolean; error?: string }> {
-  const { error } = await supabase.from('profiles').update(updates).eq('id', userId)
+  const payload: ProfileUpdate & {
+    has_onboarded?: boolean
+    onboarding_complete?: boolean
+    updated_at?: string
+  } = {
+    ...updates,
+    updated_at: new Date().toISOString(),
+  }
+
+  if (updates.full_name?.trim()) {
+    payload.has_onboarded = true
+    payload.onboarding_complete = true
+  }
+
+  const { error } = await supabase.from('profiles').update(payload).eq('id', userId)
 
   if (error) return { success: false, error: error.message }
   return { success: true }
+}
+
+export async function getProfile(userId: string) {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, full_name, avatar_url, has_onboarded, onboarding_complete')
+    .eq('id', userId)
+    .single()
+
+  if (error) return null
+  return data
 }
 
 /**

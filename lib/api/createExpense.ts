@@ -1,5 +1,26 @@
 // lib/api/createExpense.ts
+import { FunctionsHttpError } from '@supabase/supabase-js'
+
 import { supabase } from '@/lib/supabase'
+
+async function messageFromInvokeError(error: unknown, data: unknown): Promise<string> {
+  if (data && typeof data === 'object' && 'error' in data) {
+    const err = (data as { error?: unknown }).error
+    if (typeof err === 'string' && err.trim()) return err
+  }
+
+  if (error instanceof FunctionsHttpError && error.context) {
+    try {
+      const body = (await error.context.json()) as { error?: string; details?: unknown }
+      if (typeof body.error === 'string' && body.error.trim()) return body.error
+    } catch {
+      // ignore parse errors
+    }
+  }
+
+  if (error instanceof Error && error.message) return error.message
+  return 'Failed to create expense'
+}
 
 export interface CreateExpensePayload {
   title: string
@@ -58,7 +79,9 @@ export async function createExpense(payload: CreateExpensePayload): Promise<Crea
     },
   })
 
-  if (error) throw new Error(error.message ?? 'Failed to create expense')
+  if (error) {
+    throw new Error(await messageFromInvokeError(error, data))
+  }
   if (!data) throw new Error('No data returned from create-expense')
   return data as CreatedExpense
 }

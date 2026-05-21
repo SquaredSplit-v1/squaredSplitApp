@@ -1,11 +1,6 @@
-// app/(auth)/setup-profile.tsx
-// TODO: SS-023 — Build full onboarding/setup-profile screen
-import { View, Text } from 'react-native'
+import { Redirect } from 'expo-router'
 
+/** Profile setup lives at /onboarding/profile (see app/onboarding/). */
 export default function SetupProfile() {
-  return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-      <Text>Setup Profile — coming soon</Text>
-    </View>
-  )
+  return <Redirect href="/onboarding/profile" />
 }
