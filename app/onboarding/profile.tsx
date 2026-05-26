@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics'
 import * as ImagePicker from 'expo-image-picker'
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
@@ -16,7 +16,7 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { saveProfile, uploadAvatar } from '@/lib/profile'
+import { getProfile, saveProfile, uploadAvatar } from '@/lib/profile'
 import { useAuthStore } from '@/store/authStore'
 
 const MAX_NAME_LENGTH = 30
@@ -33,6 +33,15 @@ export default function ProfileSetupScreen() {
   const [avatarUri, setAvatarUri] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [nameError, setNameError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!user?.id) return
+    void getProfile(user.id).then(profile => {
+      if (!profile) return
+      if (profile.full_name) setDisplayName(profile.full_name)
+      if (profile.avatar_url) setAvatarUri(profile.avatar_url)
+    })
+  }, [user?.id])
 
   // ─── Handlers ───────────────────────────────────────────────────────────────
 

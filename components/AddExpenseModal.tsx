@@ -1,9 +1,12 @@
 // components/AddExpenseModal.tsx
-import React, { useCallback, useMemo } from 'react'
+import { Image } from 'expo-image'
+import React, { useCallback, useEffect, useMemo } from 'react'
 import {
   ActivityIndicator,
   Keyboard,
   KeyboardAvoidingView,
+  Linking,
+  Alert,
   Modal,
   Platform,
   Pressable,
@@ -18,6 +21,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { createExpense } from '@/lib/api/createExpense'
+import { labelForMatchedPhone } from '@/lib/contacts'
 import { formatAmount } from '@/lib/currency'
 import type { MatchedContact } from '@/lib/supabase/contacts'
 import { useAddExpenseStore } from '@/store/addExpenseStore'
@@ -29,21 +33,6 @@ interface Props {
   visible: boolean
   onClose: () => void
   onSuccess: () => void
-}
-
-// Derive a stable id + display name from MatchedContact
-function deriveContactId(c: MatchedContact): string {
-  return (c as any).user_id ?? (c as any).id ?? (c as any).uid ?? ''
-}
-
-function deriveContactName(c: MatchedContact): string {
-  return (
-    (c as any).name ??
-    (c as any).full_name ??
-    (c as any).display_name ??
-    (c as any).contact_name ??
-    'Friend'
-  )
 }
 
 // Equal split helper (integer cents)
@@ -65,7 +54,17 @@ export default function AddExpenseModal({ visible, onClose, onSuccess }: Props) 
   const user = useAuthStore(s => s.user)
   const { current: currency } = useCurrencyStore()
 
-  const matchedContacts = useContactsStore(s => s.matched) as MatchedContact[]
+  const loadContacts = useContactsStore(s => s.loadContacts)
+  const matchedContacts = useContactsStore(s => s.matched)
+  const rawWithPhones = useContactsStore(s => s.rawWithPhones)
+  const contactsLoading = useContactsStore(s => s.isLoading)
+  const permissionStatus = useContactsStore(s => s.permissionStatus)
+
+  useEffect(() => {
+    if (visible) {
+      void loadContacts()
+    }
+  }, [visible, loadContacts])
 
   const {
     amount,
@@ -88,6 +87,17 @@ export default function AddExpenseModal({ visible, onClose, onSuccess }: Props) 
   } = useAddExpenseStore()
 
   const myId = user?.id ?? ''
+
+  const friendRows = useMemo(() => {
+    const others = matchedContacts.filter(mc => mc.id !== myId)
+    return [...others].sort((a, b) =>
+      labelForMatchedPhone(a.phone, a.display_name, rawWithPhones).localeCompare(
+        labelForMatchedPhone(b.phone, b.display_name, rawWithPhones),
+        undefined,
+        { sensitivity: 'base' }
+      )
+    )
+  }, [matchedContacts, myId, rawWithPhones])
 
   const allParticipants = useMemo(
     () => (participants.includes(myId) ? participants : [myId, ...participants]),
@@ -145,10 +155,10 @@ export default function AddExpenseModal({ visible, onClose, onSuccess }: Props) 
   const nameFor = useCallback(
     (id: string): string => {
       if (id === myId) return 'You'
-      const m = matchedContacts.find((mc: MatchedContact) => deriveContactId(mc) === id)
-      return m ? deriveContactName(m) : id.slice(0, 8)
+      const m = matchedContacts.find(mc => mc.id === id)
+      return m ? labelForMatchedPhone(m.phone, m.display_name, rawWithPhones) : id.slice(0, 8)
     },
-    [myId, matchedContacts]
+    [myId, matchedContacts, rawWithPhones]
   )
 
   const handleSubmit = useCallback(async () => {
@@ -174,7 +184,9 @@ export default function AddExpenseModal({ visible, onClose, onSuccess }: Props) 
       onSuccess()
       onClose()
     } catch (err: unknown) {
-      console.error('[SS-021] createExpense', err instanceof Error ? err.message : err)
+      const message = err instanceof Error ? err.message : 'Could not create expense'
+      console.error('[SS-021] createExpense', message)
+      Alert.alert('Could not create expense', message)
     } finally {
       setSubmitting(false)
     }
@@ -298,17 +310,51 @@ export default function AddExpenseModal({ visible, onClose, onSuccess }: Props) 
                   </View>
                 </View>
 
-                {matchedContacts.length === 0 ? (
+                {contactsLoading && friendRows.length === 0 ? (
+                  <View style={s.contactsLoading}>
+                    <ActivityIndicator color="#3273CD" />
+                    <Text style={s.contactsLoadingText}>Loading people from your contacts…</Text>
+                  </View>
+                ) : permissionStatus === 'denied' ? (
+                  <View style={s.contactsEmptyBlock}>
+                    <Text style={s.noContacts}>
+                      Contacts are off. Allow access to pick friends who use SquaredSplit.
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => void Linking.openSettings()}
+                      style={s.openSettingsBtn}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={s.openSettingsText}>Open Settings</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => void loadContacts()} activeOpacity={0.85}>
+                      <Text style={s.retryContacts}>Try again</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : permissionStatus === 'unavailable' ? (
                   <Text style={s.noContacts}>
-                    No SquaredSplit friends found — sync contacts first
+                    Contacts are not available in this build. Use a dev build with expo-contacts
+                    enabled.
                   </Text>
+                ) : friendRows.length === 0 ? (
+                  <View style={s.contactsEmptyBlock}>
+                    <Text style={s.noContacts}>
+                      No one from your contacts is on SquaredSplit yet. Add friends from the Home
+                      screen when they join.
+                    </Text>
+                    <TouchableOpacity onPress={() => void loadContacts()} activeOpacity={0.85}>
+                      <Text style={s.retryContacts}>Refresh contacts</Text>
+                    </TouchableOpacity>
+                  </View>
                 ) : (
-                  matchedContacts.map((mc: MatchedContact) => {
-                    const contactId = deriveContactId(mc)
-                    const contactName = deriveContactName(mc)
+                  friendRows.map((mc: MatchedContact) => {
+                    const contactId = mc.id
+                    const contactName = labelForMatchedPhone(
+                      mc.phone,
+                      mc.display_name,
+                      rawWithPhones
+                    )
                     const selected = allParticipants.includes(contactId)
-
-                    if (!contactId) return null
 
                     return (
                       <Pressable
@@ -318,9 +364,17 @@ export default function AddExpenseModal({ visible, onClose, onSuccess }: Props) 
                         accessibilityRole="checkbox"
                         accessibilityState={{ checked: selected }}
                       >
-                        <View style={s.avatar}>
-                          <Text style={s.avatarText}>{contactName[0].toUpperCase()}</Text>
-                        </View>
+                        {mc.avatar_url ? (
+                          <Image
+                            source={{ uri: mc.avatar_url }}
+                            style={s.avatarImg}
+                            contentFit="cover"
+                          />
+                        ) : (
+                          <View style={s.avatar}>
+                            <Text style={s.avatarText}>{contactName[0].toUpperCase()}</Text>
+                          </View>
+                        )}
                         <Text style={s.contactName}>{contactName}</Text>
                         <View style={[s.checkbox, selected && s.checkboxChecked]}>
                           {selected && <Text style={s.checkmark}>✓</Text>}
@@ -532,7 +586,19 @@ const s = StyleSheet.create({
   },
   checkboxChecked: { backgroundColor: '#141414', borderColor: '#141414' },
   checkmark: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
-  noContacts: { fontSize: 14, color: '#9CA3AF', paddingVertical: 12 },
+  avatarImg: { width: 36, height: 36, borderRadius: 18 },
+  contactsLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 16,
+  },
+  contactsLoadingText: { fontSize: 14, color: '#6B6B6B', flex: 1 },
+  contactsEmptyBlock: { gap: 10, paddingVertical: 8 },
+  noContacts: { fontSize: 14, color: '#9CA3AF', lineHeight: 20 },
+  openSettingsBtn: { alignSelf: 'flex-start', paddingVertical: 4 },
+  openSettingsText: { fontSize: 16, fontWeight: '700', color: '#3273CD' },
+  retryContacts: { fontSize: 14, fontWeight: '600', color: '#141414', paddingVertical: 4 },
   splitToggle: { flexDirection: 'row', backgroundColor: '#F3F4F5', borderRadius: 10, padding: 3 },
   splitOption: { flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: 'center' },
   splitOptionActive: { backgroundColor: '#141414' },

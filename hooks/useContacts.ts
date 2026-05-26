@@ -12,8 +12,15 @@ const REFRESH_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
  * Call once at the screen level where contacts are needed (e.g. home/groups).
  */
 export function useContacts() {
-  const { loadContacts, isLoading, matched, unmatched, permissionStatus, lastSyncedAt } =
-    useContactsStore()
+  const {
+    loadContacts,
+    isLoading,
+    matched,
+    unmatched,
+    rawWithPhones,
+    permissionStatus,
+    lastSyncedAt,
+  } = useContactsStore()
   const appState = useRef(AppState.currentState)
 
   useEffect(() => {
@@ -32,5 +39,5 @@ export function useContacts() {
     return () => subscription.remove()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { isLoading, matched, unmatched, permissionStatus }
+  return { isLoading, matched, unmatched, rawWithPhones, permissionStatus }
 }

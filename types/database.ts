@@ -1,8 +1,6 @@
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: '14.1'
   }
@@ -89,6 +87,89 @@ export type Database = {
         }
         Relationships: []
       }
+      expense_participants: {
+        Row: {
+          id: string
+          expense_id: string
+          user_id: string
+          share_amount: number
+          is_settled: boolean | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          expense_id: string
+          user_id: string
+          share_amount: number
+          is_settled?: boolean | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          expense_id?: string
+          user_id?: string
+          share_amount?: number
+          is_settled?: boolean | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'expense_participants_expense_id_fkey'
+            columns: ['expense_id']
+            isOneToOne: false
+            referencedRelation: 'expenses'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      expenses: {
+        Row: {
+          id: string
+          amount: number
+          description: string
+          paid_by: string
+          group_id: string | null
+          split_type: string | null
+          created_by: string
+          created_at: string
+          updated_at: string | null
+          due_date: string | null
+          note: string | null
+          category: string | null
+        }
+        Insert: {
+          id?: string
+          amount: number
+          description: string
+          paid_by: string
+          group_id?: string | null
+          split_type?: string | null
+          created_by: string
+          created_at?: string | null
+          updated_at?: string | null
+          due_date?: string | null
+          note?: string | null
+          category?: string | null
+        }
+        Update: {
+          id?: string
+          amount?: number
+          description?: string
+          paid_by?: string
+          group_id?: string | null
+          split_type?: string | null
+          created_by?: string
+          created_at?: string | null
+          updated_at?: string | null
+          due_date?: string | null
+          note?: string | null
+          category?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -97,6 +178,7 @@ export type Database = {
           email: string | null
           full_name: string | null
           id: string
+          has_onboarded: boolean | null
           is_pro: boolean | null
           language: string | null
           onboarding_complete: boolean | null
@@ -112,6 +194,7 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id: string
+          has_onboarded?: boolean | null
           is_pro?: boolean | null
           language?: string | null
           onboarding_complete?: boolean | null
@@ -127,6 +210,7 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id?: string
+          has_onboarded?: boolean | null
           is_pro?: boolean | null
           language?: string | null
           onboarding_complete?: boolean | null
@@ -142,7 +226,32 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_friend_balances: {
+        Args: {
+          p_user_id: string
+        }
+        Returns: {
+          friend_id: string
+          full_name: string | null
+          avatar_url: string | null
+          net_balance: number
+        }[]
+      }
+      get_shared_expenses: {
+        Args: {
+          p_user_id: string
+          p_friend_id: string
+        }
+        Returns: {
+          expense_id: string
+          description: string
+          amount: number
+          paid_by: string
+          share_amount: number
+          is_settled: boolean
+          created_at: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
@@ -154,7 +263,6 @@ export type Database = {
 }
 
 type DatabaseWithoutInternals = Omit<Database, '__InternalSupabase'>
-
 type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, 'public'>]
 
 export type Tables<

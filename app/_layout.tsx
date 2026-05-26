@@ -41,12 +41,12 @@ export default function RootLayout() {
             <Stack.Protected guard={!!session && hasOnboarded}>
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="notifications" />
+              <Stack.Screen name="dashboard" />
             </Stack.Protected>
 
             {/* Authenticated + not onboarded → setup profile */}
             <Stack.Protected guard={!!session && !hasOnboarded}>
               <Stack.Screen name="onboarding" />
-              <Stack.Screen name="(auth)/setup-profile" />
             </Stack.Protected>
 
             {/* Not authenticated → auth screens */}

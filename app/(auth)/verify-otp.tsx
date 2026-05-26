@@ -7,6 +7,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -19,10 +20,23 @@ import { resendOtp as resendOtpApi, verifyOtp as verifyOtpApi } from '@/lib/auth
 
 const OTP_LENGTH = 6
 
+/** Spaces after country code for easier reading (best-effort). */
+function formatPhoneForDisplay(raw: string): string {
+  const t = raw.trim()
+  if (!t.startsWith('+')) return t
+  const m = t.match(/^(\+\d{1,4})(\d[\d\s]*)$/)
+  if (!m) return t
+  const body = m[2].replace(/\D/g, '')
+  if (body.length <= 4) return `${m[1]} ${body}`
+  const spaced = body.replace(/(\d{3})(?=\d)/g, '$1 ')
+  return `${m[1]} ${spaced}`.trim()
+}
+
 export default function VerifyOTPScreen() {
   const insets = useSafeAreaInsets()
   const router = useRouter()
-  const { phone } = useLocalSearchParams<{ phone: string }>()
+  const { phone: phoneParam } = useLocalSearchParams<{ phone?: string | string[] }>()
+  const phone = Array.isArray(phoneParam) ? phoneParam[0] : phoneParam
 
   const [otp, setOtp] = useState<string[]>(new Array(OTP_LENGTH).fill(''))
   const [isLoading, setIsLoading] = useState(false)
@@ -132,9 +146,15 @@ export default function VerifyOTPScreen() {
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
     >
-      <View
-        style={[styles.content, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 20 }]}
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
         <TouchableOpacity
           style={styles.backButton}
@@ -148,7 +168,14 @@ export default function VerifyOTPScreen() {
         <Text style={styles.title}>
           Please enter the verification code sent to your mobile number
         </Text>
-        <Text style={styles.phoneDisplay}>{phone ?? ''}</Text>
+        <Text style={styles.phoneDisplay} accessibilityLiveRegion="polite">
+          {phone ? formatPhoneForDisplay(phone) : '—'}
+        </Text>
+        {!phone ? (
+          <Text style={styles.missingPhoneHint}>
+            Missing phone number. Go back and enter your number again.
+          </Text>
+        ) : null}
 
         <Text style={styles.otpLabel}>Verification code</Text>
         <View style={styles.otpContainer}>
@@ -170,7 +197,12 @@ export default function VerifyOTPScreen() {
               maxLength={1}
               selectTextOnFocus
               editable={!isLoading}
-              accessibilityLabel={`OTP digit ${index + 1}`}
+              textContentType={index === 0 ? 'oneTimeCode' : undefined}
+              autoComplete={index === 0 ? 'sms-otp' : 'off'}
+              importantForAutofill={
+                Platform.OS === 'android' ? (index === 0 ? 'yes' : 'no') : undefined
+              }
+              accessibilityLabel={`OTP digit ${index + 1} of ${OTP_LENGTH}`}
             />
           ))}
         </View>
@@ -180,14 +212,14 @@ export default function VerifyOTPScreen() {
         <TouchableOpacity
           style={styles.sendAgainButton}
           onPress={handleResendOtp}
-          disabled={resendTimer > 0 || isLoading}
+          disabled={resendTimer > 0 || isLoading || !phone}
           accessibilityRole="button"
-          accessibilityState={{ disabled: resendTimer > 0 || isLoading }}
+          accessibilityState={{ disabled: resendTimer > 0 || isLoading || !phone }}
         >
           <Ionicons
             name="refresh-circle"
             size={22}
-            color={resendTimer > 0 ? '#9CA3AF' : '#3B82F6'}
+            color={resendTimer > 0 || !phone ? '#9CA3AF' : '#3273CD'}
           />
           <Text style={[styles.sendAgainText, resendTimer > 0 && styles.sendAgainTextDisabled]}>
             {resendTimer > 0 ? `Send again in ${resendTimer}s` : 'Send again'}
@@ -197,13 +229,13 @@ export default function VerifyOTPScreen() {
         <TouchableOpacity
           style={[
             styles.verifyButton,
-            (!isOtpComplete || isLoading) && styles.verifyButtonDisabled,
+            (!isOtpComplete || isLoading || !phone) && styles.verifyButtonDisabled,
           ]}
           onPress={handleVerify}
-          disabled={!isOtpComplete || isLoading}
+          disabled={!isOtpComplete || isLoading || !phone}
           accessibilityRole="button"
           accessibilityLabel="Verify code"
-          accessibilityState={{ disabled: !isOtpComplete || isLoading }}
+          accessibilityState={{ disabled: !isOtpComplete || isLoading || !phone }}
         >
           {isLoading ? (
             <ActivityIndicator color="#FFFFFF" />
@@ -211,22 +243,35 @@ export default function VerifyOTPScreen() {
             <Text style={styles.verifyButtonText}>Verify</Text>
           )}
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   )
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F3F4F5' },
-  content: { flex: 1, paddingHorizontal: 24 },
+  content: { flexGrow: 1, paddingHorizontal: 24 },
   backButton: { marginBottom: 32 },
   backButtonText: { fontSize: 16, color: '#6B6B6B' },
   title: { fontSize: 22, fontWeight: '500', color: '#141414', lineHeight: 30, marginBottom: 8 },
-  phoneDisplay: { fontSize: 16, fontWeight: '600', color: '#F97316', marginBottom: 32 },
+  phoneDisplay: { fontSize: 16, fontWeight: '600', color: '#141414', marginBottom: 24 },
+  missingPhoneHint: {
+    fontSize: 14,
+    color: '#EF4444',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
   otpLabel: { fontSize: 13, color: '#9CA3AF', marginBottom: 10 },
-  otpContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 32, gap: 8 },
+  otpContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+    gap: 6,
+  },
   otpInput: {
     flex: 1,
+    minWidth: 40,
+    maxWidth: 56,
     height: 56,
     borderWidth: 1,
     borderColor: '#E5E7EB',
@@ -249,7 +294,7 @@ const styles = StyleSheet.create({
   otpInputError: { borderColor: '#EF4444' },
   errorText: { fontSize: 13, color: '#EF4444', textAlign: 'center', marginBottom: 12 },
   sendAgainButton: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 24 },
-  sendAgainText: { fontSize: 14, fontWeight: '500', color: '#3B82F6' },
+  sendAgainText: { fontSize: 14, fontWeight: '500', color: '#3273CD' },
   sendAgainTextDisabled: { color: '#9CA3AF' },
   verifyButton: {
     height: 52,
