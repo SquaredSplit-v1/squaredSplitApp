@@ -1,86 +1,263 @@
-import { Asset } from 'expo-asset'
+import { Image } from 'expo-image'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import React, { useMemo } from 'react'
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { AddExpenseButton, BottomTabBar } from '@/components/dashboard'
+import AddExpenseModal from '@/components/AddExpenseModal'
+import AddExpenseButton from '@/components/dashboard/AddExpenseButton'
+import FriendExpenseRow, { type FriendExpenseRowData } from '@/components/friend/FriendExpenseRow'
+import { formatAmount } from '@/lib/currency'
+import { supabase } from '@/lib/supabase/client'
+import { groupByMonth } from '@/lib/utils/groupExpensesByMonth'
+import { useAuthStore } from '@/store/authStore'
+import { useCurrencyStore } from '@/store/currencyStore'
+import { useFriendsStore, type SharedExpense } from '@/store/friendsStore'
 
 import CalendarIcon from '../../assets/calendar.svg'
-import TrainIcon from '../../assets/expense-screen/train.svg'
 import LikeIcon from '../../assets/like.svg'
 import SettingsIcon from '../../assets/settings.svg'
 
-// SVGs are imported as React components via react-native-svg-transformer
-// (metro config already handles .svg files). PNGs remain loaded via expo-asset.
-const profileImageOneUri = Asset.fromModule(require('../../assets/onboarding/1.png')).uri
-const profileImageTwoUri = Asset.fromModule(require('../../assets/onboarding/2.png')).uri
+type Panel = 'square-up' | 'board' | 'charts'
 
-const FRIEND_SUMMARIES: Record<string, { name: string; subtitle: string }> = {
-  '1': { name: 'AJ', subtitle: 'Due on 1 Jan' },
-  '2': { name: 'Praneeth Reddy Ramesh', subtitle: 'Alert!' },
-  '3': { name: 'AJ', subtitle: 'Due on 1 Jan' },
-  '4': { name: 'Sarah Paul', subtitle: 'Upcoming due' },
-  '5': { name: 'Seshwath Hegde', subtitle: "8 Dec'25" },
+function roundMoney(n: number): number {
+  return Math.round(n * 100) / 100
 }
 
-export default function FriendSummaryScreen() {
-  const router = useRouter()
-  const params = useLocalSearchParams<{ friendId?: string }>()
-  const [activePanel, setActivePanel] = React.useState<'square-up' | 'board' | 'charts'>(
-    'square-up'
+function mapExpense(exp: SharedExpense, userId: string): FriendExpenseRowData {
+  const youPaid = exp.paidBy === userId
+  const displayAmount = youPaid
+    ? roundMoney(Math.max(0, exp.amount - exp.shareAmount))
+    : roundMoney(exp.shareAmount)
+  return {
+    expenseId: exp.expenseId,
+    description: exp.description || 'Expense',
+    totalAmount: exp.amount,
+    displayAmount,
+    createdAt: exp.createdAt,
+    youPaid,
+    direction: youPaid ? 'owes_you' : 'you_owe',
+  }
+}
+
+function AvatarBubble({ uri, style }: { uri: string | null; style?: object }) {
+  if (uri) {
+    return <Image source={{ uri }} style={[styles.avatar, style]} contentFit="cover" />
+  }
+  return (
+    <View style={[styles.avatar, styles.avatarPlaceholder, style]}>
+      <Text style={styles.avatarInitial}>?</Text>
+    </View>
   )
+}
 
-  const summary = useMemo(() => {
-    const friendId = Array.isArray(params.friendId) ? params.friendId[0] : params.friendId
-    return friendId ? FRIEND_SUMMARIES[friendId] : undefined
-  }, [params.friendId])
+export default function FriendDetailScreen() {
+  const router = useRouter()
+  const insets = useSafeAreaInsets()
+  const userId = useAuthStore(s => s.user?.id)
+  const { current: currency } = useCurrencyStore()
+  const { sharedExpenses, isLoadingDetail, fetchSharedExpenses } = useFriendsStore()
 
-  if (!summary) {
+  const params = useLocalSearchParams<{
+    friendId?: string
+    friendName?: string
+    friendAvatar?: string
+  }>()
+
+  const friendId = Array.isArray(params.friendId) ? params.friendId[0] : params.friendId
+  const friendNameParam = Array.isArray(params.friendName)
+    ? params.friendName[0]
+    : params.friendName
+  const friendAvatarParam = Array.isArray(params.friendAvatar)
+    ? params.friendAvatar[0]
+    : params.friendAvatar
+
+  const [activePanel, setActivePanel] = useState<Panel>('square-up')
+  const [addExpenseVisible, setAddExpenseVisible] = useState(false)
+  const [myAvatar, setMyAvatar] = useState<string | null>(null)
+  const [resolvedName, setResolvedName] = useState(friendNameParam ?? 'Friend')
+  const [resolvedAvatar, setResolvedAvatar] = useState<string | null>(friendAvatarParam ?? null)
+
+  useEffect(() => {
+    if (!userId || !friendId) return
+    void fetchSharedExpenses(userId, friendId)
+  }, [userId, friendId, fetchSharedExpenses])
+
+  useEffect(() => {
+    if (!userId) return
+    void supabase
+      .from('profiles')
+      .select('avatar_url')
+      .eq('id', userId)
+      .single()
+      .then(({ data }) => {
+        if (data?.avatar_url) setMyAvatar(data.avatar_url)
+      })
+  }, [userId])
+
+  useEffect(() => {
+    if (friendNameParam && friendAvatarParam !== undefined) {
+      setResolvedName(friendNameParam)
+      setResolvedAvatar(friendAvatarParam || null)
+      return
+    }
+    if (!friendId) return
+    void supabase
+      .from('profiles')
+      .select('full_name, avatar_url')
+      .eq('id', friendId)
+      .single()
+      .then(({ data }) => {
+        if (data?.full_name) setResolvedName(data.full_name)
+        if (data?.avatar_url) setResolvedAvatar(data.avatar_url)
+      })
+  }, [friendId, friendNameParam, friendAvatarParam])
+
+  const expenseRows = useMemo(() => {
+    if (!userId) return []
+    return sharedExpenses.map(e => mapExpense(e, userId))
+  }, [sharedExpenses, userId])
+
+  const monthGroups = useMemo(() => groupByMonth(expenseRows), [expenseRows])
+
+  const chartData = useMemo(() => {
+    const max = Math.max(...expenseRows.map(e => e.displayAmount), 1)
+    return expenseRows.map(e => ({
+      id: e.expenseId,
+      label: e.description,
+      amount: e.displayAmount,
+      widthPct: `${Math.round((e.displayAmount / max) * 100)}%`,
+    }))
+  }, [expenseRows])
+
+  const handleExpenseCreated = useCallback(() => {
+    if (userId && friendId) void fetchSharedExpenses(userId, friendId)
+  }, [userId, friendId, fetchSharedExpenses])
+
+  const openSettings = () => {
+    if (!friendId) return
+    router.push({
+      pathname: '/dashboard/friend-settings',
+      params: { friendId, friendName: resolvedName },
+    })
+  }
+
+  if (!friendId) {
     return (
-      <View style={styles.emptyStateContainer}>
-        <Text style={styles.emptyStateTitle}>Friend not found</Text>
-        <TouchableOpacity style={styles.actionButton} onPress={() => router.back()}>
-          <Text style={styles.actionButtonText}>Go back</Text>
+      <View style={[styles.centered, { paddingTop: insets.top }]}>
+        <Text style={styles.emptyTitle}>Friend not found</Text>
+        <TouchableOpacity onPress={() => router.back()}>
+          <Text style={styles.backText}>{'< Back'}</Text>
         </TouchableOpacity>
       </View>
     )
   }
 
+  const renderSquareUpList = () => {
+    if (isLoadingDetail) {
+      return (
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator color="#3273CD" />
+        </View>
+      )
+    }
+    if (expenseRows.length === 0) {
+      return <Text style={styles.emptyList}>No shared expenses yet.</Text>
+    }
+
+    return monthGroups.map(group => (
+      <View key={group.key} style={styles.monthBlock}>
+        <Text style={styles.monthTitle}>{group.label}</Text>
+        {group.items.map(item => (
+          <FriendExpenseRow
+            key={item.expenseId}
+            item={item}
+            currency={currency}
+            payerLabel={resolvedName}
+            onPress={() => router.push(`/dashboard/expense/${item.expenseId}`)}
+          />
+        ))}
+      </View>
+    ))
+  }
+
+  const renderWhiteboard = () => (
+    <View style={styles.placeholderCard}>
+      <Text style={styles.placeholderTitle}>Whiteboard</Text>
+      <Text style={styles.placeholderBody}>
+        Shared notes and trip plans for you and {resolvedName} will show up here.
+      </Text>
+    </View>
+  )
+
+  const renderCharts = () => {
+    if (expenseRows.length === 0) {
+      return <Text style={styles.emptyList}>Add expenses to see a breakdown.</Text>
+    }
+    return (
+      <View style={styles.chartsWrap}>
+        {chartData.map(row => (
+          <View key={row.id} style={styles.chartRow}>
+            <Text style={styles.chartLabel} numberOfLines={1}>
+              {row.label}
+            </Text>
+            <View style={styles.chartBarTrack}>
+              <View style={[styles.chartBarFill, { width: row.widthPct as `${number}%` }]} />
+            </View>
+            <Text style={styles.chartAmount}>{formatAmount(row.amount, currency)}</Text>
+          </View>
+        ))}
+      </View>
+    )
+  }
+
   return (
-    <View style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.summaryScrollContent}>
-        <View style={styles.summaryTopBar}>
-          <TouchableOpacity onPress={() => router.back()} hitSlop={12}>
+    <View style={[styles.screen, { paddingTop: insets.top }]}>
+      <ScrollView
+        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 100 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.topBar}>
+          <TouchableOpacity onPress={() => router.back()} hitSlop={12} style={styles.backBtn}>
             <Text style={styles.backText}>{'< Back'}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.settingsButton}>
-            <SettingsIcon width={21} height={21} />
+          <TouchableOpacity onPress={openSettings} hitSlop={12} style={styles.settingsBtn}>
+            <SettingsIcon width={22} height={22} />
           </TouchableOpacity>
         </View>
 
-        <View style={styles.summaryHeader}>
+        <View style={styles.header}>
           <View style={styles.profileStack}>
-            <View style={[styles.profileAvatarRing, styles.profileAvatarBack]}>
-              <Image source={{ uri: profileImageOneUri }} style={styles.profileAvatar} />
+            <View style={[styles.avatarRing, styles.avatarBack]}>
+              <AvatarBubble uri={myAvatar} />
             </View>
-            <View style={[styles.profileAvatarRing, styles.profileAvatarFront]}>
-              <Image source={{ uri: profileImageTwoUri }} style={styles.profileAvatar} />
+            <View style={[styles.avatarRing, styles.avatarFront]}>
+              <AvatarBubble uri={resolvedAvatar} />
             </View>
           </View>
-          <Text style={styles.summaryTitle}>{summary.name}</Text>
-          <View style={styles.summaryDivider} />
+          <Text style={styles.friendName}>{resolvedName}</Text>
+          <View style={styles.divider} />
         </View>
 
-        <View style={styles.chipRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipRow}
+        >
           <TouchableOpacity
             style={[styles.chip, activePanel === 'square-up' && styles.chipSelected]}
             onPress={() => setActivePanel('square-up')}
             activeOpacity={0.85}
           >
             <LikeIcon width={12} height={14} />
-            <Text style={[styles.chipText, activePanel === 'square-up' && styles.chipTextSelected]}>
-              Square up
-            </Text>
+            <Text style={styles.chipText}>Square up</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.chip, activePanel === 'board' && styles.chipSelected]}
@@ -88,9 +265,7 @@ export default function FriendSummaryScreen() {
             activeOpacity={0.85}
           >
             <CalendarIcon width={15} height={15} />
-            <Text style={[styles.chipText, activePanel === 'board' && styles.chipTextSelected]}>
-              Whiteboard
-            </Text>
+            <Text style={styles.chipText}>Whiteboard</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.chip, activePanel === 'charts' && styles.chipSelected]}
@@ -98,281 +273,160 @@ export default function FriendSummaryScreen() {
             activeOpacity={0.85}
           >
             <CalendarIcon width={15} height={15} />
-            <Text style={[styles.chipText, activePanel === 'charts' && styles.chipTextSelected]}>
-              Charts
-            </Text>
+            <Text style={styles.chipText}>Charts</Text>
           </TouchableOpacity>
+        </ScrollView>
+
+        <View style={styles.panel}>
+          {activePanel === 'square-up' && renderSquareUpList()}
+          {activePanel === 'board' && renderWhiteboard()}
+          {activePanel === 'charts' && renderCharts()}
         </View>
-
-        {activePanel === 'square-up' ? (
-          <View style={styles.boardCard}>
-            <Text style={styles.sectionTitle}>Square up</Text>
-            <Text style={styles.sectionSubtitle}>This is the default view for this friend.</Text>
-
-            <TouchableOpacity
-              style={styles.expenseRow}
-              onPress={() => router.push('/dashboard/expense/taxi' as never)}
-              activeOpacity={0.85}
-            >
-              <View style={styles.expenseRowLeft}>
-                <View style={styles.expenseIconBadge}>
-                  <TrainIcon width="100%" height="100%" />
-                </View>
-                <View>
-                  <Text style={styles.expenseRowTitle}>Taxi</Text>
-                  <Text style={styles.expenseRowSubtitle}>You paid $9.24</Text>
-                  <Text style={styles.expenseRowMeta}>{summary.subtitle}</Text>
-                </View>
-              </View>
-              <View style={styles.expenseRowRight}>
-                <Text style={styles.expenseRowDueLabel}>owes you</Text>
-                <Text style={styles.expenseRowDueAmount}>$9.24</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-        ) : activePanel === 'board' ? (
-          <View style={styles.boardCard}>
-            <Text style={styles.sectionTitle}>Whiteboard</Text>
-            <Text style={styles.sectionSubtitle}>Tap an expense to open the detail screen.</Text>
-
-            <TouchableOpacity
-              style={styles.expenseRow}
-              onPress={() => router.push('/dashboard/expense/taxi' as never)}
-              activeOpacity={0.85}
-            >
-              <View style={styles.expenseRowLeft}>
-                <View style={styles.expenseIconBadge}>
-                  <TrainIcon width="100%" height="100%" />
-                </View>
-                <View>
-                  <Text style={styles.expenseRowTitle}>Taxi</Text>
-                  <Text style={styles.expenseRowSubtitle}>You paid $9.24</Text>
-                  <Text style={styles.expenseRowMeta}>{summary.subtitle}</Text>
-                </View>
-              </View>
-              <View style={styles.expenseRowRight}>
-                <Text style={styles.expenseRowDueLabel}>owes you</Text>
-                <Text style={styles.expenseRowDueAmount}>$9.24</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={styles.boardCard}>
-            <Text style={styles.sectionTitle}>Charts</Text>
-            <Text style={styles.sectionSubtitle}>A quick snapshot of what this friend owes.</Text>
-
-            <View style={styles.chartRow}>
-              <Text style={styles.chartLabel}>Taxi</Text>
-              <View style={styles.chartBarTrack}>
-                <View style={[styles.chartBarFill, { width: '42%' }]} />
-              </View>
-              <Text style={styles.chartAmount}>$9.24</Text>
-            </View>
-
-            <View style={styles.chartRow}>
-              <Text style={styles.chartLabel}>Whiteboard</Text>
-              <View style={styles.chartBarTrack}>
-                <View style={[styles.chartBarFill, { width: '68%' }]} />
-              </View>
-              <Text style={styles.chartAmount}>$14.80</Text>
-            </View>
-
-            <View style={styles.chartRow}>
-              <Text style={styles.chartLabel}>Charts</Text>
-              <View style={styles.chartBarTrack}>
-                <View style={[styles.chartBarFill, { width: '30%' }]} />
-              </View>
-              <Text style={styles.chartAmount}>$6.20</Text>
-            </View>
-          </View>
-        )}
       </ScrollView>
 
-      <AddExpenseButton onPress={() => {}} />
-      <BottomTabBar activeTab="home" onTabPress={() => {}} bottomInset={0} />
+      <View style={[styles.fabWrap, { bottom: insets.bottom + 16 }]}>
+        <AddExpenseButton onPress={() => setAddExpenseVisible(true)} />
+      </View>
+
+      <AddExpenseModal
+        visible={addExpenseVisible}
+        onClose={() => setAddExpenseVisible(false)}
+        onSuccess={handleExpenseCreated}
+      />
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  screen: {
+  screen: { flex: 1, backgroundColor: '#FFFFFF' },
+  scroll: { paddingHorizontal: 20 },
+  centered: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
     backgroundColor: '#FFFFFF',
+    gap: 16,
   },
-  summaryScrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 18,
-  },
-  summaryTopBar: {
+  topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 18,
+    marginBottom: 20,
   },
+  backBtn: { flexDirection: 'row', alignItems: 'center' },
   backText: {
-    color: '#3B82F6',
-    fontFamily: 'Nunito_600SemiBold',
+    color: '#3273CD',
     fontSize: 16,
+    fontFamily: 'Nunito_700Bold',
+    lineHeight: 24,
   },
-  settingsButton: {
-    padding: 4,
-  },
-  summaryHeader: {
-    marginBottom: 10,
-  },
-  profileStack: {
-    width: 78,
-    height: 56,
-    marginBottom: 6,
-  },
-  profileAvatarRing: {
+  settingsBtn: { padding: 4 },
+  header: { marginBottom: 8 },
+  profileStack: { width: 80, height: 80, marginBottom: 8 },
+  avatarRing: {
     position: 'absolute',
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     overflow: 'hidden',
     borderWidth: 2,
     borderColor: '#FFFFFF',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#D9E897',
   },
-  profileAvatarBack: {
-    left: 0,
-    top: 2,
+  avatarBack: { left: 0, top: 0 },
+  avatarFront: { left: 28, top: 28 },
+  avatar: { width: '100%', height: '100%' },
+  avatarPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E5E7EB',
   },
-  profileAvatarFront: {
-    left: 24,
-    top: 14,
-  },
-  profileAvatar: {
-    width: '100%',
-    height: '100%',
-  },
-  summaryTitle: {
-    color: '#141414',
+  avatarInitial: {
+    color: '#6B6B6B',
     fontFamily: 'Nunito_700Bold',
-    fontSize: 28,
-    lineHeight: 32,
-    marginTop: 10,
+    fontSize: 18,
   },
-  summaryDivider: {
+  friendName: {
+    color: '#141414',
+    fontSize: 32,
+    fontFamily: 'Nunito_700Bold',
+    lineHeight: 32,
+  },
+  divider: {
     height: 1,
-    backgroundColor: '#ECE7D8',
+    backgroundColor: '#E5E7EB',
     marginTop: 12,
   },
-  chipRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginVertical: 12,
-    paddingBottom: 4,
-  },
+  chipRow: { gap: 8, paddingVertical: 12 },
   chip: {
-    borderWidth: 1,
-    borderColor: '#C9D0DD',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: '#FFFFFF',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
+    padding: 8,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 0.6,
+    borderColor: '#9CA3AF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 1,
+    elevation: 2,
   },
   chipSelected: {
-    backgroundColor: '#E6EDBC',
-    borderColor: '#D2DCA0',
+    backgroundColor: '#E1EABB',
+    borderColor: '#E1EABB',
   },
   chipText: {
     color: '#141414',
-    fontFamily: 'Nunito_600SemiBold',
-    fontSize: 13,
-  },
-  chipTextSelected: {
-    color: '#141414',
-    fontFamily: 'Nunito_600SemiBold',
-    fontSize: 13,
-  },
-  boardCard: {
-    marginTop: 4,
-    borderRadius: 16,
-    backgroundColor: '#FAFAFC',
-    borderWidth: 1,
-    borderColor: '#ECEFF5',
-    padding: 14,
-  },
-  sectionTitle: {
-    color: '#141414',
-    fontFamily: 'Nunito_700Bold',
     fontSize: 16,
+    fontFamily: 'Nunito_500Medium',
+    lineHeight: 16,
   },
-  sectionSubtitle: {
-    color: '#6B7280',
+  panel: { gap: 32, marginTop: 8 },
+  monthBlock: { gap: 12 },
+  monthTitle: {
+    color: '#141414',
+    fontSize: 20,
+    fontFamily: 'Nunito_600SemiBold',
+    lineHeight: 30,
+  },
+  loadingWrap: { paddingVertical: 32, alignItems: 'center' },
+  emptyList: {
+    color: '#6B6B6B',
+    fontSize: 14,
     fontFamily: 'Nunito_400Regular',
-    fontSize: 12,
-    marginTop: 4,
-    marginBottom: 10,
   },
-  expenseRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 14,
-    borderTopWidth: 1,
-    borderTopColor: '#F1F2F4',
+  emptyTitle: {
+    color: '#141414',
+    fontSize: 22,
+    fontFamily: 'Nunito_700Bold',
   },
-  expenseRowLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    gap: 10,
-  },
-  expenseIconBadge: {
-    width: 44,
-    height: 44,
+  placeholderCard: {
     borderRadius: 12,
-    backgroundColor: '#F9F0BF',
-    overflow: 'hidden',
-    padding: 6,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    padding: 16,
+    backgroundColor: '#FAFAFC',
   },
-  expenseRowTitle: {
+  placeholderTitle: {
     color: '#141414',
-    fontFamily: 'Nunito_600SemiBold',
-    fontSize: 16,
-  },
-  expenseRowSubtitle: {
-    color: '#72777F',
-    fontFamily: 'Nunito_400Regular',
-    fontSize: 13,
-    marginTop: 1,
-  },
-  expenseRowMeta: {
-    color: '#9CA3AF',
-    fontFamily: 'Nunito_400Regular',
-    fontSize: 12,
-    marginTop: 2,
-  },
-  expenseRowRight: {
-    alignItems: 'flex-end',
-    marginLeft: 12,
-  },
-  expenseRowDueLabel: {
-    color: '#9CA3AF',
-    fontFamily: 'Nunito_400Regular',
-    fontSize: 12,
-  },
-  expenseRowDueAmount: {
-    color: '#44BB73',
+    fontSize: 18,
     fontFamily: 'Nunito_700Bold',
-    fontSize: 16,
-    marginTop: 2,
+    marginBottom: 8,
   },
-  chartRow: {
-    gap: 8,
-    marginTop: 12,
+  placeholderBody: {
+    color: '#6B6B6B',
+    fontSize: 14,
+    fontFamily: 'Nunito_400Regular',
+    lineHeight: 20,
   },
+  chartsWrap: { gap: 16 },
+  chartRow: { gap: 6 },
   chartLabel: {
     color: '#141414',
+    fontSize: 14,
     fontFamily: 'Nunito_600SemiBold',
-    fontSize: 13,
   },
   chartBarTrack: {
     height: 10,
@@ -387,31 +441,12 @@ const styles = StyleSheet.create({
   },
   chartAmount: {
     color: '#374151',
-    fontFamily: 'Nunito_600SemiBold',
     fontSize: 12,
-  },
-  emptyStateContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    backgroundColor: '#FFFFFF',
-  },
-  emptyStateTitle: {
-    color: '#141414',
-    fontFamily: 'Nunito_700Bold',
-    fontSize: 22,
-    marginBottom: 16,
-  },
-  actionButton: {
-    backgroundColor: '#141414',
-    borderRadius: 12,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-  },
-  actionButtonText: {
-    color: '#FFFFFF',
     fontFamily: 'Nunito_600SemiBold',
-    fontSize: 14,
+  },
+  fabWrap: {
+    position: 'absolute',
+    right: 0,
+    left: 0,
   },
 })
