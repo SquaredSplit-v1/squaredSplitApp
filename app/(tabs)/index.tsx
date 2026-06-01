@@ -64,6 +64,7 @@ function formatShortActivityDate(iso: string): string {
 }
 
 interface AggregatedFriend {
+  friendId: string
   expenseId: string
   otherPartyName: string
   otherPartyAvatar: string | null
@@ -81,7 +82,7 @@ function roundMoney(n: number): number {
 function aggregateByFriend(activity: ActivityItem[]): AggregatedFriend[] {
   const groups = new Map<string, ActivityItem[]>()
   for (const item of activity) {
-    const key = `${item.otherPartyName}\0${item.direction}`
+    const key = `${item.otherPartyId}\0${item.direction}`
     const list = groups.get(key) ?? []
     list.push(item)
     groups.set(key, list)
@@ -109,6 +110,7 @@ function aggregateByFriend(activity: ActivityItem[]): AggregatedFriend[] {
     }
 
     out.push({
+      friendId: primary.otherPartyId,
       expenseId: primary.id,
       otherPartyName: primary.otherPartyName,
       otherPartyAvatar: primary.otherPartyAvatar,
@@ -144,7 +146,7 @@ function FriendBalanceRow({
 }: {
   friend: AggregatedFriend
   currency: Currency
-  onPress: () => void
+  onPress: (friend: AggregatedFriend) => void
 }) {
   const owesYou = friend.direction === 'owes_you'
   const { text: subText, color: subColor } = subtitleDisplay(friend)
@@ -153,7 +155,7 @@ function FriendBalanceRow({
 
   return (
     <Pressable
-      onPress={onPress}
+      onPress={() => onPress(friend)}
       style={({ pressed }) => [friendStyles.row, pressed && friendStyles.rowPressed]}
       accessibilityRole="button"
       accessibilityLabel={`${friend.otherPartyName}, ${statusLabel} ${friend.amount}`}
@@ -405,10 +407,21 @@ export default function HomeScreen() {
               <View style={styles.friendsList}>
                 {filteredFriends.map(f => (
                   <FriendBalanceRow
-                    key={`${f.otherPartyName}-${f.direction}`}
+                    key={`${f.friendId}-${f.direction}`}
                     friend={f}
                     currency={currency}
-                    onPress={() => router.push(`/dashboard/expense/${f.expenseId}`)}
+                    onPress={friend =>
+                      router.push({
+                        pathname: '/dashboard/friend',
+                        params: {
+                          friendId: friend.friendId,
+                          friendName: friend.otherPartyName,
+                          ...(friend.otherPartyAvatar
+                            ? { friendAvatar: friend.otherPartyAvatar }
+                            : {}),
+                        },
+                      })
+                    }
                   />
                 ))}
               </View>

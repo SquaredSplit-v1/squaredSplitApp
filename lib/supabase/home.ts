@@ -20,6 +20,7 @@ export interface ActivityItem {
   amount: number
   type: 'expense' | 'payment' | 'settle'
   createdAt: string
+  otherPartyId: string
   otherPartyName: string
   otherPartyAvatar: string | null
   direction: ActivityDirection
@@ -271,6 +272,7 @@ export async function fetchRecentActivity(
         amount: displayAmount,
         type: 'expense',
         createdAt: expense.created_at,
+        otherPartyId: counterpartyId,
         otherPartyName: prof?.name ?? 'Friend',
         otherPartyAvatar: prof?.avatar ?? null,
         direction,

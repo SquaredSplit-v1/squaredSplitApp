@@ -2,9 +2,15 @@ import type { ImageSourcePropType } from 'react-native'
 
 export interface NotificationRequest {
   id: string
+  /** activity_feed row id — used when marking seen */
+  activityId: number
+  expenseId: string
   userName: string
-  avatar: ImageSourcePropType
+  avatar?: ImageSourcePropType
+  avatarUrl?: string | null
   amount: number
+  /** Expense title / description shown in copy */
+  description?: string
   /** "owed" = someone owes you, "you_owe" = you owe someone */
   type: 'owed' | 'you_owe'
   groupName: string

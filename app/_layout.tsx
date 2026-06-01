@@ -8,6 +8,7 @@ import Toast from 'react-native-toast-message'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { useAppUpdates } from '@/hooks/useAppUpdates'
 import { useGlobalErrorHandler } from '@/hooks/useGlobalErrorHandler'
+import { usePushNotifications } from '@/hooks/usePushNotifications'
 import { useAuthStore } from '@/store/authStore'
 
 SplashScreen.preventAutoHideAsync()
@@ -16,8 +17,9 @@ export default function RootLayout() {
   useAppUpdates()
   useGlobalErrorHandler()
 
-  const { session, hasOnboarded, isLoading, initialize } = useAuthStore()
+  const { session, hasOnboarded, isLoading, initialize, user } = useAuthStore()
   const unsubRef = useRef<(() => void) | null>(null)
+  usePushNotifications(session && hasOnboarded ? user?.id : undefined)
 
   useEffect(() => {
     unsubRef.current = initialize()

@@ -3,6 +3,9 @@ import React from 'react'
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import Animated, { FadeIn, LinearTransition, SlideOutRight } from 'react-native-reanimated'
 
+import { formatAmount } from '@/lib/currency'
+import { useCurrencyStore } from '@/store/currencyStore'
+
 import type { NotificationRequest } from './types'
 
 interface NotificationItemProps {
@@ -11,8 +14,25 @@ interface NotificationItemProps {
   onReject: (item: NotificationRequest) => void
 }
 
+function Avatar({ item }: { item: NotificationRequest }) {
+  if (item.avatarUrl) {
+    return <Image source={{ uri: item.avatarUrl }} style={styles.avatar} />
+  }
+  if (item.avatar) {
+    return <Image source={item.avatar} style={styles.avatar} />
+  }
+  return (
+    <View style={[styles.avatar, styles.avatarPlaceholder]}>
+      <Text style={styles.avatarInitial}>{item.userName.charAt(0).toUpperCase()}</Text>
+    </View>
+  )
+}
+
 export default function NotificationItem({ item, onAccept, onReject }: NotificationItemProps) {
   const isOwed = item.type === 'owed'
+  const currency = useCurrencyStore(s => s.current)
+  const amountLabel = formatAmount(item.amount, currency)
+  const groupLabel = item.groupName
 
   return (
     <Animated.View
@@ -21,8 +41,7 @@ export default function NotificationItem({ item, onAccept, onReject }: Notificat
       layout={LinearTransition.duration(300)}
       style={styles.container}
     >
-      {/* Avatar */}
-      <Image source={item.avatar} style={styles.avatar} />
+      <Avatar item={item} />
 
       {/* Content */}
       <View style={styles.content}>
@@ -32,11 +51,13 @@ export default function NotificationItem({ item, onAccept, onReject }: Notificat
         {/* Message */}
         <Text style={styles.messageText}>
           <Text style={styles.boldName}>{item.userName}</Text>
-          <Text style={styles.regularText}> has added an expense of </Text>
-          <Text style={styles.amountText}>${item.amount}</Text>
+          <Text style={styles.regularText}> added you to </Text>
+          <Text style={styles.boldName}>{item.description ?? 'an expense'}</Text>
+          <Text style={styles.regularText}> for </Text>
+          <Text style={styles.amountText}>{amountLabel}</Text>
           <Text style={styles.owedText}> ({isOwed ? 'owed' : 'you owe'})</Text>
-          <Text style={styles.regularText}> in the group </Text>
-          <Text style={styles.boldName}>{item.groupName}</Text>
+          <Text style={styles.regularText}> in </Text>
+          <Text style={styles.boldName}>{groupLabel}</Text>
         </Text>
 
         {/* Action Buttons */}
@@ -74,6 +95,17 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     marginRight: 12,
     marginTop: 14,
+  },
+  avatarPlaceholder: {
+    backgroundColor: '#E5E7EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInitial: {
+    color: '#6B6B6B',
+    fontFamily: 'Nunito_700Bold',
+    fontSize: 18,
+    fontWeight: '700',
   },
   content: {
     flex: 1,
