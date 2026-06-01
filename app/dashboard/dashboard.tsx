@@ -4,7 +4,7 @@ import { StyleSheet, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Svg, { Path } from 'react-native-svg'
 
-import type { FilterOption, Group, TabName } from '@/components/dashboard'
+import type { FilterOption, Friend, Group, TabName } from '@/components/dashboard'
 import {
   AddExpenseButton,
   BalanceSummary,

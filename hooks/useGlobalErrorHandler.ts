@@ -1,3 +1,4 @@
+import * as rejectionTracking from 'promise/setimmediate/rejection-tracking'
 import { useEffect } from 'react'
 
 import { captureException } from '@/lib/sentry'
@@ -22,7 +23,6 @@ export function useGlobalErrorHandler(): void {
     })
 
     // ── 2. Unhandled promise rejections ────────────────────────────────────
-    const rejectionTracking = require('promise/setimmediate/rejection-tracking')
     rejectionTracking.enable({
       allRejections: true,
       onUnhandled: (_id: number, error: unknown) => {
