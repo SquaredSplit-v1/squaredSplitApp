@@ -1,5 +1,6 @@
+import { useFocusEffect, useRouter } from 'expo-router'
 import React, { useCallback, useState } from 'react'
-import { FlatList, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import {
@@ -9,94 +10,92 @@ import {
   SuccessToast,
 } from '@/components/notifications'
 import type { NotificationRequest, RejectionReason } from '@/components/notifications/types'
+import {
+  dismissIncomingNotification,
+  fetchIncomingExpenseNotifications,
+} from '@/lib/api/incomingNotifications'
+import { useAuthStore } from '@/store/authStore'
 
-// ── Mock data ───────────────────────────────────────────────────────────
-const INITIAL_REQUESTS: NotificationRequest[] = [
-  {
-    id: '1',
-    userName: 'Sarah Paul',
-    avatar: require('../../assets/dashboard/ak.png'),
-    amount: 100,
-    type: 'owed',
-    groupName: 'Beach House',
-    timeAgo: '5 mins ago',
-  },
-  {
-    id: '2',
-    userName: 'Seshwath Hegde',
-    avatar: require('../../assets/dashboard/ak.png'),
-    amount: 560,
-    type: 'you_owe',
-    groupName: 'Trip to Japan',
-    timeAgo: '10 mins ago',
-  },
-  {
-    id: '3',
-    userName: 'Sarah Paul',
-    avatar: require('../../assets/dashboard/ak.png'),
-    amount: 100,
-    type: 'owed',
-    groupName: 'Beach House',
-    timeAgo: '1 hour ago',
-  },
-  {
-    id: '4',
-    userName: 'Seshwath Hegde',
-    avatar: require('../../assets/dashboard/ak.png'),
-    amount: 560,
-    type: 'you_owe',
-    groupName: 'Trip to Japan',
-    timeAgo: '22 Jan',
-  },
-  {
-    id: '5',
-    userName: 'Seshwath Hegde',
-    avatar: require('../../assets/dashboard/ak.png'),
-    amount: 560,
-    type: 'you_owe',
-    groupName: 'Trip to Japan',
-    timeAgo: '22 Jan',
-  },
-]
-
-// ── Component ───────────────────────────────────────────────────────────
 function Notifications() {
-  const [requests, setRequests] = useState<NotificationRequest[]>(INITIAL_REQUESTS)
+  const router = useRouter()
+  const userId = useAuthStore(s => s.user?.id)
+
+  const [requests, setRequests] = useState<NotificationRequest[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [rejectionModalVisible, setRejectionModalVisible] = useState(false)
   const [selectedItem, setSelectedItem] = useState<NotificationRequest | null>(null)
   const [toastVisible, setToastVisible] = useState(false)
   const [toastGroupName, setToastGroupName] = useState('')
 
-  // ── Accept handler ──
-  const handleAccept = useCallback((item: NotificationRequest) => {
-    // Show success toast
-    setToastGroupName(item.groupName)
-    setToastVisible(true)
+  const loadRequests = useCallback(async () => {
+    if (!userId) {
+      setRequests([])
+      setIsLoading(false)
+      return
+    }
 
-    // Remove item from list
-    setRequests(prev => prev.filter(r => r.id !== item.id))
-  }, [])
+    setLoadError(null)
+    try {
+      const items = await fetchIncomingExpenseNotifications(userId)
+      setRequests(items)
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : 'Failed to load notifications')
+      setRequests([])
+    } finally {
+      setIsLoading(false)
+    }
+  }, [userId])
 
-  // ── Reject handler (opens modal) ──
+  useFocusEffect(
+    useCallback(() => {
+      setIsLoading(true)
+      void loadRequests()
+    }, [loadRequests])
+  )
+
+  const removeAndDismiss = useCallback(
+    async (item: NotificationRequest) => {
+      setRequests(prev => prev.filter(r => r.id !== item.id))
+      if (userId) {
+        try {
+          await dismissIncomingNotification(userId, item.activityId)
+        } catch (e) {
+          console.warn('[notifications] dismiss', e)
+        }
+      }
+    },
+    [userId]
+  )
+
+  const handleAccept = useCallback(
+    async (item: NotificationRequest) => {
+      setToastGroupName(item.groupName)
+      setToastVisible(true)
+      await removeAndDismiss(item)
+      if (item.expenseId) {
+        router.push(`/dashboard/expense/${item.expenseId}`)
+      }
+    },
+    [removeAndDismiss, router]
+  )
+
   const handleReject = useCallback((item: NotificationRequest) => {
     setSelectedItem(item)
     setRejectionModalVisible(true)
   }, [])
 
-  // ── Rejection confirmed ──
   const handleRejectionSave = useCallback(
-    (_reason: RejectionReason, _otherText?: string) => {
+    async (_reason: RejectionReason, _otherText?: string) => {
       if (selectedItem) {
-        // Remove item from list
-        setRequests(prev => prev.filter(r => r.id !== selectedItem.id))
+        await removeAndDismiss(selectedItem)
       }
       setRejectionModalVisible(false)
       setSelectedItem(null)
     },
-    [selectedItem]
+    [selectedItem, removeAndDismiss]
   )
 
-  // ── Toast hide ──
   const handleToastHide = useCallback(() => {
     setToastVisible(false)
   }, [])
@@ -104,21 +103,35 @@ function Notifications() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        {/* Header */}
         <NotificationHeader />
 
-        {/* List */}
-        <FlatList
-          data={requests}
-          keyExtractor={item => item.id}
-          renderItem={({ item }) => (
-            <NotificationItem item={item} onAccept={handleAccept} onReject={handleReject} />
-          )}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-        />
+        {isLoading ? (
+          <View style={styles.centered}>
+            <ActivityIndicator size="large" color="#3273CD" />
+          </View>
+        ) : loadError ? (
+          <View style={styles.centered}>
+            <Text style={styles.emptyText}>{loadError}</Text>
+          </View>
+        ) : requests.length === 0 ? (
+          <View style={styles.centered}>
+            <Text style={styles.emptyTitle}>No incoming requests</Text>
+            <Text style={styles.emptyText}>
+              When someone adds you to an expense, it will show up here.
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            data={requests}
+            keyExtractor={item => item.id}
+            renderItem={({ item }) => (
+              <NotificationItem item={item} onAccept={handleAccept} onReject={handleReject} />
+            )}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+          />
+        )}
 
-        {/* Rejection Modal */}
         <RejectionModal
           visible={rejectionModalVisible}
           onClose={() => {
@@ -128,7 +141,6 @@ function Notifications() {
           onSave={handleRejectionSave}
         />
 
-        {/* Success Toast */}
         <SuccessToast visible={toastVisible} groupName={toastGroupName} onHide={handleToastHide} />
       </View>
     </SafeAreaView>
@@ -147,5 +159,26 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: 100,
+  },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+  },
+  emptyTitle: {
+    color: '#141414',
+    fontFamily: 'Nunito_700Bold',
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptyText: {
+    color: '#6B6B6B',
+    fontFamily: 'Nunito_400Regular',
+    fontSize: 15,
+    textAlign: 'center',
+    lineHeight: 22,
   },
 })

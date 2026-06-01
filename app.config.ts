@@ -63,7 +63,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     package: env.androidPackage,
     // Ensures READ_CONTACTS is merged into AndroidManifest.xml on prebuild/EAS
     // (so Settings → App permissions lists “Contacts” for runtime prompts).
-    permissions: ['android.permission.READ_CONTACTS'],
+    permissions: ['android.permission.READ_CONTACTS', 'android.permission.POST_NOTIFICATIONS'],
     adaptiveIcon: {
       foregroundImage: './assets/adaptive-icon.png',
       backgroundColor: '#F3F4F5',
@@ -101,6 +101,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       {
         contactsPermission:
           'SquaredSplit needs access to your contacts so you can find friends who already use the app.',
+      },
+    ],
+    [
+      'expo-notifications',
+      {
+        icon: './assets/icon.png',
+        color: '#141414',
       },
     ],
     // Runs after library plugins — guarantees READ_CONTACTS survives manifest merge

@@ -46,6 +46,22 @@ type SharedExpenseRow = {
   created_at: string
 }
 
+/** RPC can return one row per participant edge; keep a single row per expense. */
+function dedupeSharedExpenses(items: SharedExpense[]): SharedExpense[] {
+  const byId = new Map<string, SharedExpense>()
+  for (const item of items) {
+    const existing = byId.get(item.expenseId)
+    if (!existing) {
+      byId.set(item.expenseId, item)
+      continue
+    }
+    if (new Date(item.createdAt).getTime() >= new Date(existing.createdAt).getTime()) {
+      byId.set(item.expenseId, item)
+    }
+  }
+  return [...byId.values()]
+}
+
 export const useFriendsStore = create<FriendsState>(set => ({
   friends: [],
   sharedExpenses: [],
@@ -99,17 +115,16 @@ export const useFriendsStore = create<FriendsState>(set => ({
       }
 
       const rows = (data ?? []) as SharedExpenseRow[]
-      set({
-        sharedExpenses: rows.map(row => ({
-          expenseId: row.expense_id,
-          description: row.description,
-          amount: Number(row.amount ?? 0),
-          paidBy: row.paid_by,
-          shareAmount: Number(row.share_amount ?? 0),
-          isSettled: row.is_settled ?? false,
-          createdAt: row.created_at,
-        })),
-      })
+      const mapped = rows.map(row => ({
+        expenseId: row.expense_id,
+        description: row.description,
+        amount: Number(row.amount ?? 0),
+        paidBy: row.paid_by,
+        shareAmount: Number(row.share_amount ?? 0),
+        isSettled: row.is_settled ?? false,
+        createdAt: row.created_at,
+      }))
+      set({ sharedExpenses: dedupeSharedExpenses(mapped) })
     } catch (error) {
       console.error('fetchSharedExpenses error:', error)
       set({ sharedExpenses: [] })

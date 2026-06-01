@@ -5,6 +5,12 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+function normalizePhoneE164Like(phone: string): string | null {
+  const digits = phone.replace(/\D/g, '')
+  if (digits.length < 7) return null
+  return `+${digits}`
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -69,6 +75,13 @@ Deno.serve(async (req) => {
       full_name: full_name.trim(),
       onboarding_complete: true,
       updated_at: new Date().toISOString(),
+    }
+
+    // Keep profile phone synced for contact matching.
+    // Some legacy users ended up with NULL profiles.phone.
+    if (user.phone && typeof user.phone === 'string') {
+      const normalized = normalizePhoneE164Like(user.phone)
+      if (normalized) updatePayload.phone = normalized
     }
 
     // Only include avatar_url if provided

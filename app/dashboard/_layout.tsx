@@ -1,4 +1,4 @@
-import { Stack } from "expo-router";
+import { Stack } from 'expo-router'
 
 export default function DashboardLayout() {
   return (
@@ -9,7 +9,8 @@ export default function DashboardLayout() {
     >
       <Stack.Screen name="dashboard" />
       <Stack.Screen name="friend" />
+      <Stack.Screen name="friend-settings" />
       <Stack.Screen name="expense/[id]" />
     </Stack>
-  );
+  )
 }

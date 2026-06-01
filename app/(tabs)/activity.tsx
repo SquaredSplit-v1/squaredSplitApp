@@ -1,11 +1,13 @@
-import { useRouter } from 'expo-router'
-import React from 'react'
-import { StyleSheet, TouchableOpacity, View } from 'react-native'
+import { useFocusEffect, useRouter } from 'expo-router'
+import React, { useCallback, useMemo } from 'react'
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Svg, { Path } from 'react-native-svg'
 
 import type { Activity } from '@/components/dashboard'
 import { ActivityList, AddExpenseButton } from '@/components/dashboard'
+import { useAuthStore } from '@/store/authStore'
+import { useHomeStore } from '@/store/homeStore'
 
 function BellIcon() {
   return (
@@ -21,99 +23,36 @@ function BellIcon() {
   )
 }
 
-const akAvatar = require('../../assets/dashboard/ak.png')
-const coconutAvatar = require('../../assets/dashboard/coconut.png')
-
-const MOCK_ACTIVITIES: Activity[] = [
-  {
-    id: 'a1',
-    avatar: akAvatar,
-    segments: [
-      { text: 'Paul', bold: true },
-      { text: ' turned ' },
-      { text: 'Simplify debts', bold: true },
-      { text: ' off in the group ' },
-      { text: 'Trip to Japan', bold: true },
-    ],
-    timeAgo: '5 mins ago',
-  },
-  {
-    id: 'a2',
-    avatar: akAvatar,
-    segments: [
-      { text: 'Paul', bold: true },
-      { text: ' turned ' },
-      { text: 'Simplify debts', bold: true },
-      { text: ' off in the group ' },
-      { text: 'Trip to Japan', bold: true },
-    ],
-    timeAgo: '5 mins ago',
-  },
-  {
-    id: 'a3',
-    avatar: coconutAvatar,
-    segments: [
-      { text: 'Paul', bold: true },
-      { text: ' turned ' },
-      { text: 'Simplify debts', bold: true },
-      { text: ' off in the group ' },
-      { text: 'Trip to Japan', bold: true },
-    ],
-    timeAgo: '5 mins ago',
-  },
-  {
-    id: 'a4',
-    avatar: akAvatar,
-    segments: [
-      { text: 'Paul', bold: true },
-      { text: ' turned ' },
-      { text: 'Simplify debts', bold: true },
-      { text: ' off in the group ' },
-      { text: 'Trip to Japan', bold: true },
-    ],
-    timeAgo: '5 mins ago',
-  },
-  {
-    id: 'a5',
-    avatar: coconutAvatar,
-    segments: [
-      { text: 'Paul', bold: true },
-      { text: ' turned ' },
-      { text: 'Simplify debts', bold: true },
-      { text: ' off in the group ' },
-      { text: 'Trip to Japan', bold: true },
-    ],
-    timeAgo: '5 mins ago',
-  },
-  {
-    id: 'a6',
-    avatar: akAvatar,
-    segments: [
-      { text: 'Paul', bold: true },
-      { text: ' turned ' },
-      { text: 'Simplify debts', bold: true },
-      { text: ' off in the group ' },
-      { text: 'Trip to Japan', bold: true },
-    ],
-    timeAgo: '5 mins ago',
-  },
-  {
-    id: 'a7',
-    avatar: coconutAvatar,
-    segments: [
-      { text: 'Paul', bold: true },
-      { text: ' turned ' },
-      { text: 'Simplify debts', bold: true },
-      { text: ' off in the group ' },
-      { text: 'Trip to Japan', bold: true },
-    ],
-    timeAgo: '5 mins ago',
-  },
-]
+const fallbackAvatar = require('../../assets/dashboard/ak.png')
 
 export default function ActivityScreen() {
   const insets = useSafeAreaInsets()
   const router = useRouter()
+  const userId = useAuthStore(s => s.user?.id)
+  const { activity, isLoading, refresh } = useHomeStore()
+
+  useFocusEffect(
+    useCallback(() => {
+      if (userId) void refresh(userId)
+    }, [refresh, userId])
+  )
+
+  const activities: Activity[] = useMemo(
+    () =>
+      activity.map(item => ({
+        id: item.id,
+        avatar: item.otherPartyAvatar ? { uri: item.otherPartyAvatar } : fallbackAvatar,
+        segments: [
+          { text: item.otherPartyName, bold: true },
+          { text: item.direction === 'owes_you' ? ' owes you ' : ' you owe ' },
+          { text: `${item.amount.toFixed(2)}`, bold: true },
+          { text: ' for ' },
+          { text: item.description, bold: true },
+        ],
+        timeAgo: item.subtitle,
+      })),
+    [activity]
+  )
 
   return (
     <View style={styles.container}>
@@ -138,10 +77,20 @@ export default function ActivityScreen() {
           </View>
         </View>
 
-        <ActivityList activities={MOCK_ACTIVITIES} />
+        {isLoading ? (
+          <View style={styles.loader}>
+            <ActivityIndicator color="#141414" />
+          </View>
+        ) : activities.length === 0 ? (
+          <View style={styles.loader}>
+            <Text style={styles.emptyText}>No recent activity yet.</Text>
+          </View>
+        ) : (
+          <ActivityList activities={activities} />
+        )}
       </View>
 
-      <AddExpenseButton onPress={() => console.log('Add expense')} />
+      <AddExpenseButton onPress={() => router.push('/')} />
     </View>
   )
 }
@@ -157,4 +106,10 @@ const styles = StyleSheet.create({
   },
   navIcon: { padding: 8 },
   navRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  emptyText: {
+    color: '#6B6B6B',
+    fontFamily: 'Nunito_400Regular',
+    fontSize: 15,
+  },
 })
