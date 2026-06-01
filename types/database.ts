@@ -252,6 +252,17 @@ export type Database = {
           created_at: string
         }[]
       }
+      match_contacts: {
+        Args: {
+          phone_numbers: string[]
+        }
+        Returns: {
+          id: string
+          display_name: string
+          phone: string
+          avatar_url: string | null
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

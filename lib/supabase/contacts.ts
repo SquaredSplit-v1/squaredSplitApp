@@ -25,7 +25,7 @@ export async function matchContacts(phoneNumbers: string[]): Promise<{
   for (let i = 0; i < phoneNumbers.length; i += BATCH_SIZE) {
     const batch = phoneNumbers.slice(i, i + BATCH_SIZE)
 
-    const { data, error } = await (supabase as any).rpc('match_contacts', { phone_numbers: batch })
+    const { data, error } = await supabase.rpc('match_contacts', { phone_numbers: batch })
 
     if (error) return { data: null, error: error.message }
     if (data) results.push(...(data as MatchedContact[]))
