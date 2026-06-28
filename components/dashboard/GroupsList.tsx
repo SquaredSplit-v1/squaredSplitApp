@@ -1,5 +1,5 @@
 import React from 'react'
-import { FlatList, StyleSheet, View } from 'react-native'
+import { StyleSheet, View } from 'react-native'
 
 import GroupItem from './GroupItem'
 import type { Group } from './types'
@@ -11,26 +11,20 @@ interface GroupsListProps {
 
 export default function GroupsList({ groups, onGroupPress }: GroupsListProps) {
   return (
-    <FlatList
-      data={groups}
-      keyExtractor={item => item.id}
-      renderItem={({ item }) => (
-        <GroupItem group={item} onPress={onGroupPress ? () => onGroupPress(item) : undefined} />
-      )}
-      ItemSeparatorComponent={() => <View style={styles.separator} />}
-      showsVerticalScrollIndicator={false}
-      style={styles.list}
-      contentContainerStyle={styles.listContent}
-    />
+    <View style={styles.list}>
+      {groups.map((item, index) => (
+        <React.Fragment key={item.id}>
+          {index > 0 ? <View style={styles.separator} /> : null}
+          <GroupItem group={item} onPress={onGroupPress ? () => onGroupPress(item) : undefined} />
+        </React.Fragment>
+      ))}
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
   list: {
-    flex: 1,
-  },
-  listContent: {
-    paddingBottom: 8,
+    flexGrow: 0,
   },
   separator: {
     height: 1,

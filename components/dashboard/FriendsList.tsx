@@ -1,5 +1,5 @@
 import React from 'react'
-import { FlatList, StyleSheet, View } from 'react-native'
+import { StyleSheet, View } from 'react-native'
 
 import FriendItem from './FriendItem'
 import type { Friend } from './types'
@@ -10,24 +10,20 @@ interface FriendsListProps {
 
 export default function FriendsList({ friends }: FriendsListProps) {
   return (
-    <FlatList
-      data={friends}
-      keyExtractor={item => item.id}
-      renderItem={({ item }) => <FriendItem friend={item} />}
-      ItemSeparatorComponent={() => <View style={styles.separator} />}
-      showsVerticalScrollIndicator={false}
-      style={styles.list}
-      contentContainerStyle={styles.listContent}
-    />
+    <View style={styles.list}>
+      {friends.map((item, index) => (
+        <React.Fragment key={item.id}>
+          {index > 0 ? <View style={styles.separator} /> : null}
+          <FriendItem friend={item} />
+        </React.Fragment>
+      ))}
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
   list: {
-    flex: 1,
-  },
-  listContent: {
-    paddingBottom: 8,
+    flexGrow: 0,
   },
   separator: {
     height: 1,

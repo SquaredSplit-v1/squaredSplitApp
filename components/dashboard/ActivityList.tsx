@@ -1,5 +1,5 @@
 import React from 'react'
-import { FlatList, StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 
 import ActivityItem, { Activity } from './ActivityItem'
 
@@ -11,13 +11,11 @@ export default function ActivityList({ activities }: ActivityListProps) {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Recent activities</Text>
-      <FlatList
-        data={activities}
-        keyExtractor={item => item.id}
-        renderItem={({ item }) => <ActivityItem item={item} />}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.listContent}
-      />
+      <View style={styles.list}>
+        {activities.map(item => (
+          <ActivityItem key={item.id} item={item} />
+        ))}
+      </View>
     </View>
   )
 }
@@ -35,7 +33,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.44,
     marginBottom: 8,
   },
-  listContent: {
+  list: {
     paddingBottom: 120,
   },
 })
