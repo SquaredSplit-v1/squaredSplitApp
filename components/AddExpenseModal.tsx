@@ -396,7 +396,11 @@ export default function AddExpenseModal({ visible, onClose, onSuccess }: Props) 
                       onPress={() => setSplitType(t)}
                     >
                       <Text style={[s.splitOptionText, splitType === t && s.splitOptionTextActive]}>
-                        {{ equally: 'Equally', exact: 'Exact ₹', percentage: 'By %' }[t]}
+                        {{
+                          equally: 'Equally',
+                          exact: `Exact ${currency.symbol}`,
+                          percentage: 'By %',
+                        }[t]}
                       </Text>
                     </Pressable>
                   ))}

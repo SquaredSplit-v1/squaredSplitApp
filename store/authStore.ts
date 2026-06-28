@@ -4,6 +4,8 @@ import { create } from 'zustand'
 import { supabase } from '@/lib/supabase/client'
 import { useContactsStore } from '@/store/contactsStore'
 import { useCurrencyStore } from '@/store/currencyStore'
+import { useFriendsStore } from '@/store/friendsStore'
+import { useGroupsStore } from '@/store/groupsStore'
 import { useHomeStore } from '@/store/homeStore'
 
 interface ProfileRow {
@@ -57,6 +59,14 @@ async function persistOnboardingComplete(userId: string): Promise<void> {
   if (error) console.warn('[authStore] persistOnboardingComplete', error.message)
 }
 
+function resetAllStores() {
+  useCurrencyStore.getState().reset()
+  useContactsStore.getState().reset()
+  useHomeStore.getState().reset()
+  useFriendsStore.getState().reset()
+  useGroupsStore.getState().reset()
+}
+
 export const useAuthStore = create<AuthState>(set => ({
   session: null,
   user: null,
@@ -71,9 +81,7 @@ export const useAuthStore = create<AuthState>(set => ({
 
   logout: async () => {
     set({ session: null, user: null, hasOnboarded: false, isLoading: false })
-    useCurrencyStore.getState().reset()
-    useContactsStore.getState().reset()
-    useHomeStore.getState().reset()
+    resetAllStores()
     await supabase.auth.signOut()
   },
 
@@ -83,8 +91,7 @@ export const useAuthStore = create<AuthState>(set => ({
     } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT' || !session) {
         set({ session: null, user: null, hasOnboarded: false, isLoading: false })
-        useCurrencyStore.getState().reset()
-        useContactsStore.getState().reset()
+        resetAllStores()
         return
       }
 

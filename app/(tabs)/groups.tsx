@@ -2,6 +2,7 @@ import { useFocusEffect, useRouter } from 'expo-router'
 import React, { useCallback, useState } from 'react'
 import {
   ActivityIndicator,
+  Alert,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -70,9 +71,16 @@ function AddGroupIcon() {
   )
 }
 
+function showComingSoon() {
+  Alert.alert(
+    'Coming soon',
+    'Group creation is on the way in the next update. Stay tuned!',
+    [{ text: 'Got it', style: 'default' }]
+  )
+}
+
 /**
  * Map Supabase Group → dashboard GroupsList shape.
- * GroupsList component expects the same Group type from @/components/dashboard.
  */
 function mapToDashboardGroup(g: import('@/lib/supabase/groups').Group): Group {
   return {
@@ -102,7 +110,6 @@ export default function GroupsScreen() {
   const [selectedFilter, setSelectedFilter] = useState<FilterOption>('none')
   const [addExpenseVisible, setAddExpenseVisible] = useState(false)
 
-  // Load both groups + home balance on focus
   useFocusEffect(
     useCallback(() => {
       if (!user) return
@@ -128,7 +135,13 @@ export default function GroupsScreen() {
     void refreshHome(user.id)
   }, [user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Apply filter to groups
+  const handleGroupPress = useCallback(
+    (group: Group) => {
+      router.push({ pathname: '/dashboard/group/[id]', params: { id: group.id } })
+    },
+    [router]
+  )
+
   const filteredGroups = groups
     .filter(g => {
       if (selectedFilter === 'owes_you') return g.balanceType === 'owes_you'
@@ -179,7 +192,7 @@ export default function GroupsScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.navIcon}
-              onPress={() => router.push('/dashboard/friend-settings')}
+              onPress={showComingSoon}
               accessibilityLabel="Add group"
             >
               <AddGroupIcon />
@@ -187,7 +200,7 @@ export default function GroupsScreen() {
           </View>
         </View>
 
-        {/* Balance summary — real data from homeStore */}
+        {/* Balance summary */}
         {isLoading ? (
           <View style={styles.loadingBlock}>
             <ActivityIndicator color="#141414" />
@@ -212,20 +225,19 @@ export default function GroupsScreen() {
             </Text>
             <TouchableOpacity
               style={styles.emptyAction}
-              onPress={() => router.push('/dashboard/friend-settings')}
+              onPress={showComingSoon}
             >
               <Text style={styles.emptyActionText}>Create a group</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <>
-            <GroupsList groups={filteredGroups} />
+            <GroupsList groups={filteredGroups} onGroupPress={handleGroupPress} />
             <SquaredUpSection onPress={() => console.log('Show squared-up')} />
           </>
         )}
       </ScrollView>
 
-      {/* FAB — opens AddExpenseModal */}
       <AddExpenseButton onPress={() => setAddExpenseVisible(true)} />
 
       <FilterModal

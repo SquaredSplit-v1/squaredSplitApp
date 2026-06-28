@@ -6,6 +6,7 @@ import type { Group } from './types'
 
 interface GroupItemProps {
   group: Group
+  onPress?: () => void
 }
 
 function ExpandArrow({ expanded }: { expanded: boolean }) {
@@ -24,7 +25,7 @@ function ExpandArrow({ expanded }: { expanded: boolean }) {
   )
 }
 
-export default function GroupItem({ group }: GroupItemProps) {
+export default function GroupItem({ group, onPress }: GroupItemProps) {
   const [expanded, setExpanded] = useState(false)
   const isOwedToYou = group.balanceType === 'owes_you'
   const hasMembers = group.members && group.members.length > 0
@@ -35,12 +36,20 @@ export default function GroupItem({ group }: GroupItemProps) {
       maximumFractionDigits: 2,
     })}`
 
+  const handlePress = () => {
+    if (onPress) {
+      onPress()
+    } else if (hasMembers) {
+      setExpanded(!expanded)
+    }
+  }
+
   return (
     <View>
       <TouchableOpacity
         style={styles.container}
-        onPress={() => hasMembers && setExpanded(!expanded)}
-        activeOpacity={hasMembers ? 0.7 : 1}
+        onPress={handlePress}
+        activeOpacity={onPress || hasMembers ? 0.7 : 1}
       >
         {/* Avatar */}
         <View style={styles.avatarContainer}>
@@ -73,12 +82,13 @@ export default function GroupItem({ group }: GroupItemProps) {
               {formatAmount(group.amount)}
             </Text>
           </View>
-          {hasMembers && <ExpandArrow expanded={expanded} />}
+          {/* Show expand arrow only when no onPress handler (inline expand mode) */}
+          {!onPress && hasMembers && <ExpandArrow expanded={expanded} />}
         </View>
       </TouchableOpacity>
 
-      {/* Expanded member details */}
-      {expanded && group.members && (
+      {/* Expanded member details — only in inline mode (no onPress) */}
+      {!onPress && expanded && group.members && (
         <View style={styles.membersContainer}>
           {group.members.map((member, index) => {
             const memberIsOwed = member.balanceType === 'owes_you'
