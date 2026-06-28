@@ -1,8 +1,8 @@
 import type { Session, User } from '@supabase/supabase-js'
 import { create } from 'zustand'
 
-import { supabase } from '@/lib/supabase/client'
 import { deregisterPushTokenOnLogout } from '@/lib/push/setupPushNotifications'
+import { supabase } from '@/lib/supabase/client'
 import { useAddExpenseStore } from '@/store/addExpenseStore'
 import { useContactsStore } from '@/store/contactsStore'
 import { useCurrencyStore } from '@/store/currencyStore'

@@ -170,6 +170,63 @@ export type Database = {
         }
         Relationships: []
       }
+      group_members: {
+        Row: {
+          group_id: string
+          user_id: string
+          created_at: string | null
+        }
+        Insert: {
+          group_id: string
+          user_id: string
+          created_at?: string | null
+        }
+        Update: {
+          group_id?: string
+          user_id?: string
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'group_members_group_id_fkey'
+            columns: ['group_id']
+            isOneToOne: false
+            referencedRelation: 'groups'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'group_members_user_id_fkey'
+            columns: ['user_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      groups: {
+        Row: {
+          id: string
+          name: string
+          emoji: string | null
+          avatar_url: string | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          name: string
+          emoji?: string | null
+          avatar_url?: string | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          name?: string
+          emoji?: string | null
+          avatar_url?: string | null
+          created_at?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null

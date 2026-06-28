@@ -76,13 +76,12 @@ const ICONS: Record<string, React.FC<{ active: boolean }>> = {
 
 /* ─── Custom floating tab bar ───────────────────────────── */
 
+const HIDDEN_TAB_NAMES = new Set(['ai'])
+
 function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets()
 
-  // Only render tabs that are not hidden (href !== null)
-  const visibleRoutes = state.routes.filter(
-    route => descriptors[route.key].options.href !== null
-  )
+  const visibleRoutes = state.routes.filter(route => !HIDDEN_TAB_NAMES.has(route.name))
 
   return (
     <View style={[styles.outer, { paddingBottom: insets.bottom + 8 }]}>
@@ -145,7 +144,7 @@ export default function TabLayout() {
       <Tabs.Screen name="index" options={{ title: 'Home' }} />
       <Tabs.Screen name="groups" options={{ title: 'Groups' }} />
       {/* AI tab hidden from nav bar until feature ships — screen still registered for deep links */}
-      <Tabs.Screen name="ai" options={{ title: 'AI Assist', href: null }} />
+      <Tabs.Screen name="ai" options={{ title: 'AI Assist' }} />
       <Tabs.Screen name="activity" options={{ title: 'Activity' }} />
       <Tabs.Screen name="account" options={{ title: 'Account' }} />
     </Tabs>

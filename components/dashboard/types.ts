@@ -1,6 +1,6 @@
 import type { ImageSourcePropType } from 'react-native'
 
-export type BalanceType = 'owes_you' | 'you_owe'
+export type BalanceType = 'owes_you' | 'you_owe' | 'settled'
 
 export interface Friend {
   id: string

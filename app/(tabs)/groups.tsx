@@ -14,16 +14,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Svg, { Path } from 'react-native-svg'
 
 import AddExpenseModal from '@/components/AddExpenseModal'
-import type { FilterOption } from '@/components/dashboard'
 import {
   AddExpenseButton,
   BalanceSummary,
   FilterModal,
   GroupsList,
   SquaredUpSection,
+  type FilterOption,
+  type Group,
 } from '@/components/dashboard'
-import type { Group } from '@/components/dashboard'
-import { formatAmount } from '@/lib/currency'
 import { useAuthStore } from '@/store/authStore'
 import { useCurrencyStore } from '@/store/currencyStore'
 import { useGroupsStore } from '@/store/groupsStore'
@@ -72,11 +71,9 @@ function AddGroupIcon() {
 }
 
 function showComingSoon() {
-  Alert.alert(
-    'Coming soon',
-    'Group creation is on the way in the next update. Stay tuned!',
-    [{ text: 'Got it', style: 'default' }]
-  )
+  Alert.alert('Coming soon', 'Group creation is on the way in the next update. Stay tuned!', [
+    { text: 'Got it', style: 'default' },
+  ])
 }
 
 /**
@@ -86,14 +83,14 @@ function mapToDashboardGroup(g: import('@/lib/supabase/groups').Group): Group {
   return {
     id: g.id,
     name: g.name,
-    avatar: g.avatarUrl ? { uri: g.avatarUrl } : undefined,
+    avatar: g.avatarUrl ? { uri: g.avatarUrl } : null,
     emoji: g.emoji ?? undefined,
-    balanceType: g.balanceType === 'settled' ? 'settled' : g.balanceType,
+    balanceType: g.balanceType,
     amount: g.amount,
     members: g.members.map(m => ({
       name: m.name,
       amount: m.amount,
-      balanceType: m.balanceType === 'settled' ? 'settled' : m.balanceType,
+      balanceType: m.balanceType,
     })),
   }
 }
@@ -164,11 +161,7 @@ export default function GroupsScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={handleRefresh}
-            tintColor="#141414"
-          />
+          <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor="#141414" />
         }
       >
         {/* Nav bar */}
@@ -223,10 +216,7 @@ export default function GroupsScreen() {
             <Text style={styles.emptySubtitle}>
               Create a group to start splitting expenses with multiple friends.
             </Text>
-            <TouchableOpacity
-              style={styles.emptyAction}
-              onPress={showComingSoon}
-            >
+            <TouchableOpacity style={styles.emptyAction} onPress={showComingSoon}>
               <Text style={styles.emptyActionText}>Create a group</Text>
             </TouchableOpacity>
           </View>
