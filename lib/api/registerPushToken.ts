@@ -28,3 +28,21 @@ export async function registerPushToken(token: string | null): Promise<void> {
 
   if (error) throw new Error(await getErrorMessage(error, data))
 }
+
+/**
+ * Call this on logout to deregister the push token from the backend so the
+ * user no longer receives push notifications after signing out.
+ * Silently swallows errors — failing to deregister should never block logout.
+ */
+export async function unregisterPushToken(token: string): Promise<void> {
+  try {
+    const { data, error } = await supabase.functions.invoke('notifications', {
+      body: { action: 'unregister', token },
+    })
+    if (error) {
+      console.warn('[push] unregisterPushToken', await getErrorMessage(error, data))
+    }
+  } catch (e) {
+    console.warn('[push] unregisterPushToken', e)
+  }
+}

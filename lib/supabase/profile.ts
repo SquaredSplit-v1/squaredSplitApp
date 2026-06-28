@@ -65,7 +65,6 @@ export async function uploadAvatar(userId: string, localUri: string): Promise<st
     }
 
     const { data } = supabase.storage.from('avatars').getPublicUrl(path)
-    // Cache-bust so ImagePicker change reflects immediately
     return `${data.publicUrl}?t=${Date.now()}`
   } catch (e) {
     console.warn('[uploadAvatar] error:', e)
@@ -74,11 +73,41 @@ export async function uploadAvatar(userId: string, localUri: string): Promise<st
 }
 
 /**
- * Stub — account deletion requires a Supabase Edge Function with admin privileges.
- * Tracked: SS-025
+ * Delete the authenticated user's account via an Edge Function that runs
+ * with service-role privileges (supabase/functions/delete-account/index.ts).
+ *
+ * Flow:
+ *  1. Call Edge Function — it deletes Storage files, DB rows, then auth user.
+ *  2. On success the client session will be invalidated; authStore SIGNED_OUT
+ *     handler takes care of resetting all stores and routing to login.
+ *  3. On failure, return the error message so the caller can surface it.
  */
 export async function deleteAccount(
-  _userId: string
+  userId: string
 ): Promise<{ success: boolean; error?: string }> {
-  return { success: false, error: 'Account deletion not yet available.' }
+  try {
+    const { data, error } = await supabase.functions.invoke('delete-account', {
+      body: { userId },
+    })
+
+    if (error) {
+      // Try to extract a human-readable message from the function response body
+      let msg = error.message
+      if (error.context) {
+        try {
+          const body = (await (error.context as Response).json()) as { error?: string }
+          if (typeof body.error === 'string' && body.error.trim()) msg = body.error
+        } catch { /* ignore parse errors */ }
+      }
+      return { success: false, error: msg }
+    }
+
+    if (data && typeof data === 'object' && 'error' in data) {
+      return { success: false, error: String((data as { error: unknown }).error) }
+    }
+
+    return { success: true }
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : 'Unexpected error' }
+  }
 }

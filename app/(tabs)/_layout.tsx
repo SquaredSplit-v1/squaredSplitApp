@@ -42,28 +42,6 @@ function GroupsIcon({ active }: { active: boolean }) {
   )
 }
 
-function AiSpaceIcon({ active }: { active: boolean }) {
-  const c = active ? '#141414' : '#6B6B6B'
-  return (
-    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M12 2l2.09 6.26L20 10l-5.91 1.74L12 18l-2.09-6.26L4 10l5.91-1.74L12 2z"
-        stroke={c}
-        strokeWidth={1.8}
-        strokeLinejoin="round"
-        fill={active ? '#141414' : 'none'}
-      />
-      <Path
-        d="M18 14l1 3 3 1-3 1-1 3-1-3-3-1 3-1 1-3z"
-        stroke={c}
-        strokeWidth={1.2}
-        strokeLinejoin="round"
-        fill={active ? '#141414' : 'none'}
-      />
-    </Svg>
-  )
-}
-
 function ActivityIcon({ active }: { active: boolean }) {
   const c = active ? '#141414' : '#6B6B6B'
   return (
@@ -93,7 +71,6 @@ function ActivityIcon({ active }: { active: boolean }) {
 const ICONS: Record<string, React.FC<{ active: boolean }>> = {
   index: HomeIcon,
   groups: GroupsIcon,
-  ai: AiSpaceIcon,
   activity: ActivityIcon,
 }
 
@@ -102,10 +79,16 @@ const ICONS: Record<string, React.FC<{ active: boolean }>> = {
 function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets()
 
+  // Only render tabs that are not hidden (href !== null)
+  const visibleRoutes = state.routes.filter(
+    route => descriptors[route.key].options.href !== null
+  )
+
   return (
     <View style={[styles.outer, { paddingBottom: insets.bottom + 8 }]}>
       <View style={styles.bar}>
-        {state.routes.map((route, index) => {
+        {visibleRoutes.map(route => {
+          const index = state.routes.findIndex(r => r.key === route.key)
           const { options } = descriptors[route.key]
           const label = (options.tabBarLabel as string) ?? options.title ?? route.name
           const isActive = state.index === index
@@ -161,7 +144,8 @@ export default function TabLayout() {
     <Tabs tabBar={props => <CustomTabBar {...props} />} screenOptions={{ headerShown: false }}>
       <Tabs.Screen name="index" options={{ title: 'Home' }} />
       <Tabs.Screen name="groups" options={{ title: 'Groups' }} />
-      <Tabs.Screen name="ai" options={{ title: 'AI Assist' }} />
+      {/* AI tab hidden from nav bar until feature ships — screen still registered for deep links */}
+      <Tabs.Screen name="ai" options={{ title: 'AI Assist', href: null }} />
       <Tabs.Screen name="activity" options={{ title: 'Activity' }} />
       <Tabs.Screen name="account" options={{ title: 'Account' }} />
     </Tabs>

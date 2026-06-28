@@ -2,7 +2,7 @@ import Constants from 'expo-constants'
 import * as Notifications from 'expo-notifications'
 import { Platform } from 'react-native'
 
-import { registerPushToken } from '@/lib/api/registerPushToken'
+import { registerPushToken, unregisterPushToken } from '@/lib/api/registerPushToken'
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -30,6 +30,11 @@ export async function requestNotificationPermission(): Promise<boolean> {
   return status === 'granted'
 }
 
+export async function getNotificationPermissionStatus(): Promise<'granted' | 'denied' | 'undetermined'> {
+  const { status } = await Notifications.getPermissionsAsync()
+  return status as 'granted' | 'denied' | 'undetermined'
+}
+
 export async function syncPushTokenWithBackend(): Promise<void> {
   try {
     const granted = await requestNotificationPermission()
@@ -47,5 +52,27 @@ export async function syncPushTokenWithBackend(): Promise<void> {
     await registerPushToken(token)
   } catch (e) {
     console.warn('[push] syncPushTokenWithBackend', e)
+  }
+}
+
+/**
+ * Retrieve the current Expo push token (if permission granted) and deregister
+ * it from the backend. Called during logout before supabase.auth.signOut().
+ */
+export async function deregisterPushTokenOnLogout(): Promise<void> {
+  try {
+    const { status } = await Notifications.getPermissionsAsync()
+    if (status !== 'granted') return
+
+    const projectId =
+      Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId ?? undefined
+
+    const response = await Notifications.getExpoPushTokenAsync({ projectId })
+    const token = response.data?.trim()
+    if (!token) return
+
+    await unregisterPushToken(token)
+  } catch (e) {
+    console.warn('[push] deregisterPushTokenOnLogout', e)
   }
 }

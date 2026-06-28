@@ -17,6 +17,8 @@ import { ActivityList, AddExpenseButton } from '@/components/dashboard'
 import { useAuthStore } from '@/store/authStore'
 import { useHomeStore } from '@/store/homeStore'
 
+const DEFAULT_AVATAR_BASE = 'https://api.dicebear.com/7.x/initials/png?seed='
+
 function BellIcon() {
   return (
     <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
@@ -44,8 +46,6 @@ function SearchGlyph() {
     </Svg>
   )
 }
-
-const fallbackAvatar = require('../../assets/dashboard/ak.png')
 
 export default function ActivityScreen() {
   const insets = useSafeAreaInsets()
@@ -76,7 +76,11 @@ export default function ActivityScreen() {
     () =>
       activity.map(item => ({
         id: item.id,
-        avatar: item.otherPartyAvatar ? { uri: item.otherPartyAvatar } : fallbackAvatar,
+        // Use the user's avatar if available, otherwise fall back to a
+        // DiceBear initials avatar (consistent with account.tsx)
+        avatar: item.otherPartyAvatar
+          ? { uri: item.otherPartyAvatar }
+          : { uri: `${DEFAULT_AVATAR_BASE}${encodeURIComponent(item.otherPartyName || 'U')}` },
         segments: [
           { text: item.otherPartyName, bold: true },
           { text: item.direction === 'owes_you' ? ' owes you ' : ' you owe ' },
@@ -166,7 +170,6 @@ export default function ActivityScreen() {
         )}
       </View>
 
-      {/* FAB — opens AddExpenseModal directly from activity tab */}
       <AddExpenseButton onPress={() => setAddExpenseVisible(true)} />
 
       <AddExpenseModal

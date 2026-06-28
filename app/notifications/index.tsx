@@ -1,6 +1,14 @@
 import { useFocusEffect, useRouter } from 'expo-router'
-import React, { useCallback, useState } from 'react'
-import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native'
+import React, { useCallback, useEffect, useState } from 'react'
+import {
+  ActivityIndicator,
+  FlatList,
+  Linking,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import {
@@ -14,7 +22,24 @@ import {
   dismissIncomingNotification,
   fetchIncomingExpenseNotifications,
 } from '@/lib/api/incomingNotifications'
+import { getNotificationPermissionStatus } from '@/lib/push/setupPushNotifications'
 import { useAuthStore } from '@/store/authStore'
+
+type PermissionStatus = 'granted' | 'denied' | 'undetermined' | 'checking'
+
+function NotificationsPermissionBanner({ onEnable }: { onEnable: () => void }) {
+  return (
+    <View style={styles.permissionBanner}>
+      <Text style={styles.permissionTitle}>Enable notifications</Text>
+      <Text style={styles.permissionBody}>
+        Turn on push notifications so you never miss when a friend adds you to an expense.
+      </Text>
+      <TouchableOpacity style={styles.permissionCta} onPress={onEnable}>
+        <Text style={styles.permissionCtaText}>Enable in Settings</Text>
+      </TouchableOpacity>
+    </View>
+  )
+}
 
 function Notifications() {
   const router = useRouter()
@@ -27,6 +52,17 @@ function Notifications() {
   const [selectedItem, setSelectedItem] = useState<NotificationRequest | null>(null)
   const [toastVisible, setToastVisible] = useState(false)
   const [toastGroupName, setToastGroupName] = useState('')
+  const [permissionStatus, setPermissionStatus] = useState<PermissionStatus>('checking')
+
+  // Check push permission status each time this screen is focused
+  // (user may have just toggled it in Settings)
+  useFocusEffect(
+    useCallback(() => {
+      getNotificationPermissionStatus()
+        .then(status => setPermissionStatus(status))
+        .catch(() => setPermissionStatus('undetermined'))
+    }, [])
+  )
 
   const loadRequests = useCallback(async () => {
     if (!userId) {
@@ -100,10 +136,19 @@ function Notifications() {
     setToastVisible(false)
   }, [])
 
+  const handleEnableNotifications = useCallback(() => {
+    void Linking.openSettings()
+  }, [])
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
         <NotificationHeader />
+
+        {/* Show a non-blocking banner when push permission is denied */}
+        {permissionStatus === 'denied' && (
+          <NotificationsPermissionBanner onEnable={handleEnableNotifications} />
+        )}
 
         {isLoading ? (
           <View style={styles.centered}>
@@ -180,5 +225,40 @@ const styles = StyleSheet.create({
     fontSize: 15,
     textAlign: 'center',
     lineHeight: 22,
+  },
+  permissionBanner: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 4,
+    backgroundColor: '#FFF8E1',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FFD54F',
+    padding: 16,
+  },
+  permissionTitle: {
+    fontFamily: 'Nunito_700Bold',
+    fontSize: 15,
+    color: '#141414',
+    marginBottom: 4,
+  },
+  permissionBody: {
+    fontFamily: 'Nunito_400Regular',
+    fontSize: 13,
+    color: '#6B6B6B',
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  permissionCta: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#141414',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  permissionCtaText: {
+    fontFamily: 'Nunito_600SemiBold',
+    fontSize: 13,
+    color: '#FFFFFF',
   },
 })

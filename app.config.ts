@@ -21,6 +21,16 @@ const envConfig = {
     phoneAuthUrl: 'https://eqqcqnfnfnzurfjfzwwp.supabase.co/functions/v1/phone-auth',
     icon: './assets/icon-preview.png',
   },
+  // staging is an alias for preview env — same Supabase project, internal distribution
+  staging: {
+    name: 'SquaredSplit (Staging)',
+    bundleIdentifier: 'com.squaredsplit.app.preview',
+    androidPackage: 'com.squaredsplit.app.preview',
+    supabaseUrl: 'https://eqqcqnfnfnzurfjfzwwp.supabase.co',
+    supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '',
+    phoneAuthUrl: 'https://eqqcqnfnfnzurfjfzwwp.supabase.co/functions/v1/phone-auth',
+    icon: './assets/icon-preview.png',
+  },
   production: {
     name: 'SquaredSplit',
     bundleIdentifier: 'com.squaredsplit.app',
@@ -39,7 +49,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: env.name,
   slug: 'squaredSplitApp',
-  version: '1.0.0',
+  // v0.1.0 — aligned with EAS build channel "production".
+  // runtimeVersion uses sdkVersion so OTA updates only target compatible builds.
+  version: '0.1.0',
   orientation: 'portrait',
   icon: env.icon,
   userInterfaceStyle: 'light',
@@ -61,8 +73,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     package: env.androidPackage,
-    // Ensures READ_CONTACTS is merged into AndroidManifest.xml on prebuild/EAS
-    // (so Settings → App permissions lists “Contacts” for runtime prompts).
     permissions: ['android.permission.READ_CONTACTS', 'android.permission.POST_NOTIFICATIONS'],
     adaptiveIcon: {
       foregroundImage: './assets/adaptive-icon.png',
@@ -80,8 +90,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   updates: {
     url: 'https://u.expo.dev/d74c8f5a-fa0d-4949-b5b6-b36310280603',
   },
+  // sdkVersion policy: OTA update is only delivered to a build compiled
+  // with the same Expo SDK version, preventing incompatible JS/native mismatch.
   runtimeVersion: {
-    policy: 'appVersion',
+    policy: 'sdkVersion',
   },
   plugins: [
     'expo-router',
@@ -110,7 +122,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         color: '#141414',
       },
     ],
-    // Runs after library plugins — guarantees READ_CONTACTS survives manifest merge
     './plugins/withAndroidReadContacts.js',
   ],
   experiments: {

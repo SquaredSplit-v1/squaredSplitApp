@@ -1,4 +1,5 @@
 import * as Haptics from 'expo-haptics'
+import * as ImagePicker from 'expo-image-picker'
 import { useRouter } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import {
@@ -19,17 +20,6 @@ import Toast from 'react-native-toast-message'
 import { deleteAccount, getProfile, saveProfile, uploadAvatar } from '@/lib/supabase/profile'
 import { useAuthStore } from '@/store/authStore'
 import { useCurrencyStore } from '@/store/currencyStore'
-
-// Lazy-load — expo-image-picker needs dev client rebuild (SS-015 rebuild)
-const getImagePicker = () => {
-  try {
-    /* eslint-disable @typescript-eslint/no-require-imports */
-    return require('expo-image-picker') as typeof import('expo-image-picker')
-    /* eslint-enable @typescript-eslint/no-require-imports */
-  } catch {
-    return null
-  }
-}
 
 const MAX_NAME_LENGTH = 30
 const DEFAULT_AVATAR = 'https://api.dicebear.com/7.x/initials/png?seed='
@@ -59,20 +49,14 @@ export default function AccountScreen() {
   // ── Avatar ───────────────────────────────────────────────────────────────
 
   const handleAvatarPress = () => {
-    const ImagePicker = getImagePicker()
-    if (!ImagePicker) {
-      Alert.alert('Unavailable', 'Photo picker requires a dev client rebuild.')
-      return
-    }
-
     Alert.alert('Change Photo', 'Choose how to update your avatar', [
-      { text: 'Take Photo', onPress: () => launchCamera(ImagePicker) },
-      { text: 'Choose from Library', onPress: () => launchLibrary(ImagePicker) },
+      { text: 'Take Photo', onPress: launchCamera },
+      { text: 'Choose from Library', onPress: launchLibrary },
       { text: 'Cancel', style: 'cancel' },
     ])
   }
 
-  const launchLibrary = async (ImagePicker: typeof import('expo-image-picker')) => {
+  const launchLibrary = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (status !== 'granted') {
       Alert.alert('Permission required', 'Please allow access to your photo library.')
@@ -89,7 +73,7 @@ export default function AccountScreen() {
     }
   }
 
-  const launchCamera = async (ImagePicker: typeof import('expo-image-picker')) => {
+  const launchCamera = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync()
     if (status !== 'granted') {
       Alert.alert('Permission required', 'Please allow camera access.')
@@ -108,13 +92,13 @@ export default function AccountScreen() {
   const handleAvatarUpdate = async (uri: string) => {
     if (!user) return
     setIsSaving(true)
-    setAvatarUri(uri) // optimistic
+    setAvatarUri(uri)
 
     const uploadedUrl = await uploadAvatar(user.id, uri)
     if (!uploadedUrl) {
       Toast.show({ type: 'error', text1: 'Upload failed', text2: 'Could not update photo.' })
       const profile = await getProfile(user.id)
-      setAvatarUri(profile?.avatar_url ?? null) // rollback
+      setAvatarUri(profile?.avatar_url ?? null)
       setIsSaving(false)
       return
     }
@@ -193,9 +177,19 @@ export default function AccountScreen() {
           style: 'destructive',
           onPress: async () => {
             if (!user) return
+            setIsSaving(true)
             const { success, error } = await deleteAccount(user.id)
+            setIsSaving(false)
             if (!success) {
-              Toast.show({ type: 'info', text1: 'Not available yet', text2: error })
+              Toast.show({
+                type: 'error',
+                text1: 'Could not delete account',
+                text2: error ?? 'Please try again or contact support.',
+              })
+            } else {
+              // Session will be invalidated by the Edge Function;
+              // authStore SIGNED_OUT handler handles cleanup and navigation.
+              Toast.show({ type: 'success', text1: 'Account deleted' })
             }
           },
         },

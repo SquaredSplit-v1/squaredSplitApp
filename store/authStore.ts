@@ -2,6 +2,8 @@ import type { Session, User } from '@supabase/supabase-js'
 import { create } from 'zustand'
 
 import { supabase } from '@/lib/supabase/client'
+import { deregisterPushTokenOnLogout } from '@/lib/push/setupPushNotifications'
+import { useAddExpenseStore } from '@/store/addExpenseStore'
 import { useContactsStore } from '@/store/contactsStore'
 import { useCurrencyStore } from '@/store/currencyStore'
 import { useFriendsStore } from '@/store/friendsStore'
@@ -65,6 +67,7 @@ function resetAllStores() {
   useHomeStore.getState().reset()
   useFriendsStore.getState().reset()
   useGroupsStore.getState().reset()
+  useAddExpenseStore.getState().reset()
 }
 
 export const useAuthStore = create<AuthState>(set => ({
@@ -80,6 +83,9 @@ export const useAuthStore = create<AuthState>(set => ({
   },
 
   logout: async () => {
+    // Deregister push token before invalidating session so the backend
+    // still has auth context to identify the token row to delete.
+    await deregisterPushTokenOnLogout()
     set({ session: null, user: null, hasOnboarded: false, isLoading: false })
     resetAllStores()
     await supabase.auth.signOut()
@@ -95,9 +101,6 @@ export const useAuthStore = create<AuthState>(set => ({
         return
       }
 
-      // Set session immediately so UI knows user is authed,
-      // then fetch profile in a separate microtask to avoid
-      // deadlocking the Supabase auth queue.
       set({ session, user: session.user })
 
       fetchProfile(session.user.id).then(hasOnboarded => {
