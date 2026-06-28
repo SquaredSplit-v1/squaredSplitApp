@@ -1,9 +1,17 @@
 import { useFocusEffect, useRouter } from 'expo-router'
-import React, { useCallback, useMemo } from 'react'
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import React, { useCallback, useMemo, useState } from 'react'
+import {
+  ActivityIndicator,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Svg, { Path } from 'react-native-svg'
 
+import AddExpenseModal from '@/components/AddExpenseModal'
 import type { Activity } from '@/components/dashboard'
 import { ActivityList, AddExpenseButton } from '@/components/dashboard'
 import { useAuthStore } from '@/store/authStore'
@@ -23,6 +31,20 @@ function BellIcon() {
   )
 }
 
+function SearchGlyph() {
+  return (
+    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z"
+        stroke="#141414"
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  )
+}
+
 const fallbackAvatar = require('../../assets/dashboard/ak.png')
 
 export default function ActivityScreen() {
@@ -31,13 +53,26 @@ export default function ActivityScreen() {
   const userId = useAuthStore(s => s.user?.id)
   const { activity, isLoading, refresh } = useHomeStore()
 
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [addExpenseVisible, setAddExpenseVisible] = useState(false)
+
   useFocusEffect(
     useCallback(() => {
       if (userId) void refresh(userId)
     }, [refresh, userId])
   )
 
-  const activities: Activity[] = useMemo(
+  const handleExpenseCreated = useCallback(() => {
+    if (userId) void refresh(userId)
+  }, [userId, refresh])
+
+  const closeSearch = useCallback(() => {
+    setSearchOpen(false)
+    setSearchQuery('')
+  }, [])
+
+  const allActivities: Activity[] = useMemo(
     () =>
       activity.map(item => ({
         id: item.id,
@@ -54,43 +89,91 @@ export default function ActivityScreen() {
     [activity]
   )
 
+  const filteredActivities = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return allActivities
+    return allActivities.filter(a =>
+      a.segments.some(s => s.text.toLowerCase().includes(q))
+    )
+  }, [allActivities, searchQuery])
+
   return (
     <View style={styles.container}>
       <View style={[styles.content, { paddingTop: insets.top + 8 }]}>
-        {/* Nav bar — no add-friend button on activity */}
+        {/* Nav bar */}
         <View style={styles.navBar}>
-          <TouchableOpacity style={styles.navIcon} onPress={() => router.push('/notifications')}>
+          <TouchableOpacity
+            style={styles.navIcon}
+            onPress={() => router.push('/notifications')}
+            accessibilityLabel="Notifications"
+          >
             <BellIcon />
           </TouchableOpacity>
           <View style={styles.navRight}>
-            <TouchableOpacity style={styles.navIcon}>
-              <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-                <Path
-                  d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z"
-                  stroke="#141414"
-                  strokeWidth={1.8}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </Svg>
-            </TouchableOpacity>
+            {!searchOpen ? (
+              <TouchableOpacity
+                style={styles.navIcon}
+                onPress={() => setSearchOpen(true)}
+                accessibilityLabel="Search activity"
+              >
+                <SearchGlyph />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                onPress={closeSearch}
+                hitSlop={12}
+                style={styles.cancelSearch}
+              >
+                <Text style={styles.cancelSearchText}>Cancel</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
+
+        {/* Inline search input */}
+        {searchOpen && (
+          <View style={styles.searchBlock}>
+            <View style={styles.searchRow}>
+              <SearchGlyph />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search activity"
+                placeholderTextColor="#9CA3AF"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoFocus
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="search"
+              />
+            </View>
+            <View style={styles.searchUnderline} />
+          </View>
+        )}
 
         {isLoading ? (
           <View style={styles.loader}>
             <ActivityIndicator color="#141414" />
           </View>
-        ) : activities.length === 0 ? (
+        ) : filteredActivities.length === 0 ? (
           <View style={styles.loader}>
-            <Text style={styles.emptyText}>No recent activity yet.</Text>
+            <Text style={styles.emptyText}>
+              {searchQuery.trim() ? 'No activity matches your search.' : 'No recent activity yet.'}
+            </Text>
           </View>
         ) : (
-          <ActivityList activities={activities} />
+          <ActivityList activities={filteredActivities} />
         )}
       </View>
 
-      <AddExpenseButton onPress={() => router.push('/')} />
+      {/* FAB — opens AddExpenseModal directly from activity tab */}
+      <AddExpenseButton onPress={() => setAddExpenseVisible(true)} />
+
+      <AddExpenseModal
+        visible={addExpenseVisible}
+        onClose={() => setAddExpenseVisible(false)}
+        onSuccess={handleExpenseCreated}
+      />
     </View>
   )
 }
@@ -106,6 +189,33 @@ const styles = StyleSheet.create({
   },
   navIcon: { padding: 8 },
   navRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  cancelSearch: { paddingVertical: 8, paddingHorizontal: 4 },
+  cancelSearchText: {
+    color: '#6B6B6B',
+    fontSize: 16,
+    fontFamily: 'Nunito_600SemiBold',
+    lineHeight: 16,
+  },
+  searchBlock: { marginTop: 4, marginBottom: 8 },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingBottom: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    fontFamily: 'Nunito_400Regular',
+    lineHeight: 20,
+    color: '#141414',
+    paddingVertical: 0,
+  },
+  searchUnderline: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#141414',
+    width: '100%',
+  },
   loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   emptyText: {
     color: '#6B6B6B',
