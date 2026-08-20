@@ -1,4 +1,4 @@
-name: CI — Lint & Type Check
+name: "CI"
 
 on:
   pull_request:
@@ -6,7 +6,7 @@ on:
 
 jobs:
   lint-and-typecheck:
-    name: Lint & TypeCheck
+    name: Lint & TypeScript Check
     runs-on: ubuntu-latest
 
     steps:
