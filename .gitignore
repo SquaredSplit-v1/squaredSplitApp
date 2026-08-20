@@ -45,3 +45,8 @@ app-example
 # generated native folders
 /ios
 /android
+config/
+env.json
+SquaredSplitDev.app/
+*.tar.gz
+*.app/

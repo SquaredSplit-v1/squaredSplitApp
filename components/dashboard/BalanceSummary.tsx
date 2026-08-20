@@ -1,12 +1,16 @@
-import React from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import Svg, { Path } from "react-native-svg";
+import React from 'react'
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import Svg, { Path } from 'react-native-svg'
+
+import { formatAmount, type Currency } from '@/lib/currency'
 
 interface BalanceSummaryProps {
-  balanceToSquare: number;
-  youAreOwed: number;
-  youOwe: number;
-  onFilterPress: () => void;
+  balanceToSquare: number
+  youAreOwed: number
+  youOwe: number
+  onFilterPress: () => void
+  /** When set, amounts use the user’s locale and symbol. Otherwise USD-style `$` is used. */
+  currency?: Currency
 }
 
 function FilterIcon() {
@@ -29,7 +33,7 @@ function FilterIcon() {
         fill="#141414"
       />
     </Svg>
-  );
+  )
 }
 
 export default function BalanceSummary({
@@ -37,12 +41,15 @@ export default function BalanceSummary({
   youAreOwed,
   youOwe,
   onFilterPress,
+  currency,
 }: BalanceSummaryProps) {
-  const formatAmount = (amount: number) =>
-    `$${amount.toLocaleString("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
+  const formatMoney = (amount: number) =>
+    currency
+      ? formatAmount(amount, currency)
+      : `$${amount.toLocaleString('en-US', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })}`
 
   return (
     <View style={styles.container}>
@@ -50,9 +57,7 @@ export default function BalanceSummary({
       <View style={styles.balanceRow}>
         <View style={styles.balanceTextRow}>
           <Text style={styles.balanceLabel}>Balance to square </Text>
-          <Text style={styles.balanceAmount}>
-            {formatAmount(balanceToSquare)}
-          </Text>
+          <Text style={styles.balanceAmount}>{formatMoney(balanceToSquare)}</Text>
         </View>
         <TouchableOpacity onPress={onFilterPress} hitSlop={12}>
           <FilterIcon />
@@ -62,16 +67,16 @@ export default function BalanceSummary({
       {/* You are owed */}
       <View style={styles.owedRow}>
         <Text style={styles.youAreOwedLabel}>You are owed </Text>
-        <Text style={styles.youAreOwedAmount}>{formatAmount(youAreOwed)}</Text>
+        <Text style={styles.youAreOwedAmount}>{formatMoney(youAreOwed)}</Text>
       </View>
 
       {/* You owe */}
       <View style={styles.oweRow}>
         <Text style={styles.youOweLabel}>You owe </Text>
-        <Text style={styles.youOweAmount}>{formatAmount(youOwe)}</Text>
+        <Text style={styles.youOweAmount}>{formatMoney(youOwe)}</Text>
       </View>
     </View>
-  );
+  )
 }
 
 const styles = StyleSheet.create({
@@ -80,71 +85,71 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   balanceRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 8,
   },
   balanceTextRow: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   balanceLabel: {
-    color: "#141414",
-    fontFamily: "Nunito_600SemiBold",
-    fontSize: 16,
-    fontWeight: "600",
-    lineHeight: 16,
+    color: '#141414',
+    fontFamily: 'Nunito_600SemiBold',
+    fontSize: 17,
+    fontWeight: '600',
+    lineHeight: 17,
     letterSpacing: -0.32,
   },
   balanceAmount: {
-    color: "#44BB73",
-    fontFamily: "Nunito_700Bold",
-    fontSize: 16,
-    fontWeight: "700",
-    lineHeight: 16,
+    color: '#44BB73',
+    fontFamily: 'Nunito_700Bold',
+    fontSize: 17,
+    fontWeight: '700',
+    lineHeight: 17,
     letterSpacing: -0.32,
   },
   owedRow: {
-    flexDirection: "row",
-    alignItems: "baseline",
+    flexDirection: 'row',
+    alignItems: 'baseline',
     marginTop: 4,
   },
   youAreOwedLabel: {
-    color: "#141414",
-    fontFamily: "Nunito_600SemiBold",
+    color: '#141414',
+    fontFamily: 'Nunito_600SemiBold',
     fontSize: 24,
-    fontWeight: "600",
+    fontWeight: '600',
     lineHeight: 28.8,
     letterSpacing: -0.48,
   },
   youAreOwedAmount: {
-    color: "#44BB73",
-    fontFamily: "Nunito_700Bold",
+    color: '#44BB73',
+    fontFamily: 'Nunito_700Bold',
     fontSize: 20,
-    fontWeight: "700",
+    fontWeight: '700',
     lineHeight: 24,
     letterSpacing: -0.4,
   },
   oweRow: {
-    flexDirection: "row",
-    alignItems: "baseline",
+    flexDirection: 'row',
+    alignItems: 'baseline',
     marginTop: 2,
   },
   youOweLabel: {
-    color: "#9CA3AF",
-    fontFamily: "Nunito_600SemiBold",
+    color: '#9CA3AF',
+    fontFamily: 'Nunito_600SemiBold',
     fontSize: 24,
-    fontWeight: "600",
+    fontWeight: '600',
     lineHeight: 28.8,
     letterSpacing: -0.48,
   },
   youOweAmount: {
-    color: "#D48D4F",
-    fontFamily: "Nunito_700Bold",
+    color: '#DE8334',
+    fontFamily: 'Nunito_700Bold',
     fontSize: 20,
-    fontWeight: "700",
+    fontWeight: '700',
     lineHeight: 24,
     letterSpacing: -0.4,
   },
-});
+})

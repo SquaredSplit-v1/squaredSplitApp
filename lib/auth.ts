@@ -1,137 +1,92 @@
-/**
- * Auth API helper — routes all phone OTP requests through the Supabase Edge Function
- * (`phone-auth`) which enforces rate limiting, E.164 normalization, and verify-attempt lockout.
- *
- * The edge function URLs come from `EXPO_PUBLIC_SUPABASE_PHONE_AUTH_URL` in `.env.*`.
- */
+import { SUPABASE_ANON_KEY, PHONE_AUTH_URL } from '@/lib/env'
 
-import { supabase } from "./supabase";
+import { supabase } from './supabase/client'
 
-const PHONE_AUTH_URL = process.env.EXPO_PUBLIC_SUPABASE_PHONE_AUTH_URL!;
-const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_KEY!;
-
-if (!PHONE_AUTH_URL) {
-  throw new Error(
-    "Missing EXPO_PUBLIC_SUPABASE_PHONE_AUTH_URL — check your .env file.",
-  );
+const SUPABASE_HEADERS = {
+  'Content-Type': 'application/json',
+  Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+  apikey: SUPABASE_ANON_KEY,
 }
 
-// ─── Types ─────────────────────────────────────────────────────────────────
-
 export interface SendOtpResult {
-  success: boolean;
-  error?: string;
-  retryAfter?: number;
+  success: boolean
+  error?: string
+  retryAfter?: number
 }
 
 export interface VerifyOtpResult {
-  success: boolean;
-  error?: string;
-  retryAfter?: number;
-  isNewUser?: boolean;
+  success: boolean
+  error?: string
+  retryAfter?: number
 }
 
 // ─── Send OTP ──────────────────────────────────────────────────────────────
 
-/**
- * Sends a one-time password to a phone number via the edge function.
- * Always returns a generic `{ success: true }` from the backend to avoid
- * leaking whether a phone number is registered.
- */
 export async function sendOtp(phone: string): Promise<SendOtpResult> {
   try {
     const res = await fetch(`${PHONE_AUTH_URL}/send-otp`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-      },
+      method: 'POST',
+      headers: SUPABASE_HEADERS,
       body: JSON.stringify({ phone }),
-    });
+    })
+    const data = await res.json()
 
-    const data = await res.json();
-
-    if (!res.ok) {
+    if (res.status === 429) {
       return {
         success: false,
-        error: data.error ?? "Failed to send verification code.",
+        error: `Too many attempts. Try again in ${data.retryAfter}s.`,
         retryAfter: data.retryAfter,
-      };
+      }
     }
-
-    return { success: true };
+    if (!res.ok) {
+      return { success: false, error: data.error ?? 'Failed to send code.' }
+    }
+    return { success: true }
   } catch {
-    return { success: false, error: "Network error. Please try again." };
+    return { success: false, error: 'Network error. Please try again.' }
   }
 }
 
 // ─── Verify OTP ────────────────────────────────────────────────────────────
 
-/**
- * Verifies the OTP code through the edge function and, on success,
- * hydrates the local Supabase client session so `onAuthStateChange`
- * fires automatically.
- *
- * Returns `isNewUser: true` when the user was just created (i.e. first sign-up)
- * so the caller can redirect to onboarding.
- */
-export async function verifyOtp(
-  phone: string,
-  otp: string,
-): Promise<VerifyOtpResult> {
+export async function verifyOtp(phone: string, otp: string): Promise<VerifyOtpResult> {
   try {
     const res = await fetch(`${PHONE_AUTH_URL}/verify-otp`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-      },
+      method: 'POST',
+      headers: SUPABASE_HEADERS,
       body: JSON.stringify({ phone, otp }),
-    });
+    })
+    const data = await res.json()
 
-    const data = await res.json();
-
-    if (!res.ok) {
+    if (res.status === 429) {
       return {
         success: false,
-        error: data.error ?? "Verification failed.",
+        error: `Too many attempts. Try again in ${data.retryAfter}s.`,
         retryAfter: data.retryAfter,
-      };
+      }
+    }
+    if (!res.ok) {
+      return { success: false, error: data.error ?? 'Invalid or expired OTP.' }
+    }
+    if (!data.session?.access_token || !data.session?.refresh_token) {
+      return { success: false, error: 'Invalid response from server.' }
     }
 
-    // Hydrate the local Supabase client with the session returned by the edge
-    // function. This makes `supabase.auth.getSession()` and the
-    // `onAuthStateChange` listener pick up the authenticated state immediately.
-    if (data.session) {
-      await supabase.auth.setSession({
-        access_token: data.session.access_token,
-        refresh_token: data.session.refresh_token,
-      });
+    const { error: sessionError } = await supabase.auth.setSession({
+      access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token,
+    })
+
+    if (sessionError) {
+      return { success: false, error: 'Failed to establish session. Please try again.' }
     }
 
-    // Determine if this is a brand-new user (first-time sign-up)
-    const isNewUser = !!data.user?.created_at && isRecentTimestamp(data.user.created_at);
-
-    return { success: true, isNewUser };
+    return { success: true }
   } catch {
-    return { success: false, error: "Network error. Please try again." };
+    return { success: false, error: 'Network error. Please try again.' }
   }
 }
 
 // ─── Resend OTP ────────────────────────────────────────────────────────────
 
-/**
- * Convenience wrapper — semantically identical to `sendOtp` but named for
- * clarity at the call-site (verify-otp screen "Resend" button).
- */
-export const resendOtp = sendOtp;
-
-// ─── Helpers ───────────────────────────────────────────────────────────────
-
-/** Returns true when the ISO timestamp is less than 10 seconds old. */
-function isRecentTimestamp(iso: string): boolean {
-  const created = new Date(iso).getTime();
-  return Date.now() - created < 10_000;
-}
+export const resendOtp = sendOtp

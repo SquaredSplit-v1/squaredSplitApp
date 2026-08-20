@@ -1,109 +1,130 @@
-import { ExpoConfig, ConfigContext } from "expo/config";
+import type { ConfigContext, ExpoConfig } from 'expo/config'
 
-// Determine environment from APP_ENV or default to development
-const APP_ENV = process.env.APP_ENV ?? "development";
+const APP_ENV = process.env.APP_ENV ?? 'development'
 
 const envConfig = {
   development: {
-    name: "SquaredSplit (Dev)",
-    slug: "squaredSplitApp",
-    scheme: "squaredsplitapp.dev",
-    icon: "./assets/images/icon.png",
-    bundleIdentifier: "com.sqsplit.squaredSplitApp.dev",
-    package: "com.sqsplit.squaredSplitApp.dev",
-    eas: {
-      projectId: "d74c8f5a-fa0d-4949-b5b6-b36310280603",
-    },
+    name: 'SquaredSplit (Dev)',
+    bundleIdentifier: 'com.squaredsplit.app.dev',
+    androidPackage: 'com.squaredsplit.app.dev',
+    supabaseUrl: 'https://bwkgphgnrrwczxkfeanz.supabase.co',
+    supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '',
+    phoneAuthUrl: 'https://bwkgphgnrrwczxkfeanz.supabase.co/functions/v1/phone-auth',
+    icon: './assets/icon-dev.png',
   },
+  preview: {
+    name: 'SquaredSplit (Preview)',
+    bundleIdentifier: 'com.squaredsplit.app.preview',
+    androidPackage: 'com.squaredsplit.app.preview',
+    supabaseUrl: 'https://eqqcqnfnfnzurfjfzwwp.supabase.co',
+    supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '',
+    phoneAuthUrl: 'https://eqqcqnfnfnzurfjfzwwp.supabase.co/functions/v1/phone-auth',
+    icon: './assets/icon-preview.png',
+  },
+  // staging is an alias for preview env — same Supabase project, internal distribution
   staging: {
-    name: "SquaredSplit (Staging)",
-    slug: "squaredSplitApp",
-    scheme: "squaredsplitapp.staging",
-    icon: "./assets/images/icon.png",
-    bundleIdentifier: "com.sqsplit.squaredSplitApp.staging",
-    package: "com.sqsplit.squaredSplitApp.staging",
-    eas: {
-      projectId: "d74c8f5a-fa0d-4949-b5b6-b36310280603",
-    },
+    name: 'SquaredSplit (Staging)',
+    bundleIdentifier: 'com.squaredsplit.app.preview',
+    androidPackage: 'com.squaredsplit.app.preview',
+    supabaseUrl: 'https://eqqcqnfnfnzurfjfzwwp.supabase.co',
+    supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '',
+    phoneAuthUrl: 'https://eqqcqnfnfnzurfjfzwwp.supabase.co/functions/v1/phone-auth',
+    icon: './assets/icon-preview.png',
   },
   production: {
-    name: "SquaredSplit",
-    slug: "squaredSplitApp",
-    scheme: "squaredsplitapp",
-    icon: "./assets/images/icon.png",
-    bundleIdentifier: "com.sqsplit.squaredSplitApp",
-    package: "com.sqsplit.squaredSplitApp",
-    eas: {
-      projectId: "d74c8f5a-fa0d-4949-b5b6-b36310280603",
-    },
+    name: 'SquaredSplit',
+    bundleIdentifier: 'com.squaredsplit.app',
+    androidPackage: 'com.squaredsplit.app',
+    supabaseUrl: 'https://clrnrpxxcpxhwsyseqyd.supabase.co',
+    supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '',
+    phoneAuthUrl: 'https://clrnrpxxcpxhwsyseqyd.supabase.co/functions/v1/phone-auth',
+    icon: './assets/icon.png',
   },
-} as const;
+} as const
 
-const currentEnv =
-  envConfig[APP_ENV as keyof typeof envConfig] ?? envConfig.development;
+type Env = keyof typeof envConfig
+const env = envConfig[(APP_ENV as Env) ?? 'development']
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
-  name: currentEnv.name,
-  slug: currentEnv.slug,
-  version: "1.0.0",
-  orientation: "portrait",
-  icon: currentEnv.icon,
-  scheme: currentEnv.scheme,
-  userInterfaceStyle: "automatic",
+  name: env.name,
+  slug: 'squaredSplitApp',
+  // v0.1.0 — aligned with EAS build channel "production".
+  // runtimeVersion uses sdkVersion so OTA updates only target compatible builds.
+  version: '0.1.0',
+  orientation: 'portrait',
+  icon: env.icon,
+  userInterfaceStyle: 'light',
   newArchEnabled: true,
+  splash: {
+    image: './assets/splash.png',
+    resizeMode: 'contain',
+    backgroundColor: '#F3F4F5',
+  },
   ios: {
-    supportsTablet: true,
-    bundleIdentifier: currentEnv.bundleIdentifier,
+    bundleIdentifier: env.bundleIdentifier,
+    supportsTablet: false,
     infoPlist: {
-      ITSAppUsesNonExemptEncryption: false,
+      NSPhotoLibraryUsageDescription:
+        'SquaredSplit needs access to your photo library to set a profile picture.',
+      NSCameraUsageDescription:
+        'SquaredSplit needs access to your camera to take a profile picture.',
     },
   },
   android: {
+    package: env.androidPackage,
+    permissions: ['android.permission.READ_CONTACTS', 'android.permission.POST_NOTIFICATIONS'],
     adaptiveIcon: {
-      backgroundColor: "#E6F4FE",
-      foregroundImage: "./assets/images/android-icon-foreground.png",
-      backgroundImage: "./assets/images/android-icon-background.png",
-      monochromeImage: "./assets/images/android-icon-monochrome.png",
+      foregroundImage: './assets/adaptive-icon.png',
+      backgroundColor: '#F3F4F5',
     },
-    edgeToEdgeEnabled: true,
-    predictiveBackGestureEnabled: false,
-    package: currentEnv.package,
   },
   web: {
-    bundler: "metro",
-    output: "static",
-    favicon: "./assets/images/favicon.png",
+    favicon: './assets/favicon.png',
+  },
+  extra: {
+    eas: {
+      projectId: 'd74c8f5a-fa0d-4949-b5b6-b36310280603',
+    },
   },
   updates: {
-    url: "https://u.expo.dev/d74c8f5a-fa0d-4949-b5b6-b36310280603"
+    url: 'https://u.expo.dev/d74c8f5a-fa0d-4949-b5b6-b36310280603',
   },
+  // sdkVersion policy: OTA update is only delivered to a build compiled
+  // with the same Expo SDK version, preventing incompatible JS/native mismatch.
   runtimeVersion: {
-    policy: "appVersion"
+    policy: 'sdkVersion',
   },
   plugins: [
-    "expo-router",
+    'expo-router',
+    'expo-image-picker',
+    'expo-secure-store',
     [
-      "expo-splash-screen",
+      'expo-splash-screen',
       {
-        image: "./assets/images/splash-icon.png",
+        image: './assets/splash.png',
         imageWidth: 200,
-        resizeMode: "contain",
-        backgroundColor: "#ffffff",
-        dark: {
-          backgroundColor: "#000000",
-        },
+        resizeMode: 'contain',
+        backgroundColor: '#F3F4F5',
       },
     ],
+    [
+      'expo-contacts',
+      {
+        contactsPermission:
+          'SquaredSplit needs access to your contacts so you can find friends who already use the app.',
+      },
+    ],
+    [
+      'expo-notifications',
+      {
+        icon: './assets/icon.png',
+        color: '#141414',
+      },
+    ],
+    './plugins/withAndroidReadContacts.js',
   ],
   experiments: {
     typedRoutes: true,
-    reactCompiler: true,
   },
-  extra: {
-    router: {},
-    eas: currentEnv.eas,
-    APP_ENV,
-  },
-  owner: "sqsplit",
-});
+})

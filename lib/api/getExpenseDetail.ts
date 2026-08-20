@@ -1,0 +1,11 @@
+import { getExpense, type ExpenseDetail } from '@/lib/supabase/home'
+
+/**
+ * API wrapper to fetch a single expense detail
+ * Called from the expense detail page
+ */
+export async function fetchExpenseDetail(
+  expenseId: string
+): Promise<{ data: ExpenseDetail | null; error?: string }> {
+  return getExpense(expenseId)
+}

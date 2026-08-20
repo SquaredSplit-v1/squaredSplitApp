@@ -1,0 +1,40 @@
+name: Deploy — Development (OTA)
+
+on:
+  push:
+    branches: [dev]
+
+jobs:
+  eas-update-dev:
+    name: EAS Update → development channel
+    runs-on: ubuntu-latest
+
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Publish OTA update → development
+        run: |
+          eas update \
+            --branch development \
+            --environment development \
+            --message "dev: ${{ github.sha }}" \
+            --non-interactive

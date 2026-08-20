@@ -1,0 +1,3 @@
+-- Allow any participant on an expense to read all split rows for that expense.
+-- Uses SECURITY DEFINER helper to avoid RLS infinite recursion (42P17).
+-- See 20260516130000_fix_expense_participants_rls_recursion.sql for the function.
