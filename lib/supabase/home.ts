@@ -274,14 +274,15 @@ export async function fetchRecentActivity(
       if (displayAmount <= 0) continue
 
       const prof = profileMap.get(counterpartyId)
-      const sub = classifySubtitle(expense.created_at, expense.due_date)
+      const createdAt = expense.created_at ?? new Date().toISOString()
+      const sub = classifySubtitle(createdAt, expense.due_date)
 
       activities.push({
         id: expense.id,
         description: expense.description || 'Expense',
         amount: displayAmount,
         type: 'expense',
-        createdAt: expense.created_at,
+        createdAt,
         otherPartyId: counterpartyId,
         otherPartyName: prof?.name ?? 'Friend',
         otherPartyAvatar: prof?.avatar ?? null,
@@ -351,7 +352,7 @@ export async function getExpense(
         title: expense.description || 'Expense',
         amount: roundMoney(Number(expense.amount)),
         paidBy: expense.paid_by,
-        createdAt: expense.created_at,
+        createdAt: expense.created_at ?? new Date().toISOString(),
         note: expense.note ?? null,
         dueDate: expense.due_date ?? null,
         category: expense.category ?? null,

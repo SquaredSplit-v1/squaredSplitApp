@@ -57,7 +57,7 @@ export async function createGroup(
   try {
     const { data, error } = await supabase.rpc('create_group', {
       p_name: name,
-      p_emoji: emoji ?? null,
+      p_emoji: emoji ?? undefined,
       p_member_ids: memberIds,
     })
 
@@ -348,7 +348,7 @@ export async function getGroupById(
       paidByName: payerNames.get(exp.paid_by) ?? 'Member',
       myShare: roundMoney(myShare),
       netForMe: roundMoney(paidByMe ? Number(exp.amount) - myShare : -myShare),
-      createdAt: exp.created_at,
+      createdAt: exp.created_at ?? new Date().toISOString(),
     }
   })
 

@@ -138,7 +138,7 @@ function Notifications() {
           const { error } = await supabase.rpc('reject_expense', {
             p_expense_id: selectedItem.expenseId,
             p_reason: reasonLabel,
-            p_other_text: reason === 'other' ? otherText?.trim() || null : null,
+            p_other_text: reason === 'other' ? otherText?.trim() || undefined : undefined,
           })
           if (error) console.warn('[notifications] reject_expense', error.message)
         } catch (e) {
