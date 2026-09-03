@@ -3,9 +3,12 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
+  Alert,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native'
@@ -16,6 +19,8 @@ import AddExpenseButton from '@/components/dashboard/AddExpenseButton'
 import FriendExpenseRow, { type FriendExpenseRowData } from '@/components/friend/FriendExpenseRow'
 import { formatAmount } from '@/lib/currency'
 import { supabase } from '@/lib/supabase/client'
+import { getFriendNote, saveFriendNote } from '@/lib/supabase/friends'
+import { settleUpWithFriend } from '@/lib/supabase/home'
 import { groupByMonth } from '@/lib/utils/groupExpensesByMonth'
 import { useAuthStore } from '@/store/authStore'
 import { useCurrencyStore } from '@/store/currencyStore'
@@ -84,11 +89,30 @@ export default function FriendDetailScreen() {
   const [myAvatar, setMyAvatar] = useState<string | null>(null)
   const [resolvedName, setResolvedName] = useState(friendNameParam ?? 'Friend')
   const [resolvedAvatar, setResolvedAvatar] = useState<string | null>(friendAvatarParam ?? null)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [isSettling, setIsSettling] = useState(false)
+  const [noteText, setNoteText] = useState('')
+  const [noteLoaded, setNoteLoaded] = useState(false)
+  const [isSavingNote, setIsSavingNote] = useState(false)
 
   useEffect(() => {
     if (!userId || !friendId) return
     void fetchSharedExpenses(userId, friendId)
   }, [userId, friendId, fetchSharedExpenses])
+
+  // Whiteboard note
+  useEffect(() => {
+    if (!userId || !friendId) return
+    let cancelled = false
+    void getFriendNote(userId, friendId).then(({ note }) => {
+      if (cancelled) return
+      setNoteText(note ?? '')
+      setNoteLoaded(true)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [userId, friendId])
 
   useEffect(() => {
     if (!userId) return
@@ -125,6 +149,19 @@ export default function FriendDetailScreen() {
     return sharedExpenses.map(e => mapExpense(e, userId))
   }, [sharedExpenses, userId])
 
+  const unsettledRows = useMemo(() => sharedExpenses.filter(e => !e.isSettled), [sharedExpenses])
+
+  const netBalance = useMemo(() => {
+    if (!userId) return 0
+    return roundMoney(
+      unsettledRows.reduce(
+        (sum, e) =>
+          sum + (e.paidBy === userId ? Math.max(0, e.amount - e.shareAmount) : -e.shareAmount),
+        0
+      )
+    )
+  }, [unsettledRows, userId])
+
   const monthGroups = useMemo(() => groupByMonth(expenseRows), [expenseRows])
 
   const chartData = useMemo(() => {
@@ -137,9 +174,54 @@ export default function FriendDetailScreen() {
     }))
   }, [expenseRows])
 
+  const handleRefresh = useCallback(async () => {
+    if (!userId || !friendId) return
+    setIsRefreshing(true)
+    await fetchSharedExpenses(userId, friendId)
+    setIsRefreshing(false)
+  }, [userId, friendId, fetchSharedExpenses])
+
   const handleExpenseCreated = useCallback(() => {
     if (userId && friendId) void fetchSharedExpenses(userId, friendId)
   }, [userId, friendId, fetchSharedExpenses])
+
+  const handleSettleUp = useCallback(() => {
+    if (!friendId || Math.abs(netBalance) < 0.005 || isSettling) return
+    const owesYou = netBalance > 0
+    Alert.alert(
+      'Square up',
+      owesYou
+        ? `Mark all outstanding balances with ${resolvedName} as settled? (${formatAmount(netBalance, currency)} they owe you)`
+        : `Mark all outstanding balances with ${resolvedName} as settled? (${formatAmount(Math.abs(netBalance), currency)} you owe)`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Square up',
+          style: 'default',
+          onPress: async () => {
+            setIsSettling(true)
+            const result = await settleUpWithFriend(friendId)
+            setIsSettling(false)
+            if (!result.success) {
+              Alert.alert('Could not square up', result.error ?? 'Please try again.')
+              return
+            }
+            if (userId) await fetchSharedExpenses(userId, friendId)
+          },
+        },
+      ]
+    )
+  }, [friendId, netBalance, isSettling, resolvedName, currency, userId, fetchSharedExpenses])
+
+  const handleSaveNote = useCallback(async () => {
+    if (!friendId || isSavingNote) return
+    setIsSavingNote(true)
+    const result = await saveFriendNote(friendId, noteText)
+    setIsSavingNote(false)
+    if (!result.success) {
+      Alert.alert('Could not save note', result.error ?? 'Please try again.')
+    }
+  }, [friendId, noteText, isSavingNote])
 
   const openSettings = () => {
     if (!friendId) return
@@ -160,40 +242,101 @@ export default function FriendDetailScreen() {
     )
   }
 
-  const renderSquareUpList = () => {
-    if (isLoadingDetail) {
+  const renderSettleUpCard = () => {
+    if (Math.abs(netBalance) < 0.005) {
       return (
-        <View style={styles.loadingWrap}>
-          <ActivityIndicator color="#3273CD" />
+        <View style={styles.settleCardSettled}>
+          <Text style={styles.settleTitleSettled}>All squared up ✓</Text>
+          <Text style={styles.settleBody}>
+            You and {resolvedName} have no outstanding balances.
+          </Text>
         </View>
       )
     }
-    if (expenseRows.length === 0) {
-      return <Text style={styles.emptyList}>No shared expenses yet.</Text>
-    }
-
-    return monthGroups.map(group => (
-      <View key={group.key} style={styles.monthBlock}>
-        <Text style={styles.monthTitle}>{group.label}</Text>
-        {group.items.map(item => (
-          <FriendExpenseRow
-            key={item.expenseId}
-            item={item}
-            currency={currency}
-            payerLabel={resolvedName}
-            onPress={() => router.push(`/dashboard/expense/${item.expenseId}`)}
-          />
-        ))}
+    const owesYou = netBalance > 0
+    return (
+      <View style={[styles.settleCard, owesYou ? styles.settleCardGreen : styles.settleCardOrange]}>
+        <Text style={styles.settleTitle}>
+          {owesYou
+            ? `${resolvedName} owes you ${formatAmount(netBalance, currency)}`
+            : `You owe ${resolvedName} ${formatAmount(Math.abs(netBalance), currency)}`}
+        </Text>
+        <Text style={styles.settleBody}>
+          {unsettledRows.length} unsettled expense{unsettledRows.length === 1 ? '' : 's'} · tap
+          below once you have paid each other back.
+        </Text>
+        <TouchableOpacity
+          style={[styles.settleBtn, isSettling && styles.settleBtnDisabled]}
+          onPress={handleSettleUp}
+          disabled={isSettling}
+          activeOpacity={0.85}
+        >
+          {isSettling ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={styles.settleBtnText}>Square up</Text>
+          )}
+        </TouchableOpacity>
       </View>
-    ))
+    )
   }
 
+  const renderSquareUpList = () => (
+    <View style={styles.squareUpWrap}>
+      {renderSettleUpCard()}
+      {isLoadingDetail ? (
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator color="#3273CD" />
+        </View>
+      ) : expenseRows.length === 0 ? (
+        <Text style={styles.emptyList}>No shared expenses yet.</Text>
+      ) : (
+        monthGroups.map(group => (
+          <View key={group.key} style={styles.monthBlock}>
+            <Text style={styles.monthTitle}>{group.label}</Text>
+            {group.items.map(item => (
+              <FriendExpenseRow
+                key={item.expenseId}
+                item={item}
+                currency={currency}
+                payerLabel={resolvedName}
+                onPress={() => router.push(`/dashboard/expense/${item.expenseId}`)}
+              />
+            ))}
+          </View>
+        ))
+      )}
+    </View>
+  )
+
   const renderWhiteboard = () => (
-    <View style={styles.placeholderCard}>
-      <Text style={styles.placeholderTitle}>Whiteboard</Text>
-      <Text style={styles.placeholderBody}>
-        Shared notes and trip plans for you and {resolvedName} will show up here.
+    <View style={styles.whiteboardCard}>
+      <Text style={styles.whiteboardTitle}>Whiteboard</Text>
+      <Text style={styles.whiteboardHint}>
+        Shared notes between you and {resolvedName} — great for trip plans or reminders.
       </Text>
+      <TextInput
+        style={styles.whiteboardInput}
+        value={noteText}
+        onChangeText={setNoteText}
+        placeholder={noteLoaded ? 'Start typing…' : 'Loading…'}
+        placeholderTextColor="#9CA3AF"
+        multiline
+        textAlignVertical="top"
+        accessibilityLabel="Shared note"
+      />
+      <TouchableOpacity
+        style={[styles.whiteboardSave, isSavingNote && styles.settleBtnDisabled]}
+        onPress={handleSaveNote}
+        disabled={isSavingNote}
+        activeOpacity={0.85}
+      >
+        {isSavingNote ? (
+          <ActivityIndicator color="#FFFFFF" size="small" />
+        ) : (
+          <Text style={styles.whiteboardSaveText}>Save note</Text>
+        )}
+      </TouchableOpacity>
     </View>
   )
 
@@ -223,6 +366,9 @@ export default function FriendDetailScreen() {
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 100 }]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor="#3273CD" />
+        }
       >
         <View style={styles.topBar}>
           <TouchableOpacity onPress={() => router.back()} hitSlop={12} style={styles.backBtn}>
@@ -292,6 +438,7 @@ export default function FriendDetailScreen() {
         visible={addExpenseVisible}
         onClose={() => setAddExpenseVisible(false)}
         onSuccess={handleExpenseCreated}
+        presetParticipantIds={friendId ? [friendId] : undefined}
       />
     </View>
   )
@@ -421,6 +568,86 @@ const styles = StyleSheet.create({
     fontFamily: 'Nunito_400Regular',
     lineHeight: 20,
   },
+  squareUpWrap: { gap: 24 },
+  settleCard: {
+    borderRadius: 16,
+    padding: 16,
+    gap: 8,
+  },
+  settleCardGreen: { backgroundColor: '#E8F8EE' },
+  settleCardOrange: { backgroundColor: '#FEF3E8' },
+  settleCardSettled: {
+    borderRadius: 16,
+    padding: 16,
+    backgroundColor: '#F3F4F5',
+    gap: 4,
+  },
+  settleTitle: {
+    color: '#141414',
+    fontSize: 16,
+    fontFamily: 'Nunito_700Bold',
+  },
+  settleTitleSettled: {
+    color: '#44BB73',
+    fontSize: 16,
+    fontFamily: 'Nunito_700Bold',
+  },
+  settleBody: {
+    color: '#6B6B6B',
+    fontSize: 13,
+    fontFamily: 'Nunito_400Regular',
+    lineHeight: 18,
+  },
+  settleBtn: {
+    marginTop: 4,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#141414',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  settleBtnDisabled: { opacity: 0.6 },
+  settleBtnText: { color: '#FFFFFF', fontSize: 15, fontFamily: 'Nunito_600SemiBold' },
+  whiteboardCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    padding: 16,
+    backgroundColor: '#FAFAFC',
+    gap: 10,
+  },
+  whiteboardTitle: {
+    color: '#141414',
+    fontSize: 18,
+    fontFamily: 'Nunito_700Bold',
+  },
+  whiteboardHint: {
+    color: '#6B6B6B',
+    fontSize: 13,
+    fontFamily: 'Nunito_400Regular',
+    lineHeight: 18,
+  },
+  whiteboardInput: {
+    minHeight: 140,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    padding: 12,
+    fontSize: 14,
+    fontFamily: 'Nunito_400Regular',
+    color: '#141414',
+  },
+  whiteboardSave: {
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#141414',
+    justifyContent: 'center',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 24,
+  },
+  whiteboardSaveText: { color: '#FFFFFF', fontSize: 15, fontFamily: 'Nunito_600SemiBold' },
   chartsWrap: { gap: 16 },
   chartRow: { gap: 6 },
   chartLabel: {

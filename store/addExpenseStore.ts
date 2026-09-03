@@ -2,9 +2,14 @@ import { create } from 'zustand'
 
 export type SplitType = 'equally' | 'exact' | 'percentage'
 
+export type DueDatePreset = 'none' | '1w' | '2w' | '1m'
+
 interface AddExpenseState {
   amount: string
   title: string
+  note: string
+  category: string
+  dueDatePreset: DueDatePreset
   paidBy: string | null
   participants: string[]
   splitType: SplitType
@@ -14,8 +19,12 @@ interface AddExpenseState {
 
   setAmount: (v: string) => void
   setTitle: (v: string) => void
+  setNote: (v: string) => void
+  setCategory: (v: string) => void
+  setDueDatePreset: (v: DueDatePreset) => void
   setPaidBy: (id: string) => void
   toggleParticipant: (id: string) => void
+  setParticipants: (ids: string[]) => void
   setSplitType: (t: SplitType) => void
   setExactAmount: (userId: string, value: string) => void
   setPercentage: (userId: string, value: string) => void
@@ -26,6 +35,9 @@ interface AddExpenseState {
 const defaults = {
   amount: '',
   title: '',
+  note: '',
+  category: 'general',
+  dueDatePreset: 'none' as DueDatePreset,
   paidBy: null,
   participants: [],
   splitType: 'equally' as SplitType,
@@ -34,10 +46,21 @@ const defaults = {
   isSubmitting: false,
 }
 
+export function dueDatePresetToIsoDate(preset: DueDatePreset): string | null {
+  if (preset === 'none') return null
+  const days = preset === '1w' ? 7 : preset === '2w' ? 14 : 30
+  const d = new Date()
+  d.setDate(d.getDate() + days)
+  return d.toISOString().split('T')[0]
+}
+
 export const useAddExpenseStore = create<AddExpenseState>((set, get) => ({
   ...defaults,
   setAmount: v => set({ amount: v }),
   setTitle: v => set({ title: v }),
+  setNote: v => set({ note: v }),
+  setCategory: v => set({ category: v }),
+  setDueDatePreset: v => set({ dueDatePreset: v }),
   setPaidBy: id => set({ paidBy: id }),
 
   toggleParticipant: id => {
@@ -52,6 +75,8 @@ export const useAddExpenseStore = create<AddExpenseState>((set, get) => ({
       set({ participants: [...participants, id] })
     }
   },
+
+  setParticipants: ids => set({ participants: ids }),
 
   setSplitType: t => set({ splitType: t }),
   setExactAmount: (userId, val) =>

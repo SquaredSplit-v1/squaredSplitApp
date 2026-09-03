@@ -2,6 +2,9 @@ import { useFocusEffect, useRouter } from 'expo-router'
 import React, { useCallback, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
+  Keyboard,
+  RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -51,7 +54,7 @@ export default function ActivityScreen() {
   const insets = useSafeAreaInsets()
   const router = useRouter()
   const userId = useAuthStore(s => s.user?.id)
-  const { activity, isLoading, refresh } = useHomeStore()
+  const { activity, isLoading, isRefreshing, refresh } = useHomeStore()
 
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -96,10 +99,13 @@ export default function ActivityScreen() {
   const filteredActivities = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
     if (!q) return allActivities
-    return allActivities.filter(a =>
-      a.segments.some(s => s.text.toLowerCase().includes(q))
-    )
+    return allActivities.filter(a => a.segments.some(s => s.text.toLowerCase().includes(q)))
   }, [allActivities, searchQuery])
+
+  const handleRefresh = useCallback(() => {
+    Keyboard.dismiss()
+    if (userId) void refresh(userId)
+  }, [userId, refresh])
 
   return (
     <View style={styles.container}>
@@ -123,11 +129,7 @@ export default function ActivityScreen() {
                 <SearchGlyph />
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity
-                onPress={closeSearch}
-                hitSlop={12}
-                style={styles.cancelSearch}
-              >
+              <TouchableOpacity onPress={closeSearch} hitSlop={12} style={styles.cancelSearch}>
                 <Text style={styles.cancelSearchText}>Cancel</Text>
               </TouchableOpacity>
             )}
@@ -166,7 +168,21 @@ export default function ActivityScreen() {
             </Text>
           </View>
         ) : (
-          <ActivityList activities={filteredActivities} />
+          <ScrollView
+            style={styles.scroll}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            refreshControl={
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={handleRefresh}
+                tintColor="#141414"
+              />
+            }
+          >
+            <ActivityList activities={filteredActivities} />
+          </ScrollView>
         )}
       </View>
 
@@ -220,6 +236,8 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  scroll: { flex: 1 },
+  scrollContent: { paddingBottom: 120 },
   emptyText: {
     color: '#6B6B6B',
     fontFamily: 'Nunito_400Regular',

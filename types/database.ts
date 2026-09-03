@@ -278,6 +278,116 @@ export type Database = {
         }
         Relationships: []
       }
+      friend_notes: {
+        Row: {
+          user_id: string
+          friend_id: string
+          note: string
+          updated_by: string | null
+          updated_at: string
+        }
+        Insert: {
+          user_id: string
+          friend_id: string
+          note?: string
+          updated_by?: string | null
+          updated_at?: string
+        }
+        Update: {
+          user_id?: string
+          friend_id?: string
+          note?: string
+          updated_by?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'friend_notes_user_id_fkey'
+            columns: ['user_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'friend_notes_friend_id_fkey'
+            columns: ['friend_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      friend_settings: {
+        Row: {
+          user_id: string
+          friend_id: string
+          muted: boolean
+          updated_at: string
+        }
+        Insert: {
+          user_id: string
+          friend_id: string
+          muted?: boolean
+          updated_at?: string
+        }
+        Update: {
+          user_id?: string
+          friend_id?: string
+          muted?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'friend_settings_user_id_fkey'
+            columns: ['user_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'friend_settings_friend_id_fkey'
+            columns: ['friend_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      expense_rejections: {
+        Row: {
+          id: string
+          user_id: string
+          expense_id: string
+          reason: string
+          other_text: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          expense_id: string
+          reason: string
+          other_text?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          expense_id?: string
+          reason?: string
+          other_text?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'expense_rejections_expense_id_fkey'
+            columns: ['expense_id']
+            isOneToOne: false
+            referencedRelation: 'expenses'
+            referencedColumns: ['id']
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -319,6 +429,57 @@ export type Database = {
           phone: string
           avatar_url: string | null
         }[]
+      }
+      create_group: {
+        Args: {
+          p_name: string
+          p_emoji?: string | null
+          p_member_ids?: string[]
+        }
+        Returns: Record<string, unknown>[]
+      }
+      add_group_members: {
+        Args: {
+          p_group_id: string
+          p_member_ids: string[]
+        }
+        Returns: undefined
+      }
+      get_friends_overview: {
+        Args: {
+          p_user_id: string
+        }
+        Returns: {
+          friend_id: string
+          full_name: string | null
+          avatar_url: string | null
+          net_balance: number
+          expense_count: number
+          last_activity_at: string | null
+          has_overdue: boolean | null
+          next_due_date: string | null
+        }[]
+      }
+      settle_up_with_friend: {
+        Args: {
+          p_friend_id: string
+        }
+        Returns: Record<string, unknown>[]
+      }
+      upsert_friend_note: {
+        Args: {
+          p_friend_id: string
+          p_note: string
+        }
+        Returns: undefined
+      }
+      reject_expense: {
+        Args: {
+          p_expense_id: string
+          p_reason: string
+          p_other_text?: string | null
+        }
+        Returns: undefined
       }
     }
     Enums: {

@@ -1,14 +1,103 @@
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import React from 'react'
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  ActivityIndicator,
+  Alert,
+  Share,
+  StyleSheet,
+  Switch,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+
+import { formatAmount } from '@/lib/currency'
+import { getFriendMuted, setFriendMuted } from '@/lib/supabase/friends'
+import { useAuthStore } from '@/store/authStore'
+import { useCurrencyStore } from '@/store/currencyStore'
+import { useFriendsStore } from '@/store/friendsStore'
 
 export default function FriendSettingsScreen() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
+  const userId = useAuthStore(s => s.user?.id)
+  const { current: currency } = useCurrencyStore()
+  const { sharedExpenses, fetchSharedExpenses } = useFriendsStore()
+
   const params = useLocalSearchParams<{ friendId?: string; friendName?: string }>()
   const friendName = Array.isArray(params.friendName) ? params.friendName[0] : params.friendName
   const friendId = Array.isArray(params.friendId) ? params.friendId[0] : params.friendId
+
+  const [muted, setMuted] = useState(false)
+  const [settingsUnavailable, setSettingsUnavailable] = useState(false)
+  const [isLoadingSettings, setIsLoadingSettings] = useState(true)
+
+  useEffect(() => {
+    if (!userId || !friendId) return
+    let cancelled = false
+    setIsLoadingSettings(true)
+    void getFriendMuted(userId, friendId)
+      .then(result => {
+        if (cancelled) return
+        setMuted(result.muted)
+        setSettingsUnavailable(Boolean(result.unavailable))
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingSettings(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [userId, friendId])
+
+  useEffect(() => {
+    if (!userId || !friendId) return
+    void fetchSharedExpenses(userId, friendId)
+  }, [userId, friendId, fetchSharedExpenses])
+
+  const stats = useMemo(() => {
+    const total = sharedExpenses.reduce((sum, e) => sum + e.amount, 0)
+    const myShare = sharedExpenses.reduce((sum, e) => sum + e.shareAmount, 0)
+    return {
+      count: sharedExpenses.length,
+      total,
+      myShare,
+    }
+  }, [sharedExpenses])
+
+  const handleToggleMute = useCallback(
+    async (value: boolean) => {
+      if (!userId || !friendId) return
+      setMuted(value)
+      const result = await setFriendMuted(userId, friendId, value)
+      if (!result.success) {
+        setMuted(!value)
+        Alert.alert('Could not update setting', result.error ?? 'Please try again.')
+      }
+    },
+    [userId, friendId]
+  )
+
+  const handleExport = useCallback(async () => {
+    if (!friendName) return
+    const lines = sharedExpenses.map(
+      e =>
+        `${new Date(e.createdAt).toLocaleDateString()} · ${e.description} · ${formatAmount(e.amount, currency)} (your share: ${formatAmount(e.shareAmount, currency)})`
+    )
+    const summary = [
+      `SquaredSplit — shared expenses with ${friendName}`,
+      `Total: ${stats.count} expenses · ${formatAmount(stats.total, currency)} · your share ${formatAmount(stats.myShare, currency)}`,
+      '',
+      ...lines,
+    ].join('\n')
+
+    try {
+      await Share.share({ message: summary })
+    } catch {
+      // User cancelled the share sheet — nothing to do.
+    }
+  }, [friendName, sharedExpenses, stats, currency])
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top + 12 }]}>
@@ -19,17 +108,60 @@ export default function FriendSettingsScreen() {
       <Text style={styles.title}>Friend settings</Text>
       {friendName ? <Text style={styles.subtitle}>{friendName}</Text> : null}
 
+      {/* Mute notifications */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Coming soon</Text>
-        <Text style={styles.cardBody}>
-          Mute notifications, remove friend, and export history will live here.
-        </Text>
-        {friendId ? (
-          <Text style={styles.meta} selectable>
-            ID: {friendId}
-          </Text>
+        <View style={styles.cardRow}>
+          <View style={styles.cardTextWrap}>
+            <Text style={styles.cardTitle}>Mute notifications</Text>
+            <Text style={styles.cardBody}>
+              Stop receiving alerts about new expenses with this friend.
+            </Text>
+          </View>
+          {isLoadingSettings ? (
+            <ActivityIndicator color="#3273CD" />
+          ) : (
+            <Switch
+              value={muted}
+              onValueChange={handleToggleMute}
+              disabled={settingsUnavailable}
+              trackColor={{ false: '#D1D5DB', true: '#141414' }}
+              thumbColor="#FFFFFF"
+              accessibilityLabel="Mute notifications for this friend"
+            />
+          )}
+        </View>
+        {settingsUnavailable && !isLoadingSettings ? (
+          <Text style={styles.unavailable}>Not available on this environment yet.</Text>
         ) : null}
       </View>
+
+      {/* Shared history */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Shared history</Text>
+        <View style={styles.statRow}>
+          <View style={styles.stat}>
+            <Text style={styles.statValue}>{stats.count}</Text>
+            <Text style={styles.statLabel}>expenses</Text>
+          </View>
+          <View style={styles.stat}>
+            <Text style={styles.statValue}>{formatAmount(stats.total, currency)}</Text>
+            <Text style={styles.statLabel}>total value</Text>
+          </View>
+          <View style={styles.stat}>
+            <Text style={styles.statValue}>{formatAmount(stats.myShare, currency)}</Text>
+            <Text style={styles.statLabel}>your share</Text>
+          </View>
+        </View>
+        <TouchableOpacity style={styles.exportBtn} onPress={handleExport} activeOpacity={0.85}>
+          <Text style={styles.exportBtnText}>Export history</Text>
+        </TouchableOpacity>
+      </View>
+
+      {friendId ? (
+        <Text style={styles.meta} selectable>
+          ID: {friendId}
+        </Text>
+      ) : null}
     </View>
   )
 }
@@ -66,7 +198,14 @@ const styles = StyleSheet.create({
     borderColor: '#E5E7EB',
     padding: 16,
     backgroundColor: '#FAFAFC',
+    marginBottom: 16,
   },
+  cardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  cardTextWrap: { flex: 1, minWidth: 0 },
   cardTitle: {
     color: '#141414',
     fontSize: 18,
@@ -79,8 +218,39 @@ const styles = StyleSheet.create({
     fontFamily: 'Nunito_400Regular',
     lineHeight: 20,
   },
+  unavailable: {
+    marginTop: 8,
+    color: '#9CA3AF',
+    fontSize: 12,
+    fontFamily: 'Nunito_400Regular',
+  },
+  statRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  stat: { flex: 1 },
+  statValue: {
+    color: '#141414',
+    fontSize: 18,
+    fontFamily: 'Nunito_700Bold',
+  },
+  statLabel: {
+    color: '#9CA3AF',
+    fontSize: 12,
+    fontFamily: 'Nunito_500Medium',
+    marginTop: 2,
+  },
+  exportBtn: {
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#141414',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  exportBtnText: { color: '#FFFFFF', fontSize: 15, fontFamily: 'Nunito_600SemiBold' },
   meta: {
-    marginTop: 12,
+    marginTop: 8,
     color: '#9CA3AF',
     fontSize: 12,
     fontFamily: 'Nunito_400Regular',

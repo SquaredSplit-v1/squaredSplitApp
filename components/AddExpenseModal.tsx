@@ -1,4 +1,5 @@
 // components/AddExpenseModal.tsx
+import * as Haptics from 'expo-haptics'
 import { Image } from 'expo-image'
 import React, { useCallback, useEffect, useMemo } from 'react'
 import {
@@ -24,7 +25,11 @@ import { createExpense } from '@/lib/api/createExpense'
 import { labelForMatchedPhone } from '@/lib/contacts'
 import { formatAmount } from '@/lib/currency'
 import type { MatchedContact } from '@/lib/supabase/contacts'
-import { useAddExpenseStore } from '@/store/addExpenseStore'
+import {
+  dueDatePresetToIsoDate,
+  useAddExpenseStore,
+  type DueDatePreset,
+} from '@/store/addExpenseStore'
 import { useAuthStore } from '@/store/authStore'
 import { useContactsStore } from '@/store/contactsStore'
 import { useCurrencyStore } from '@/store/currencyStore'
@@ -33,7 +38,28 @@ interface Props {
   visible: boolean
   onClose: () => void
   onSuccess: () => void
+  /** When set, the expense is created inside this group. */
+  groupId?: string
+  groupName?: string
+  /** Participant ids to preselect (group members or a single friend). */
+  presetParticipantIds?: string[]
 }
+
+const CATEGORIES = [
+  { id: 'general', label: 'General', emoji: '🧾' },
+  { id: 'food', label: 'Food', emoji: '🍽️' },
+  { id: 'travel', label: 'Travel', emoji: '✈️' },
+  { id: 'shopping', label: 'Shopping', emoji: '🛍️' },
+  { id: 'bills', label: 'Bills', emoji: '💡' },
+  { id: 'entertainment', label: 'Fun', emoji: '🎬' },
+]
+
+const DUE_PRESETS: { id: DueDatePreset; label: string }[] = [
+  { id: 'none', label: 'None' },
+  { id: '1w', label: '1 week' },
+  { id: '2w', label: '2 weeks' },
+  { id: '1m', label: '1 month' },
+]
 
 // Equal split helper (integer cents)
 function calcEqualSplits(amount: number, ids: string[]): Record<string, number> {
@@ -49,7 +75,14 @@ function calcEqualSplits(amount: number, ids: string[]): Record<string, number> 
   return result
 }
 
-export default function AddExpenseModal({ visible, onClose, onSuccess }: Props) {
+export default function AddExpenseModal({
+  visible,
+  onClose,
+  onSuccess,
+  groupId,
+  groupName,
+  presetParticipantIds,
+}: Props) {
   const insets = useSafeAreaInsets()
   const user = useAuthStore(s => s.user)
   const { current: currency } = useCurrencyStore()
@@ -69,6 +102,9 @@ export default function AddExpenseModal({ visible, onClose, onSuccess }: Props) 
   const {
     amount,
     title,
+    note,
+    category,
+    dueDatePreset,
     paidBy,
     participants,
     splitType,
@@ -77,14 +113,26 @@ export default function AddExpenseModal({ visible, onClose, onSuccess }: Props) 
     isSubmitting,
     setAmount,
     setTitle,
+    setNote,
+    setCategory,
+    setDueDatePreset,
     setPaidBy,
     toggleParticipant,
+    setParticipants,
     setSplitType,
     setExactAmount,
     setPercentage,
     setSubmitting,
     reset,
   } = useAddExpenseStore()
+
+  // Preselect participants (a friend or a whole group) each time the modal opens.
+  useEffect(() => {
+    if (visible && presetParticipantIds && presetParticipantIds.length > 0) {
+      setParticipants(presetParticipantIds)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible])
 
   const myId = user?.id ?? ''
 
@@ -172,6 +220,10 @@ export default function AddExpenseModal({ visible, onClose, onSuccess }: Props) 
         paid_by: effectivePaidBy,
         participants: allParticipants,
         split_type: splitType,
+        category,
+        note: note.trim() ? note.trim() : null,
+        due_date: dueDatePresetToIsoDate(dueDatePreset),
+        group_id: groupId ?? null,
         exact_amounts: splitType === 'exact' ? { ...splitPreview } : undefined,
         percentages:
           splitType === 'percentage'
@@ -181,11 +233,13 @@ export default function AddExpenseModal({ visible, onClose, onSuccess }: Props) 
             : undefined,
       })
       reset()
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
       onSuccess()
       onClose()
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Could not create expense'
       console.error('[SS-021] createExpense', message)
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {})
       Alert.alert('Could not create expense', message)
     } finally {
       setSubmitting(false)
@@ -194,6 +248,10 @@ export default function AddExpenseModal({ visible, onClose, onSuccess }: Props) 
     canSubmit,
     user,
     title,
+    note,
+    category,
+    dueDatePreset,
+    groupId,
     amountFloat,
     effectivePaidBy,
     allParticipants,
@@ -226,7 +284,16 @@ export default function AddExpenseModal({ visible, onClose, onSuccess }: Props) 
           <View style={[s.root, { paddingTop: insets.top + 16 }]}>
             {/* Header */}
             <View style={s.header}>
-              <Text style={s.headerTitle}>Add Expense</Text>
+              <View style={s.headerTitleWrap}>
+                <Text style={s.headerTitle}>Add Expense</Text>
+                {groupName ? (
+                  <View style={s.groupChip}>
+                    <Text style={s.groupChipText} numberOfLines={1}>
+                      👥 {groupName}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
               <TouchableOpacity onPress={handleClose} hitSlop={12}>
                 <Text style={s.closeBtn}>✕</Text>
               </TouchableOpacity>
@@ -268,6 +335,50 @@ export default function AddExpenseModal({ visible, onClose, onSuccess }: Props) 
                   returnKeyType="done"
                   accessibilityLabel="Expense description"
                 />
+              </View>
+
+              {/* Category */}
+              <View style={s.section}>
+                <Text style={s.label}>Category</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={s.pillRow}>
+                    {CATEGORIES.map(c => (
+                      <Pressable
+                        key={c.id}
+                        style={[s.pill, category === c.id && s.pillActive]}
+                        onPress={() => setCategory(c.id)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: category === c.id }}
+                      >
+                        <Text style={[s.pillText, category === c.id && s.pillTextActive]}>
+                          {c.emoji} {c.label}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </ScrollView>
+              </View>
+
+              {/* Due date */}
+              <View style={s.section}>
+                <Text style={s.label}>Pay back by</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={s.pillRow}>
+                    {DUE_PRESETS.map(d => (
+                      <Pressable
+                        key={d.id}
+                        style={[s.pill, dueDatePreset === d.id && s.pillActive]}
+                        onPress={() => setDueDatePreset(d.id)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: dueDatePreset === d.id }}
+                      >
+                        <Text style={[s.pillText, dueDatePreset === d.id && s.pillTextActive]}>
+                          {d.label}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </ScrollView>
               </View>
 
               {/* Paid by */}
@@ -396,11 +507,13 @@ export default function AddExpenseModal({ visible, onClose, onSuccess }: Props) 
                       onPress={() => setSplitType(t)}
                     >
                       <Text style={[s.splitOptionText, splitType === t && s.splitOptionTextActive]}>
-                        {{
-                          equally: 'Equally',
-                          exact: `Exact ${currency.symbol}`,
-                          percentage: 'By %',
-                        }[t]}
+                        {
+                          {
+                            equally: 'Equally',
+                            exact: `Exact ${currency.symbol}`,
+                            percentage: 'By %',
+                          }[t]
+                        }
                       </Text>
                     </Pressable>
                   ))}
@@ -474,6 +587,21 @@ export default function AddExpenseModal({ visible, onClose, onSuccess }: Props) 
               {allParticipants.length < 2 && (
                 <Text style={s.hint}>Select at least 1 friend to split with</Text>
               )}
+
+              {/* Note */}
+              <View style={s.section}>
+                <Text style={s.label}>Note (optional)</Text>
+                <TextInput
+                  style={[s.textInput, s.noteInput]}
+                  value={note}
+                  onChangeText={setNote}
+                  placeholder="Add a note for the group…"
+                  placeholderTextColor="#C7C7C7"
+                  maxLength={500}
+                  multiline
+                  accessibilityLabel="Expense note"
+                />
+              </View>
             </ScrollView>
 
             {/* Submit */}
@@ -510,7 +638,15 @@ const s = StyleSheet.create({
     paddingHorizontal: 24,
     marginBottom: 8,
   },
+  headerTitleWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#141414' },
+  groupChip: {
+    backgroundColor: '#F3F4F5',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  groupChipText: { fontSize: 12, fontWeight: '600', color: '#6B6B6B' },
   closeBtn: { fontSize: 18, color: '#6B6B6B', padding: 4 },
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 24, paddingTop: 16 },
@@ -635,6 +771,7 @@ const s = StyleSheet.create({
   pctSymbol: { fontSize: 14, color: '#6B6B6B' },
   validationError: { fontSize: 12, color: '#EF4444', marginTop: 6 },
   hint: { fontSize: 13, color: '#9CA3AF', textAlign: 'center', marginTop: 8 },
+  noteInput: { height: 84, textAlignVertical: 'top', paddingTop: 12 },
   footer: {
     paddingHorizontal: 24,
     paddingTop: 12,

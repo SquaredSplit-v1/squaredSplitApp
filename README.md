@@ -60,8 +60,12 @@ cp .env.example .env.dev
 ```bash
 EXPO_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
 EXPO_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+EXPO_PUBLIC_SUPABASE_PHONE_AUTH_URL=https://xxxx.supabase.co/functions/v1/phone-auth
 EXPO_PUBLIC_APP_ENV=development
 ```
+
+> `EXPO_PUBLIC_SUPABASE_PHONE_AUTH_URL` is required for login — without it the
+> OTP screens cannot reach the `phone-auth` Edge Function.
 
 **Build-time only variables** (no prefix — used in `app.config.ts` and build
 scripts only, never in app bundle):
@@ -85,10 +89,19 @@ This project uses **Supabase Branching** with three persistent branches:
 Supabase Pro is required for branching (already subscribed).
 GitHub is connected to Supabase for auto branch preview environments.
 
-To run migrations locally:
+To apply migrations to the linked project (after `supabase login` and
+`supabase link --project-ref <ref>`):
 
 ```bash
-npx supabase db push --db-url "$EXPO_PUBLIC_SUPABASE_URL"
+npx supabase db push
+```
+
+Edge Functions used by the app:
+
+```bash
+npx supabase functions deploy phone-auth
+npx supabase functions deploy create-expense
+npx supabase functions deploy delete-account
 ```
 
 ---

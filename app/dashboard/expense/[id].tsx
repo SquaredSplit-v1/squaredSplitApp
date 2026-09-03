@@ -118,6 +118,23 @@ export default function ExpenseDetailScreen() {
   const yourShare = expense.participants.find(p => p.userId === userId)?.shareAmount ?? 0
   const others = expense.participants.filter(p => p.userId !== userId)
 
+  let dueInfo: { text: string; color: string } | null = null
+  if (expense.dueDate) {
+    const due = new Date(expense.dueDate + 'T12:00:00')
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const formatted = new Intl.DateTimeFormat('en-GB', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    }).format(due)
+    if (due < today) {
+      dueInfo = { text: `Was due ${formatted} · overdue`, color: '#F06767' }
+    } else {
+      dueInfo = { text: `Pay back by ${formatted}`, color: '#F09E42' }
+    }
+  }
+
   return (
     <View style={styles.screen}>
       <ScrollView
@@ -198,6 +215,12 @@ export default function ExpenseDetailScreen() {
             )}
           </View>
         </View>
+
+        {dueInfo ? (
+          <View style={styles.dueChip}>
+            <Text style={[styles.dueText, { color: dueInfo.color }]}>{dueInfo.text}</Text>
+          </View>
+        ) : null}
 
         {expense.note ? (
           <View style={styles.noteBox}>
@@ -372,6 +395,19 @@ const styles = StyleSheet.create({
     padding: 12,
     backgroundColor: '#F9F0BF',
     borderRadius: 8,
+  },
+  dueChip: {
+    marginTop: 20,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: '#F3F4F5',
+  },
+  dueText: {
+    fontSize: 13,
+    fontFamily: 'Nunito_600SemiBold',
+    lineHeight: 18,
   },
   noteText: {
     color: '#141414',

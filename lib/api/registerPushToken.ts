@@ -1,32 +1,50 @@
-import { FunctionsHttpError } from '@supabase/supabase-js'
+import { Platform } from 'react-native'
 
 import { supabase } from '@/lib/supabase'
 
-async function getErrorMessage(error: unknown, data: unknown): Promise<string> {
-  if (data && typeof data === 'object' && 'error' in data) {
-    const e = (data as { error?: unknown }).error
-    if (typeof e === 'string' && e.trim()) return e
-  }
-
-  if (error instanceof FunctionsHttpError && error.context) {
-    try {
-      const body = (await error.context.json()) as { error?: string }
-      if (typeof body.error === 'string' && body.error.trim()) return body.error
-    } catch {
-      // ignore
-    }
-  }
-
-  if (error instanceof Error && error.message) return error.message
-  return 'Failed to register push token'
-}
-
+/**
+ * Register (or refresh) the caller's Expo push token in the device_tokens
+ * table. Writes go through PostgREST with the user's JWT, so no Edge Function
+ * is needed.
+ */
 export async function registerPushToken(token: string | null): Promise<void> {
-  const { data, error } = await supabase.functions.invoke('notifications', {
-    body: { action: 'register', token },
+  if (!token) return
+
+  const { data: userData } = await supabase.auth.getUser()
+  const userId = userData.user?.id
+  if (!userId) return
+
+  const { data: existing, error: selectError } = await supabase
+    .from('device_tokens')
+    .select('id')
+    .eq('token', token)
+    .maybeSingle()
+
+  if (selectError) {
+    console.warn('[push] registerPushToken lookup', selectError.message)
+    return
+  }
+
+  if (existing) {
+    const { error: updateError } = await supabase
+      .from('device_tokens')
+      .update({ user_id: userId, platform: Platform.OS })
+      .eq('token', token)
+    if (updateError) {
+      console.warn('[push] registerPushToken update', updateError.message)
+    }
+    return
+  }
+
+  const { error: insertError } = await supabase.from('device_tokens').insert({
+    token,
+    user_id: userId,
+    platform: Platform.OS,
   })
 
-  if (error) throw new Error(await getErrorMessage(error, data))
+  if (insertError) {
+    console.warn('[push] registerPushToken insert', insertError.message)
+  }
 }
 
 /**
@@ -36,11 +54,9 @@ export async function registerPushToken(token: string | null): Promise<void> {
  */
 export async function unregisterPushToken(token: string): Promise<void> {
   try {
-    const { data, error } = await supabase.functions.invoke('notifications', {
-      body: { action: 'unregister', token },
-    })
+    const { error } = await supabase.from('device_tokens').delete().eq('token', token)
     if (error) {
-      console.warn('[push] unregisterPushToken', await getErrorMessage(error, data))
+      console.warn('[push] unregisterPushToken', error.message)
     }
   } catch (e) {
     console.warn('[push] unregisterPushToken', e)

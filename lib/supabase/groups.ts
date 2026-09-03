@@ -29,6 +29,60 @@ export interface Group {
   members: GroupMember[]
 }
 
+export interface GroupExpense {
+  id: string
+  description: string
+  amount: number
+  paidByName: string
+  paidBy: string
+  myShare: number
+  /** Net movement for the current user: positive = owed to user. */
+  netForMe: number
+  createdAt: string
+}
+
+export interface GroupDetail extends Group {
+  expenses: GroupExpense[]
+}
+
+/**
+ * Create a group with the caller as first member plus the given member ids.
+ * Goes through the create_group RPC (SECURITY DEFINER).
+ */
+export async function createGroup(
+  name: string,
+  memberIds: string[],
+  emoji?: string | null
+): Promise<{ data: { id: string } | null; error?: string }> {
+  try {
+    const { data, error } = await supabase.rpc('create_group', {
+      p_name: name,
+      p_emoji: emoji ?? null,
+      p_member_ids: memberIds,
+    })
+
+    if (error) {
+      if (error.code === 'PGRST202') {
+        return {
+          data: null,
+          error: 'Group creation is not available on this environment yet (missing create_group).',
+        }
+      }
+      throw error
+    }
+
+    const row = (Array.isArray(data) ? data[0] : data) as { id?: string } | undefined
+    if (!row?.id) return { data: null, error: 'Group created but no id returned' }
+    return { data: { id: row.id } }
+  } catch (error) {
+    console.error('[createGroup]', error)
+    return {
+      data: null,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    }
+  }
+}
+
 function roundMoney(n: number): number {
   return Math.round(n * 100) / 100
 }
@@ -51,9 +105,7 @@ function isTableMissingError(err: unknown): boolean {
   )
 }
 
-export async function getGroups(
-  userId: string
-): Promise<{ data: Group[]; error?: string }> {
+export async function getGroups(userId: string): Promise<{ data: Group[]; error?: string }> {
   // ── 1. Groups the user is a member of ──────────────────────────────────
   const { data: memberRows, error: memberErr } = await supabase
     .from('group_members')
@@ -178,8 +230,9 @@ export async function getGroups(
 }
 
 export async function getGroupById(
-  groupId: string
-): Promise<{ data: Group | null; error?: string }> {
+  groupId: string,
+  userId: string | null
+): Promise<{ data: GroupDetail | null; error?: string }> {
   const { data: g, error: gErr } = await supabase
     .from('groups')
     .select('id, name, emoji, avatar_url')
@@ -204,24 +257,115 @@ export async function getGroupById(
     return { data: null, error: mErr.message }
   }
 
+  // ── Expenses + participants for real balance computation ────────────────
+  const { data: expenseRows, error: expErr } = await supabase
+    .from('expenses')
+    .select('id, amount, description, paid_by, created_at')
+    .eq('group_id', groupId)
+    .order('created_at', { ascending: false })
+
+  if (expErr) {
+    if (isTableMissingError(expErr)) return { data: null }
+    console.error('[getGroupById] expenses query failed:', expErr)
+    return { data: null, error: expErr.message }
+  }
+
+  const expenses = expenseRows ?? []
+  const expenseIds = expenses.map(e => e.id)
+
+  let participantRows: { expense_id: string; user_id: string; share_amount: number }[] = []
+  if (expenseIds.length > 0) {
+    const { data: pRows, error: pErr } = await supabase
+      .from('expense_participants')
+      .select('expense_id, user_id, share_amount')
+      .in('expense_id', expenseIds)
+
+    if (pErr) {
+      if (isTableMissingError(pErr)) return { data: null }
+      console.error('[getGroupById] expense_participants query failed:', pErr)
+      return { data: null, error: pErr.message }
+    }
+    participantRows = pRows ?? []
+  }
+
+  // Payer names for the expenses list
+  const payerIds = [...new Set(expenses.map(e => e.paid_by))]
+  let payerNames = new Map<string, string>()
+  if (payerIds.length > 0) {
+    const { data: payers } = await supabase
+      .from('profiles')
+      .select('id, full_name')
+      .in('id', payerIds)
+    payerNames = new Map((payers ?? []).map(p => [p.id, p.full_name ?? 'Member']))
+  }
+
+  // ── Per-member net balance within this group ────────────────────────────
+  const memberNet = new Map<string, number>()
+  const shareFor = (expenseId: string, userId: string): number =>
+    participantRows
+      .filter(p => p.expense_id === expenseId && p.user_id === userId)
+      .reduce((s, p) => s + Number(p.share_amount), 0)
+
+  for (const exp of expenses) {
+    const total = Number(exp.amount)
+    for (const m of members ?? []) {
+      const myShare = shareFor(exp.id, m.user_id)
+      const net = memberNet.get(m.user_id) ?? 0
+      if (exp.paid_by === m.user_id) {
+        memberNet.set(m.user_id, net + (total - myShare))
+      } else {
+        memberNet.set(m.user_id, net - myShare)
+      }
+    }
+  }
+
+  const memberList: GroupMember[] = (members ?? []).map(m => {
+    const p = m.profiles as { full_name: string | null; avatar_url: string | null } | null
+    const net = roundMoney(memberNet.get(m.user_id) ?? 0)
+    return {
+      userId: m.user_id,
+      name: p?.full_name ?? 'Member',
+      avatarUrl: p?.avatar_url ?? null,
+      amount: Math.abs(net),
+      balanceType: (net > 0.005
+        ? 'owes_you'
+        : net < -0.005
+          ? 'you_owe'
+          : 'settled') as GroupBalanceType,
+    }
+  })
+
+  const myNet = roundMoney(memberNet.get(userId ?? '') ?? 0)
+
+  const groupExpenses: GroupExpense[] = expenses.map(exp => {
+    const myShare = shareFor(exp.id, userId ?? '')
+    const paidByMe = exp.paid_by === userId
+    return {
+      id: exp.id,
+      description: exp.description || 'Expense',
+      amount: roundMoney(Number(exp.amount)),
+      paidBy: exp.paid_by,
+      paidByName: payerNames.get(exp.paid_by) ?? 'Member',
+      myShare: roundMoney(myShare),
+      netForMe: roundMoney(paidByMe ? Number(exp.amount) - myShare : -myShare),
+      createdAt: exp.created_at,
+    }
+  })
+
   return {
     data: {
       id: g.id,
       name: g.name,
       emoji: g.emoji ?? null,
       avatarUrl: g.avatar_url ?? null,
-      balanceType: 'settled',
-      amount: 0,
-      members: (members ?? []).map(m => {
-        const p = m.profiles as { full_name: string | null; avatar_url: string | null } | null
-        return {
-          userId: m.user_id,
-          name: p?.full_name ?? 'Member',
-          avatarUrl: p?.avatar_url ?? null,
-          amount: 0,
-          balanceType: 'settled' as GroupBalanceType,
-        }
-      }),
+      balanceType: (myNet > 0.005
+        ? 'owes_you'
+        : myNet < -0.005
+          ? 'you_owe'
+          : 'settled') as GroupBalanceType,
+      amount: Math.abs(myNet),
+      members: memberList,
+      expenses: groupExpenses,
     },
   }
 }

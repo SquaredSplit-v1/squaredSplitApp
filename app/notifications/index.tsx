@@ -18,14 +18,20 @@ import {
   SuccessToast,
 } from '@/components/notifications'
 import type { NotificationRequest, RejectionReason } from '@/components/notifications/types'
+import { REJECTION_OPTIONS } from '@/components/notifications/types'
 import {
   dismissIncomingNotification,
   fetchIncomingExpenseNotifications,
 } from '@/lib/api/incomingNotifications'
 import { getNotificationPermissionStatus } from '@/lib/push/setupPushNotifications'
+import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/store/authStore'
 
 type PermissionStatus = 'granted' | 'denied' | 'undetermined' | 'checking'
+
+const REASON_LABELS: Record<RejectionReason, string> = Object.fromEntries(
+  REJECTION_OPTIONS.map(o => [o.value, o.label])
+) as Record<RejectionReason, string>
 
 function NotificationsPermissionBanner({ onEnable }: { onEnable: () => void }) {
   return (
@@ -122,7 +128,23 @@ function Notifications() {
   }, [])
 
   const handleRejectionSave = useCallback(
-    async (_reason: RejectionReason, _otherText?: string) => {
+    async (reason: RejectionReason, otherText?: string) => {
+      if (selectedItem?.expenseId) {
+        // Persist the rejection so the expense creator is notified. Failures
+        // are non-blocking — the notification is still dismissed below.
+        const reasonLabel =
+          reason === 'other' ? otherText?.trim() || 'other' : (REASON_LABELS[reason] ?? reason)
+        try {
+          const { error } = await supabase.rpc('reject_expense', {
+            p_expense_id: selectedItem.expenseId,
+            p_reason: reasonLabel,
+            p_other_text: reason === 'other' ? otherText?.trim() || null : null,
+          })
+          if (error) console.warn('[notifications] reject_expense', error.message)
+        } catch (e) {
+          console.warn('[notifications] reject_expense', e)
+        }
+      }
       if (selectedItem) {
         await removeAndDismiss(selectedItem)
       }
