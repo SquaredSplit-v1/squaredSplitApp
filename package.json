@@ -4,9 +4,9 @@
   "version": "1.0.0",
   "scripts": {
     "start": "expo start",
-    "start:dev": "EXPO_ENV_FILE=.env.dev APP_ENV=development expo start",
-    "start:devbuild": "EXPO_ENV_FILE=.env.dev APP_ENV=development expo start --dev-client",
-    "start:staging": "EXPO_ENV_FILE=.env.staging APP_ENV=staging expo start",
+    "start:dev": "APP_ENV=development expo start",
+    "start:devbuild": "APP_ENV=development expo start --dev-client",
+    "start:staging": "APP_ENV=staging expo start",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo run:android",
     "ios": "expo run:ios",
