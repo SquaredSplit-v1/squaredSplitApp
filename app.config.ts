@@ -49,6 +49,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: env.name,
   slug: 'squaredSplitApp',
+  scheme: 'squaredsplit',
   // v0.1.0 — aligned with EAS build channel "production".
   // runtimeVersion uses sdkVersion so OTA updates only target compatible builds.
   version: '0.1.0',
@@ -69,6 +70,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         'SquaredSplit needs access to your photo library to set a profile picture.',
       NSCameraUsageDescription:
         'SquaredSplit needs access to your camera to take a profile picture.',
+      NSContactsUsageDescription:
+        'SquaredSplit needs access to your contacts so you can find friends who already use the app.',
     },
   },
   android: {
