@@ -72,6 +72,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         'SquaredSplit needs access to your camera to take a profile picture.',
       NSContactsUsageDescription:
         'SquaredSplit needs access to your contacts so you can find friends who already use the app.',
+      ITSAppUsesNonExemptEncryption: false,
     },
   },
   android: {
