@@ -25,12 +25,12 @@
       "environment": "preview",
       "autoIncrement": true
     },
-    // Store builds. After every successful build the artifacts are submitted
-    // automatically (autoSubmit → submit.production): iOS goes to TestFlight,
-    // Android to the Play Console internal testing track.
+    // Store builds. Run with the auto-submit flag to push the finished
+    // artifacts to the stores (npm run build:production does this):
+    //   eas build --profile production --platform all --auto-submit
+    // iOS lands in TestFlight, Android in the Play internal testing track.
     "production": {
       "autoIncrement": true,
-      "autoSubmit": true,
       "channel": "production",
       "environment": "production"
     }
