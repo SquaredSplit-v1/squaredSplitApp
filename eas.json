@@ -40,18 +40,21 @@
       "ios": {
         // Apple ID used by EAS Submit for App Store Connect access.
         "appleId": "pedapati.basanth@gmail.com",
-        // 10-digit Apple ID of the app record in App Store Connect
-        // (App Store Connect → App Information → Apple ID).
-        // The first interactive `eas submit -p ios --latest` can create the
-        // app record automatically — fill this afterwards.
-        "ascAppId": "TODO_ASC_APP_ID",
-        // 10-character Team ID (Apple Developer Membership page).
-        "appleTeamId": "TODO_APPLE_TEAM_ID"
-        // The first submit also needs an app-specific password (appleid.apple.com
-        // → Sign-In and Security → App-Specific Passwords):
-        //   EXPO_APPLE_APP_SPECIFIC_PASSWORD=xxxx-xxxx-xxxx-xxxx eas submit -p ios --latest
-        // After the first submit, or with an ASC API key configured, autoSubmit
-        // works unattended.
+        //
+        // FIRST-TIME SETUP (interactive, once):
+        //   1. Create an app-specific password at appleid.apple.com
+        //      (Sign-In and Security → App-Specific Passwords).
+        //   2. Run:
+        //        EXPO_APPLE_APP_SPECIFIC_PASSWORD=xxxx-xxxx-xxxx-xxxx \
+        //          eas submit --platform ios --latest
+        //      Pick your team when prompted; EAS creates/selects the app
+        //      record on App Store Connect and uploads the build (TestFlight).
+        //   3. Then fill in these two keys so future auto-submits are
+        //      fully unattended:
+        //        "ascAppId":    10-digit Apple ID of the app
+        //                       (App Store Connect → App Information),
+        //        "appleTeamId": 10-character Team ID
+        //                       (Apple Developer → Membership details).
       },
       "android": {
         // Play Console → Setup → API access → service account JSON key.
