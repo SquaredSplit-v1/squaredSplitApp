@@ -1,5 +1,7 @@
 import { create } from 'zustand'
 
+import type { InviteDraft } from '@/lib/supabase/invites'
+
 export type SplitType = 'equally' | 'exact' | 'percentage'
 
 export type DueDatePreset = 'none' | '1w' | '2w' | '1m'
@@ -12,6 +14,8 @@ interface AddExpenseState {
   dueDatePreset: DueDatePreset
   paidBy: string | null
   participants: string[]
+  /** Contacts invited via WhatsApp — not on SquaredSplit yet. */
+  invites: InviteDraft[]
   splitType: SplitType
   exactAmounts: Record<string, string>
   percentages: Record<string, string>
@@ -25,6 +29,7 @@ interface AddExpenseState {
   setPaidBy: (id: string) => void
   toggleParticipant: (id: string) => void
   setParticipants: (ids: string[]) => void
+  toggleInvite: (draft: InviteDraft) => void
   setSplitType: (t: SplitType) => void
   setExactAmount: (userId: string, value: string) => void
   setPercentage: (userId: string, value: string) => void
@@ -40,6 +45,7 @@ const defaults = {
   dueDatePreset: 'none' as DueDatePreset,
   paidBy: null,
   participants: [],
+  invites: [] as InviteDraft[],
   splitType: 'equally' as SplitType,
   exactAmounts: {},
   percentages: {},
@@ -77,6 +83,15 @@ export const useAddExpenseStore = create<AddExpenseState>((set, get) => ({
   },
 
   setParticipants: ids => set({ participants: ids }),
+
+  toggleInvite: draft => {
+    const { invites } = get()
+    if (invites.some(i => i.phone === draft.phone)) {
+      set({ invites: invites.filter(i => i.phone !== draft.phone) })
+    } else {
+      set({ invites: [...invites, draft] })
+    }
+  },
 
   setSplitType: t => set({ splitType: t }),
   setExactAmount: (userId, val) =>

@@ -307,6 +307,53 @@ export type Database = {
           },
         ]
       }
+      expense_invites: {
+        Row: {
+          id: string
+          expense_id: string
+          inviter_id: string
+          invitee_phone: string
+          invitee_name: string | null
+          share_amount: number
+          status: string
+          accepted_by: string | null
+          accepted_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          expense_id: string
+          inviter_id: string
+          invitee_phone: string
+          invitee_name?: string | null
+          share_amount: number
+          status?: string
+          accepted_by?: string | null
+          accepted_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          expense_id?: string
+          inviter_id?: string
+          invitee_phone?: string
+          invitee_name?: string | null
+          share_amount?: number
+          status?: string
+          accepted_by?: string | null
+          accepted_at?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'expense_invites_expense_id_fkey'
+            columns: ['expense_id']
+            isOneToOne: false
+            referencedRelation: 'expenses'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       group_members: {
         Row: {
           created_at: string | null
@@ -598,6 +645,22 @@ export type Database = {
         Args: { p_friend_id: string; p_note: string }
         Returns: undefined
       }
+      create_expense_with_invites: {
+        Args: {
+          p_title: string
+          p_amount: number
+          p_category?: string
+          p_paid_by: string
+          p_group_id?: string | null
+          p_due_date?: string | null
+          p_note?: string | null
+          p_participants: Json
+          p_invites: Json
+        }
+        Returns: Json
+      }
+      get_expense_invite: { Args: { p_invite_id: string }; Returns: Json }
+      accept_expense_invite: { Args: { p_invite_id: string }; Returns: Json }
     }
     Enums: {
       split_type: 'equal' | 'exact' | 'percentage'

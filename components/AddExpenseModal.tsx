@@ -25,6 +25,8 @@ import { createExpense } from '@/lib/api/createExpense'
 import { labelForMatchedPhone } from '@/lib/contacts'
 import { formatAmount } from '@/lib/currency'
 import type { MatchedContact } from '@/lib/supabase/contacts'
+import { createExpenseWithInvites, type CreatedExpenseWithInvites } from '@/lib/supabase/invites'
+import { expenseInviteMessage, inviteLink, whatsappUrl } from '@/lib/whatsapp'
 import {
   dueDatePresetToIsoDate,
   useAddExpenseStore,
@@ -75,6 +77,30 @@ function calcEqualSplits(amount: number, ids: string[]): Record<string, number> 
   return result
 }
 
+/**
+ * After creating an expense with invites, walk the user through opening
+ * WhatsApp for each invitee (one at a time — the OS allows one external app
+ * open at a time). Each step can be skipped.
+ */
+async function openWhatsAppInvitesChain(
+  items: { name: string | null; phone: string; url: string }[]
+): Promise<void> {
+  for (const item of items) {
+    await new Promise<void>(resolve => {
+      Alert.alert('Send WhatsApp invite', `Invite ${item.name || item.phone} on WhatsApp?`, [
+        { text: 'Skip', style: 'cancel', onPress: () => resolve() },
+        {
+          text: 'Send',
+          onPress: () => {
+            void Linking.openURL(item.url).catch(() => {})
+            resolve()
+          },
+        },
+      ])
+    })
+  }
+}
+
 export default function AddExpenseModal({
   visible,
   onClose,
@@ -89,6 +115,7 @@ export default function AddExpenseModal({
 
   const loadContacts = useContactsStore(s => s.loadContacts)
   const matchedContacts = useContactsStore(s => s.matched)
+  const unmatchedContacts = useContactsStore(s => s.unmatched)
   const rawWithPhones = useContactsStore(s => s.rawWithPhones)
   const contactsLoading = useContactsStore(s => s.isLoading)
   const permissionStatus = useContactsStore(s => s.permissionStatus)
@@ -107,6 +134,7 @@ export default function AddExpenseModal({
     dueDatePreset,
     paidBy,
     participants,
+    invites,
     splitType,
     exactAmounts,
     percentages,
@@ -119,6 +147,7 @@ export default function AddExpenseModal({
     setPaidBy,
     toggleParticipant,
     setParticipants,
+    toggleInvite,
     setSplitType,
     setExactAmount,
     setPercentage,
@@ -152,8 +181,26 @@ export default function AddExpenseModal({
     [participants, myId]
   )
 
+  /** Device contacts NOT on SquaredSplit — invite candidates. */
+  const unmatchedRows = useMemo(() => {
+    return [...unmatchedContacts]
+      .map(c => ({ id: c.id, name: c.name, phone: c.phones[0] }))
+      .filter(c => Boolean(c.phone))
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
+  }, [unmatchedContacts])
+
+  const invitedPhones = useMemo(() => new Set(invites.map(i => i.phone)), [invites])
+
+  /** Everyone in the split: app users + WhatsApp invitees. */
+  const peopleCount = allParticipants.length + invites.length
+
   const effectivePaidBy = paidBy ?? myId
   const amountFloat = parseFloat(amount) || 0
+
+  const inviteSharePreview = useMemo(() => {
+    if (!peopleCount || amountFloat <= 0) return 0
+    return Math.floor(Math.round(amountFloat * 100) / peopleCount) / 100
+  }, [peopleCount, amountFloat])
 
   const splitPreview = useMemo<Record<string, number>>(() => {
     if (!allParticipants.length || amountFloat <= 0) return {}
@@ -192,11 +239,15 @@ export default function AddExpenseModal({
       allParticipants.reduce((a, id) => a + (parseFloat(percentages[id] ?? '0') || 0), 0) - 100
     ) < 0.5
 
+  /** Invited people join with an equal share, so invites require equal split. */
+  const invitesNeedEqual = invites.length > 0 && splitType !== 'equally'
+
   const canSubmit =
     amountFloat > 0 &&
     title.trim().length > 0 &&
-    allParticipants.length >= 2 &&
+    peopleCount >= 2 &&
     !isSubmitting &&
+    !invitesNeedEqual &&
     exactSumOk &&
     pctSumOk
 
@@ -214,28 +265,67 @@ export default function AddExpenseModal({
     Keyboard.dismiss()
     setSubmitting(true)
     try {
-      await createExpense({
-        title: title.trim(),
-        amount: amountFloat,
-        paid_by: effectivePaidBy,
-        participants: allParticipants,
-        split_type: splitType,
-        category,
-        note: note.trim() ? note.trim() : null,
-        due_date: dueDatePresetToIsoDate(dueDatePreset),
-        group_id: groupId ?? null,
-        exact_amounts: splitType === 'exact' ? { ...splitPreview } : undefined,
-        percentages:
-          splitType === 'percentage'
-            ? Object.fromEntries(
-                allParticipants.map(id => [id, parseFloat(percentages[id] ?? '0') || 0])
-              )
-            : undefined,
-      })
+      let createdWithInvites: CreatedExpenseWithInvites | null = null
+
+      if (invites.length > 0) {
+        // Invite flow — equal split across app users + invitees, then send
+        // WhatsApp links for each invite.
+        createdWithInvites = await createExpenseWithInvites({
+          title: title.trim(),
+          amount: amountFloat,
+          paidBy: effectivePaidBy,
+          participants: allParticipants,
+          invites,
+          groupId: groupId ?? null,
+          category,
+          note: note.trim() ? note.trim() : null,
+          dueDate: dueDatePresetToIsoDate(dueDatePreset),
+        })
+      } else {
+        await createExpense({
+          title: title.trim(),
+          amount: amountFloat,
+          paid_by: effectivePaidBy,
+          participants: allParticipants,
+          split_type: splitType,
+          category,
+          note: note.trim() ? note.trim() : null,
+          due_date: dueDatePresetToIsoDate(dueDatePreset),
+          group_id: groupId ?? null,
+          exact_amounts: splitType === 'exact' ? { ...splitPreview } : undefined,
+          percentages:
+            splitType === 'percentage'
+              ? Object.fromEntries(
+                  allParticipants.map(id => [id, parseFloat(percentages[id] ?? '0') || 0])
+                )
+              : undefined,
+        })
+      }
+
       reset()
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
       onSuccess()
       onClose()
+
+      if (createdWithInvites && createdWithInvites.invites.length > 0) {
+        const inviterName = user.user_metadata?.full_name?.trim() || 'A friend'
+        await openWhatsAppInvitesChain(
+          createdWithInvites.invites.map(i => ({
+            name: i.name,
+            phone: i.phone,
+            url: whatsappUrl(
+              i.phone,
+              expenseInviteMessage({
+                inviterName,
+                expenseTitle: createdWithInvites.title,
+                amountLabel: formatAmount(createdWithInvites.amount, currency),
+                shareLabel: formatAmount(i.share_amount, currency),
+                link: inviteLink(i.invite_id),
+              })
+            ),
+          }))
+        )
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Could not create expense'
       console.error('[SS-021] createExpense', message)
@@ -247,6 +337,7 @@ export default function AddExpenseModal({
   }, [
     canSubmit,
     user,
+    invites,
     title,
     note,
     category,
@@ -258,6 +349,7 @@ export default function AddExpenseModal({
     splitType,
     splitPreview,
     percentages,
+    currency,
     reset,
     onSuccess,
     onClose,
@@ -496,6 +588,41 @@ export default function AddExpenseModal({
                 )}
               </View>
 
+              {/* Invite via WhatsApp — contacts not on SquaredSplit */}
+              {unmatchedRows.length > 0 && (
+                <View style={s.section}>
+                  <Text style={s.label}>
+                    Not on SquaredSplit
+                    <Text style={s.labelSub}> · invite via WhatsApp</Text>
+                  </Text>
+                  {unmatchedRows.map(c => {
+                    const selected = invitedPhones.has(c.phone)
+                    return (
+                      <Pressable
+                        key={c.id}
+                        style={s.contactRow}
+                        onPress={() => toggleInvite({ phone: c.phone, name: c.name })}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: selected }}
+                      >
+                        <View style={[s.avatar, { backgroundColor: '#FEF3E8' }]}>
+                          <Text style={s.avatarText}>{c.name[0]?.toUpperCase() ?? '?'}</Text>
+                        </View>
+                        <View style={s.inviteNameBlock}>
+                          <Text style={s.contactName} numberOfLines={1}>
+                            {c.name}
+                          </Text>
+                          <Text style={s.invitePhoneHint}>Invite on WhatsApp</Text>
+                        </View>
+                        <View style={[s.checkbox, selected && s.checkboxChecked]}>
+                          {selected && <Text style={s.checkmark}>✓</Text>}
+                        </View>
+                      </Pressable>
+                    )
+                  })}
+                </View>
+              )}
+
               {/* Split toggle */}
               <View style={s.section}>
                 <Text style={s.label}>Split</Text>
@@ -521,7 +648,7 @@ export default function AddExpenseModal({
               </View>
 
               {/* Preview */}
-              {allParticipants.length >= 2 && amountFloat > 0 && (
+              {peopleCount >= 2 && amountFloat > 0 && (
                 <View style={s.section}>
                   <Text style={s.label}>Preview</Text>
                   {allParticipants.map(id => (
@@ -573,6 +700,27 @@ export default function AddExpenseModal({
                     </View>
                   ))}
 
+                  {invites.map(i => (
+                    <View key={i.phone} style={s.previewRow}>
+                      <View style={[s.previewAvatar, { backgroundColor: '#FEF3E8' }]}>
+                        <Text style={s.previewAvatarText}>
+                          {(i.name?.[0] ?? '?').toUpperCase()}
+                        </Text>
+                      </View>
+                      <View style={s.inviteNameBlock}>
+                        <Text style={s.previewName} numberOfLines={1}>
+                          {i.name || i.phone}
+                        </Text>
+                        <Text style={s.invitePhoneHint}>will be invited</Text>
+                      </View>
+                      {splitType === 'equally' && (
+                        <Text style={s.previewAmount}>
+                          {formatAmount(inviteSharePreview, currency)}
+                        </Text>
+                      )}
+                    </View>
+                  ))}
+
                   {splitType === 'exact' && !exactSumOk && (
                     <Text style={s.validationError}>
                       Total must equal {formatAmount(amountFloat, currency)}
@@ -581,11 +729,16 @@ export default function AddExpenseModal({
                   {splitType === 'percentage' && !pctSumOk && (
                     <Text style={s.validationError}>Percentages must sum to 100%</Text>
                   )}
+                  {invitesNeedEqual && (
+                    <Text style={s.validationError}>
+                      Invited friends split equally — switch to “Equally”
+                    </Text>
+                  )}
                 </View>
               )}
 
-              {allParticipants.length < 2 && (
-                <Text style={s.hint}>Select at least 1 friend to split with</Text>
+              {peopleCount < 2 && (
+                <Text style={s.hint}>Select a friend or invite a contact to split with</Text>
               )}
 
               {/* Note */}
@@ -715,6 +868,8 @@ const s = StyleSheet.create({
   },
   avatarText: { fontSize: 14, fontWeight: '600', color: '#141414' },
   contactName: { flex: 1, fontSize: 15, color: '#141414' },
+  inviteNameBlock: { flex: 1, minWidth: 0, gap: 2 },
+  invitePhoneHint: { fontSize: 12, color: '#9CA3AF' },
   checkbox: {
     width: 22,
     height: 22,
