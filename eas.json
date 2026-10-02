@@ -23,16 +23,27 @@
       "distribution": "internal",
       "channel": "staging",
       "environment": "preview",
+      "env": {
+        "APP_ENV": "staging"
+      },
       "autoIncrement": true
     },
     // Store builds. Run with the auto-submit flag to push the finished
     // artifacts to the stores (npm run build:production does this):
     //   eas build --profile production --platform all --auto-submit
     // iOS lands in TestFlight, Android in the Play internal testing track.
+    //
+    // APP_ENV is pinned here (not just in the linked EAS environment) because
+    // app.config.ts derives the bundle identifier from it during config
+    // resolution — a production build that evaluated as "development" shipped
+    // with the .dev bundle id once already.
     "production": {
       "autoIncrement": true,
       "channel": "production",
-      "environment": "production"
+      "environment": "production",
+      "env": {
+        "APP_ENV": "production"
+      }
     }
   },
   "submit": {
