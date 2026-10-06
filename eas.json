@@ -52,17 +52,11 @@
         // Apple ID used by EAS Submit for App Store Connect access.
         "appleId": "pedapati.basanth@gmail.com",
         "appleTeamId": "GDG397AAU5",
-        //
-        // FIRST-TIME SETUP (interactive, once) — must run with
-        // APP_ENV=production so app.config.ts resolves the PRODUCTION bundle
-        // id (com.squaredsplit.app). Without it the config evaluates as
-        // development and the submit targets the .dev app record:
-        //   APP_ENV=production eas submit --platform ios --latest
-        // EAS creates the app record for com.squaredsplit.app and uploads to
-        // TestFlight. Afterwards fill in:
-        //   "ascAppId": 10-digit Apple ID of the app (App Store Connect →
-        //               App Information) — makes all future submits
-        //               environment-independent and fully unattended.
+        // Apple ID of the com.squaredsplit.app record in App Store Connect.
+        // Pinning this makes submits independent of local APP_ENV — without
+        // it, eas submit evaluates app.config.ts in the local shell and can
+        // target the wrong (dev) app record.
+        "ascAppId": "6801000587"
       },
       "android": {
         // Play Console → Setup → API access → service account JSON key.
