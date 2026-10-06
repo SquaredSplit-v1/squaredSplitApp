@@ -20,7 +20,7 @@
     "build:preview:ios": "eas build --profile preview --platform ios",
     "build:preview:android": "eas build --profile preview --platform android",
     "build:production": "eas build --profile production --platform all --auto-submit-with-profile production",
-    "submit:production": "eas submit --profile production --platform all",
+    "submit:production": "APP_ENV=production eas submit --profile production --platform all",
     "update:dev": "eas update --branch development",
     "update:preview": "eas update --branch preview",
     "update:staging": "eas update --branch staging",

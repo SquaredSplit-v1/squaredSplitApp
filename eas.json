@@ -51,21 +51,18 @@
       "ios": {
         // Apple ID used by EAS Submit for App Store Connect access.
         "appleId": "pedapati.basanth@gmail.com",
+        "appleTeamId": "GDG397AAU5",
         //
-        // FIRST-TIME SETUP (interactive, once):
-        //   1. Create an app-specific password at appleid.apple.com
-        //      (Sign-In and Security → App-Specific Passwords).
-        //   2. Run:
-        //        EXPO_APPLE_APP_SPECIFIC_PASSWORD=xxxx-xxxx-xxxx-xxxx \
-        //          eas submit --platform ios --latest
-        //      Pick your team when prompted; EAS creates/selects the app
-        //      record on App Store Connect and uploads the build (TestFlight).
-        //   3. Then fill in these two keys so future auto-submits are
-        //      fully unattended:
-        //        "ascAppId":    10-digit Apple ID of the app
-        //                       (App Store Connect → App Information),
-        //        "appleTeamId": 10-character Team ID
-        //                       (Apple Developer → Membership details).
+        // FIRST-TIME SETUP (interactive, once) — must run with
+        // APP_ENV=production so app.config.ts resolves the PRODUCTION bundle
+        // id (com.squaredsplit.app). Without it the config evaluates as
+        // development and the submit targets the .dev app record:
+        //   APP_ENV=production eas submit --platform ios --latest
+        // EAS creates the app record for com.squaredsplit.app and uploads to
+        // TestFlight. Afterwards fill in:
+        //   "ascAppId": 10-digit Apple ID of the app (App Store Connect →
+        //               App Information) — makes all future submits
+        //               environment-independent and fully unattended.
       },
       "android": {
         // Play Console → Setup → API access → service account JSON key.
