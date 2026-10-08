@@ -37,11 +37,23 @@ export default function ProfileSetupScreen() {
   useEffect(() => {
     if (!user?.id) return
     void getProfile(user.id).then(profile => {
-      if (!profile) return
-      if (profile.full_name) setDisplayName(profile.full_name)
-      if (profile.avatar_url) setAvatarUri(profile.avatar_url)
+      // Social sign-ins (Google/Apple) already know the user's name and
+      // picture — prefill the form so setup is a single "Save & Continue".
+      const meta = (user.user_metadata ?? {}) as Record<string, unknown>
+      const metaName =
+        typeof meta.full_name === 'string'
+          ? meta.full_name
+          : typeof meta.name === 'string'
+            ? meta.name
+            : ''
+      const metaAvatar = typeof meta.avatar_url === 'string' ? meta.avatar_url : null
+
+      const name = profile?.full_name || metaName
+      if (name) setDisplayName(name.slice(0, MAX_NAME_LENGTH))
+      const avatar = profile?.avatar_url || metaAvatar
+      if (avatar) setAvatarUri(avatar)
     })
-  }, [user?.id])
+  }, [user?.id, user?.user_metadata])
 
   // ─── Handlers ───────────────────────────────────────────────────────────────
 

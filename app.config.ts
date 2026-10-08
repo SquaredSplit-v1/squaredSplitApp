@@ -45,6 +45,19 @@ const envConfig = {
 type Env = keyof typeof envConfig
 const env = envConfig[(APP_ENV as Env) ?? 'development']
 
+// Google OAuth client IDs (see docs/social-login-setup.md). The reverse-DNS
+// schemes derived from them are registered as URL schemes / intent filters so
+// the browser-based Google prompt can hand the ID token back to the app.
+const GOOGLE_IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID
+const GOOGLE_ANDROID_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID
+
+const googleIosScheme = GOOGLE_IOS_CLIENT_ID
+  ? GOOGLE_IOS_CLIENT_ID.split('.').reverse().join('.')
+  : null
+const googleAndroidScheme = GOOGLE_ANDROID_CLIENT_ID
+  ? GOOGLE_ANDROID_CLIENT_ID.split('.').reverse().join('.')
+  : null
+
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: env.name,
@@ -65,6 +78,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     bundleIdentifier: env.bundleIdentifier,
     supportsTablet: false,
+    entitlements: {
+      // Required for native Sign in with Apple (expo-apple-authentication).
+      // EAS syncs this capability into the provisioning profile at build time.
+      'com.apple.developer.applesignin': ['Default'],
+    },
     infoPlist: {
       NSPhotoLibraryUsageDescription:
         'SquaredSplit needs access to your photo library to set a profile picture.',
@@ -73,11 +91,34 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       NSContactsUsageDescription:
         'SquaredSplit needs access to your contacts so you can find friends who already use the app.',
       ITSAppUsesNonExemptEncryption: false,
+      ...(googleIosScheme
+        ? {
+            CFBundleURLTypes: [
+              // Deep-link scheme (also added automatically by `scheme` above)
+              { CFBundleURLName: env.bundleIdentifier, CFBundleURLSchemes: ['squaredsplit'] },
+              // Reversed Google iOS client ID — the redirect Google sends the
+              // ID token back to after the browser sign-in prompt.
+              { CFBundleURLName: googleIosScheme, CFBundleURLSchemes: [googleIosScheme] },
+            ],
+          }
+        : {}),
     },
   },
   android: {
     package: env.androidPackage,
     permissions: ['android.permission.READ_CONTACTS', 'android.permission.POST_NOTIFICATIONS'],
+    ...(googleAndroidScheme
+      ? {
+          intentFilters: [
+            {
+              action: 'VIEW',
+              autoVerify: false,
+              data: [{ scheme: googleAndroidScheme }],
+              category: ['BROWSABLE', 'DEFAULT'],
+            },
+          ],
+        }
+      : {}),
     adaptiveIcon: {
       foregroundImage: './assets/adaptive-icon.png',
       backgroundColor: '#F3F4F5',

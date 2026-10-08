@@ -23,7 +23,9 @@ import Animated, {
 } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
+import { AppleButton, GoogleButton, OrContinueWithDivider } from '@/components/auth/SocialButtons'
 import { sendOtp } from '@/lib/auth'
+import { signInWithApple, useAppleAvailability, useGoogleSignIn } from '@/lib/socialAuth'
 
 import AppIcon from '../../assets/app-icon.svg'
 import BlurEllipse from '../../assets/auth/Blur-Ellipse.svg'
@@ -220,6 +222,29 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false)
   const [showPicker, setShowPicker] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const [socialError, setSocialError] = useState('')
+  const [isAppleBusy, setIsAppleBusy] = useState(false)
+
+  const appleAvailable = useAppleAvailability()
+
+  // useCallback keeps the hook's response effect stable across renders
+  const handleGoogleOutcome = React.useCallback((outcome: { success: boolean; error?: string }) => {
+    if (!outcome.success && outcome.error) setSocialError(outcome.error)
+  }, [])
+  const {
+    canUseGoogle,
+    isSigningIn: isGoogleBusy,
+    signInWithGoogle,
+  } = useGoogleSignIn(handleGoogleOutcome)
+
+  const handleAppleSignIn = async () => {
+    setSocialError('')
+    setIsAppleBusy(true)
+    await signInWithApple(outcome => {
+      if (!outcome.success && outcome.error) setSocialError(outcome.error)
+    })
+    setIsAppleBusy(false)
+  }
 
   const handlePhoneChange = (text: string) => {
     if (errorMessage) setErrorMessage('')
@@ -325,6 +350,17 @@ export default function LoginScreen() {
             <Text style={styles.buttonText}>Get Started</Text>
           )}
         </TouchableOpacity>
+
+        {(canUseGoogle || appleAvailable) && (
+          <>
+            <OrContinueWithDivider />
+            <View style={styles.socialRow}>
+              {canUseGoogle && <GoogleButton onPress={signInWithGoogle} busy={isGoogleBusy} />}
+              {appleAvailable && <AppleButton onPress={handleAppleSignIn} busy={isAppleBusy} />}
+            </View>
+            {!!socialError && <Text style={styles.socialErrorText}>{socialError}</Text>}
+          </>
+        )}
 
         <View style={styles.footerLinks}>
           <TouchableOpacity
@@ -482,6 +518,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  socialRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 24,
+  },
+  socialErrorText: {
+    fontSize: 13,
+    color: '#EF4444',
+    marginTop: -16,
+    marginBottom: 16,
   },
   footerLinks: {
     flexDirection: 'row',
