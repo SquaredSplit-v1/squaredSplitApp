@@ -1,7 +1,9 @@
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
+  Alert,
+  Modal,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -13,10 +15,17 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import AddExpenseModal from '@/components/AddExpenseModal'
 import AddExpenseButton from '@/components/dashboard/AddExpenseButton'
+import { labelForMatchedPhone } from '@/lib/contacts'
 import { formatAmount } from '@/lib/currency'
-import { getGroupById } from '@/lib/supabase/groups'
+import {
+  addGroupMembers,
+  getGroupById,
+  removeGroupMember,
+  settleUpGroup,
+} from '@/lib/supabase/groups'
 import type { GroupDetail } from '@/lib/supabase/groups'
 import { useAuthStore } from '@/store/authStore'
+import { useContactsStore } from '@/store/contactsStore'
 import { useCurrencyStore } from '@/store/currencyStore'
 import { useGroupsStore } from '@/store/groupsStore'
 
@@ -33,11 +42,21 @@ export default function GroupDetailScreen() {
   const user = useAuthStore(s => s.user)
   const { current: currency } = useCurrencyStore()
   const refreshGroups = useGroupsStore(s => s.refreshGroups)
+  const loadContacts = useContactsStore(s => s.loadContacts)
+  const matchedContacts = useContactsStore(s => s.matched)
+  const rawWithPhones = useContactsStore(s => s.rawWithPhones)
 
   const [group, setGroup] = useState<GroupDetail | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [addExpenseVisible, setAddExpenseVisible] = useState(false)
+  const [isSettling, setIsSettling] = useState(false)
+  const [membersEditing, setMembersEditing] = useState(false)
+  const [addMemberVisible, setAddMemberVisible] = useState(false)
+
+  useEffect(() => {
+    void loadContacts()
+  }, [loadContacts])
 
   const load = useCallback(async () => {
     if (!groupId) return
@@ -64,6 +83,79 @@ export default function GroupDetailScreen() {
     void load()
     if (user) void refreshGroups(user.id)
   }, [load, refreshGroups, user])
+
+  const handleSettleUp = useCallback(() => {
+    if (!groupId || !group || group.amount <= 0.005 || isSettling) return
+    Alert.alert(
+      'Square up group',
+      `Mark your shares on all unsettled "${group.name}" expenses as settled? (${formatAmount(group.amount, currency)} ${group.balanceType === 'owes_you' ? 'you are owed' : 'you owe'})`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Square up',
+          onPress: async () => {
+            setIsSettling(true)
+            const result = await settleUpGroup(groupId)
+            setIsSettling(false)
+            if (!result.success) {
+              Alert.alert('Could not square up', result.error ?? 'Please try again.')
+              return
+            }
+            await load()
+          },
+        },
+      ]
+    )
+  }, [groupId, group, isSettling, currency, load])
+
+  const handleRemoveMember = useCallback(
+    (userId: string, name: string) => {
+      if (!groupId) return
+      Alert.alert('Remove member', `Remove ${name} from this group?`, [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            const result = await removeGroupMember(groupId, userId)
+            if (!result.success) {
+              Alert.alert('Could not remove member', result.error)
+              return
+            }
+            await load()
+          },
+        },
+      ])
+    },
+    [groupId, load]
+  )
+
+  const handleAddMembers = useCallback(
+    async (ids: string[]) => {
+      if (!groupId || ids.length === 0) return
+      const result = await addGroupMembers(groupId, ids)
+      if (!result.success) {
+        Alert.alert('Could not add members', result.error)
+        return
+      }
+      setAddMemberVisible(false)
+      await load()
+    },
+    [groupId, load]
+  )
+
+  /** Contacts on SquaredSplit who aren't already in this group. */
+  const addableContacts = useMemo(() => {
+    if (!group) return []
+    const memberIds = new Set(group.members.map(m => m.userId))
+    return matchedContacts
+      .filter(mc => !memberIds.has(mc.id) && mc.id !== user?.id)
+      .map(mc => ({
+        id: mc.id,
+        label: labelForMatchedPhone(mc.phone, mc.display_name, rawWithPhones),
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+  }, [group, matchedContacts, rawWithPhones, user?.id])
 
   const memberIdsForExpense = group
     ? group.members.map(m => m.userId).filter(id => id !== user?.id)
@@ -140,8 +232,51 @@ export default function GroupDetailScreen() {
               <View style={styles.divider} />
             </View>
 
+            {/* Square up group */}
+            {group.amount > 0.005 ? (
+              <TouchableOpacity
+                style={[
+                  styles.settleCard,
+                  group.balanceType === 'owes_you'
+                    ? styles.settleCardGreen
+                    : styles.settleCardOrange,
+                ]}
+                onPress={handleSettleUp}
+                disabled={isSettling}
+                activeOpacity={0.85}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.settleTitle}>
+                    {group.balanceType === 'owes_you'
+                      ? `You are owed ${formatAmount(group.amount, currency)}`
+                      : `You owe ${formatAmount(group.amount, currency)}`}
+                  </Text>
+                  <Text style={styles.settleBody}>
+                    Square up to mark your shares on all group expenses as settled.
+                  </Text>
+                </View>
+                <View style={styles.settleBtn}>
+                  {isSettling ? (
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                  ) : (
+                    <Text style={styles.settleBtnText}>Square up</Text>
+                  )}
+                </View>
+              </TouchableOpacity>
+            ) : null}
+
             {/* Members */}
-            <Text style={styles.sectionTitle}>Members ({group.members.length})</Text>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Members ({group.members.length})</Text>
+              <View style={{ flexDirection: 'row', gap: 16 }}>
+                <TouchableOpacity onPress={() => setAddMemberVisible(true)} hitSlop={8}>
+                  <Text style={styles.actionLink}>Add</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setMembersEditing(e => !e)} hitSlop={8}>
+                  <Text style={styles.actionLink}>{membersEditing ? 'Done' : 'Edit'}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
             {group.members.length === 0 ? (
               <Text style={styles.emptyList}>No members found.</Text>
             ) : (
@@ -173,6 +308,15 @@ export default function GroupDetailScreen() {
                         <Text style={styles.memberBalanceSettled}>settled up</Text>
                       )}
                     </View>
+                    {membersEditing && !isMe ? (
+                      <TouchableOpacity
+                        style={styles.removeMemberBtn}
+                        onPress={() => handleRemoveMember(m.userId, m.name)}
+                        accessibilityLabel={`Remove ${m.name}`}
+                      >
+                        <Text style={styles.removeMemberText}>Remove</Text>
+                      </TouchableOpacity>
+                    ) : null}
                   </View>
                 )
               })
@@ -249,7 +393,120 @@ export default function GroupDetailScreen() {
         groupName={group?.name}
         presetParticipantIds={memberIdsForExpense}
       />
+
+      {/* Add members from contacts already on SquaredSplit */}
+      <AddGroupMembersModal
+        visible={addMemberVisible}
+        candidates={addableContacts}
+        onClose={() => setAddMemberVisible(false)}
+        onAdd={handleAddMembers}
+      />
     </View>
+  )
+}
+
+function AddGroupMembersModal({
+  visible,
+  candidates,
+  onClose,
+  onAdd,
+}: {
+  visible: boolean
+  candidates: { id: string; label: string }[]
+  onClose: () => void
+  onAdd: (ids: string[]) => Promise<void>
+}) {
+  const [selected, setSelected] = useState<string[]>([])
+  const [isAdding, setIsAdding] = useState(false)
+
+  useEffect(() => {
+    if (!visible) {
+      setSelected([])
+      setIsAdding(false)
+    }
+  }, [visible])
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}
+    >
+      <View style={[styles.screen, { paddingTop: 60, paddingHorizontal: 24, flex: 1 }]}>
+        <View style={styles.addMembersHeader}>
+          <Text style={styles.addMembersTitle}>Add members</Text>
+          <TouchableOpacity onPress={onClose} hitSlop={12}>
+            <Text style={{ fontSize: 18, color: '#6B6B6B' }}>✕</Text>
+          </TouchableOpacity>
+        </View>
+        <ScrollView
+          contentContainerStyle={{ paddingBottom: 120 }}
+          showsVerticalScrollIndicator={false}
+        >
+          {candidates.length === 0 ? (
+            <Text style={styles.emptyList}>
+              No more of your contacts are on SquaredSplit. Invite them from an expense first.
+            </Text>
+          ) : (
+            candidates.map(c => {
+              const isSelected = selected.includes(c.id)
+              return (
+                <TouchableOpacity
+                  key={c.id}
+                  style={styles.addMemberRow}
+                  onPress={() =>
+                    setSelected(prev =>
+                      prev.includes(c.id) ? prev.filter(x => x !== c.id) : [...prev, c.id]
+                    )
+                  }
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: isSelected }}
+                >
+                  <View style={styles.memberAvatar}>
+                    <Text style={styles.memberAvatarText}>{c.label[0]?.toUpperCase() ?? '?'}</Text>
+                  </View>
+                  <Text style={styles.memberName}>{c.label}</Text>
+                  <View
+                    style={[
+                      styles.checkbox,
+                      isSelected && { backgroundColor: '#141414', borderColor: '#141414' },
+                    ]}
+                  >
+                    {isSelected && (
+                      <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '700' }}>✓</Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              )
+            })
+          )}
+        </ScrollView>
+        <TouchableOpacity
+          style={[
+            styles.addMembersBtn,
+            (selected.length === 0 || isAdding) && { backgroundColor: '#D1D5DB' },
+          ]}
+          disabled={selected.length === 0 || isAdding}
+          onPress={async () => {
+            setIsAdding(true)
+            await onAdd(selected)
+            setIsAdding(false)
+          }}
+        >
+          {isAdding ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={styles.addMembersBtnText}>
+              Add{' '}
+              {selected.length > 0
+                ? `${selected.length} member${selected.length > 1 ? 's' : ''}`
+                : ''}
+            </Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    </Modal>
   )
 }
 
@@ -379,4 +636,79 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   fabWrap: { position: 'absolute', right: 20 },
+  settleCard: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 16,
+    padding: 14,
+  },
+  settleCardGreen: { backgroundColor: '#E8F8EE' },
+  settleCardOrange: { backgroundColor: '#FEF3E8' },
+  settleTitle: { fontSize: 15, fontFamily: 'Nunito_700Bold', color: '#141414' },
+  settleBody: {
+    fontSize: 12,
+    fontFamily: 'Nunito_400Regular',
+    color: '#6B6B6B',
+    lineHeight: 17,
+    marginTop: 2,
+  },
+  settleBtn: {
+    backgroundColor: '#141414',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  settleBtnText: { color: '#FFFFFF', fontSize: 13, fontFamily: 'Nunito_600SemiBold' },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  actionLink: { fontSize: 13, fontFamily: 'Nunito_600SemiBold', color: '#3273CD' },
+  removeMemberBtn: {
+    borderWidth: 1,
+    borderColor: '#EF4444',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  removeMemberText: { color: '#EF4444', fontSize: 12, fontFamily: 'Nunito_600SemiBold' },
+  addMembersHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  addMembersTitle: { fontSize: 18, fontWeight: '700', color: '#141414' },
+  addMemberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: '#D1D5DB',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addMembersBtn: {
+    position: 'absolute',
+    bottom: 40,
+    left: 24,
+    right: 24,
+    height: 52,
+    backgroundColor: '#141414',
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addMembersBtnText: { color: '#FFFFFF', fontSize: 16, fontFamily: 'Nunito_600SemiBold' },
 })

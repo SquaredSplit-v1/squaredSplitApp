@@ -369,3 +369,45 @@ export async function getGroupById(
     },
   }
 }
+
+/** Remove a member (blocked server-side while they have an outstanding balance). */
+export async function removeGroupMember(
+  groupId: string,
+  userId: string
+): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase.rpc('remove_group_member', {
+    p_group_id: groupId,
+    p_user_id: userId,
+  })
+  if (error) {
+    const msg = error.message ?? ''
+    if (msg.includes('SS702')) {
+      return { success: false, error: 'This member still has an outstanding balance in the group.' }
+    }
+    return { success: false, error: msg || 'Could not remove member' }
+  }
+  return { success: true }
+}
+
+/** Invite existing SquaredSplit users (matched contacts) into a group. */
+export async function addGroupMembers(
+  groupId: string,
+  memberIds: string[]
+): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase.rpc('add_group_members', {
+    p_group_id: groupId,
+    p_member_ids: memberIds,
+  })
+  if (error) return { success: false, error: error.message || 'Could not add members' }
+  return { success: true }
+}
+
+/** Settle the caller's shares on every unsettled expense in a group. */
+export async function settleUpGroup(
+  groupId: string
+): Promise<{ success: boolean; settledShares?: number; error?: string }> {
+  const { data, error } = await supabase.rpc('settle_up_group', { p_group_id: groupId })
+  if (error) return { success: false, error: error.message || 'Could not square up' }
+  const row = (Array.isArray(data) ? data[0] : data) as { settled_shares?: number } | undefined
+  return { success: true, settledShares: row ? Number(row.settled_shares ?? 0) : 0 }
+}

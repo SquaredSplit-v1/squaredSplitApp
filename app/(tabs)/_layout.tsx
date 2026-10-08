@@ -68,15 +68,48 @@ function ActivityIcon({ active }: { active: boolean }) {
   )
 }
 
+function AiIcon({ active }: { active: boolean }) {
+  const c = active ? '#141414' : '#6B6B6B'
+  return (
+    <Svg width={24} height={24} viewBox="0 0 20 20" fill="none">
+      <Path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M10 2.70801C10.3452 2.70801 10.625 2.98783 10.625 3.33301V4.58301C10.625 4.92819 10.3452 5.20801 10 5.20801C9.65482 5.20801 9.375 4.92819 9.375 4.58301V3.33301C9.375 2.98783 9.65482 2.70801 10 2.70801Z"
+        fill={c}
+      />
+      <Path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M5.28513 4.61781C5.5292 4.37373 5.92093 4.37373 6.16501 4.61781L7.04834 5.50114C7.29242 5.74522 7.29242 6.13695 7.04834 6.38103C6.80426 6.6251 6.41253 6.6251 6.16846 6.38103L5.28513 5.49769C5.04105 5.25362 5.04105 4.86189 5.28513 4.61781Z"
+        fill={c}
+      />
+      <Path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M14.7149 4.61781C14.959 4.86189 14.959 5.25362 14.7149 5.49769L13.8315 6.38103C13.5875 6.6251 13.1957 6.6251 12.9517 6.38103C12.7076 6.13695 12.7076 5.74522 12.9517 5.50114L13.835 4.61781C14.0791 4.37373 14.4708 4.37373 14.7149 4.61781Z"
+        fill={c}
+      />
+      <Path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M4.79175 8.95801C4.79175 8.26766 5.35139 7.70801 6.04175 7.70801H13.9584C14.6488 7.70801 15.2084 8.26766 15.2084 8.95801V12.2913C15.2084 13.0972 14.846 13.8596 14.2199 14.3762L12.7084 15.6247V16.6663C12.7084 17.0115 12.4286 17.2913 12.0834 17.2913C11.7382 17.2913 11.4584 17.0115 11.4584 16.6663V15.4163H8.54175V16.6663C8.54175 17.0115 8.26093 17.2913 7.91575 17.2913C7.57057 17.2913 7.29075 17.0115 7.29075 16.6663V15.6247L5.77923 14.3762C5.15313 13.8596 4.79175 13.0972 4.79175 12.2913V8.95801ZM6.04175 8.95801V12.2913C6.04175 12.6287 6.19275 12.9488 6.45371 13.1638L7.29175 13.8546V12.9163H12.7084V13.8546L13.5465 13.1638C13.8074 12.9488 13.9584 12.6287 13.9584 12.2913V8.95801H6.04175Z"
+        fill={c}
+      />
+    </Svg>
+  )
+}
+
 const ICONS: Record<string, React.FC<{ active: boolean }>> = {
   index: HomeIcon,
   groups: GroupsIcon,
   activity: ActivityIcon,
+  ai: AiIcon,
 }
 
 /* ─── Custom floating tab bar ───────────────────────────── */
 
-const HIDDEN_TAB_NAMES = new Set(['ai'])
+const HIDDEN_TAB_NAMES = new Set<string>()
 
 function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets()
@@ -143,7 +176,6 @@ export default function TabLayout() {
     <Tabs tabBar={props => <CustomTabBar {...props} />} screenOptions={{ headerShown: false }}>
       <Tabs.Screen name="index" options={{ title: 'Home' }} />
       <Tabs.Screen name="groups" options={{ title: 'Groups' }} />
-      {/* AI tab hidden from nav bar until feature ships — screen still registered for deep links */}
       <Tabs.Screen name="ai" options={{ title: 'AI Assist' }} />
       <Tabs.Screen name="activity" options={{ title: 'Activity' }} />
       <Tabs.Screen name="account" options={{ title: 'Account' }} />
