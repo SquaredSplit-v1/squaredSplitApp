@@ -21,8 +21,8 @@ interface Reminder {
   createdAt: string
 }
 
-function BellGlyph() {
-  return <Text style={styles.headerEmoji}>🧠</Text>
+function SparkleGlyph() {
+  return <Text style={styles.headerEmoji}>✦</Text>
 }
 
 export default function AiSpaceScreen() {
@@ -95,10 +95,10 @@ export default function AiSpaceScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top + 8 }]}>
       <View style={styles.header}>
-        <BellGlyph />
+        <SparkleGlyph />
         <View style={{ flex: 1 }}>
-          <Text style={styles.title}>AI Assist</Text>
-          <Text style={styles.subtitle}>Friendly nudges to keep you squared up</Text>
+          <Text style={styles.title}>Squarer</Text>
+          <Text style={styles.subtitle}>Your settle-up assistant</Text>
         </View>
       </View>
 

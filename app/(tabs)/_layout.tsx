@@ -1,13 +1,12 @@
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
-import { Redirect, Tabs } from 'expo-router'
-import React from 'react'
+import { Redirect, Tabs, useFocusEffect } from 'expo-router'
+import React, { useCallback, useState } from 'react'
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Svg, { Path } from 'react-native-svg'
 
+import { supabase } from '@/lib/supabase/client'
 import { useAuthStore } from '@/store/authStore'
-
-const akAvatar = require('../../assets/dashboard/ak.png')
 
 /* ─── Tab icons (Figma) ─────────────────────────────────── */
 
@@ -72,28 +71,19 @@ function AiIcon({ active }: { active: boolean }) {
   const c = active ? '#141414' : '#6B6B6B'
   return (
     <Svg width={24} height={24} viewBox="0 0 20 20" fill="none">
+      {/* Squarer — 4-point sparkle */}
       <Path
         fillRule="evenodd"
         clipRule="evenodd"
-        d="M10 2.70801C10.3452 2.70801 10.625 2.98783 10.625 3.33301V4.58301C10.625 4.92819 10.3452 5.20801 10 5.20801C9.65482 5.20801 9.375 4.92819 9.375 4.58301V3.33301C9.375 2.98783 9.65482 2.70801 10 2.70801Z"
+        d="M10 1.875C10.2526 1.875 10.4694 2.06151 10.5108 2.31092L10.9056 4.68846C11.0226 5.39047 11.5715 5.93942 12.2736 6.05644L14.6511 6.45124C14.9005 6.49262 15.087 6.70944 15.087 6.96203C15.087 7.21462 14.9005 7.43144 14.6511 7.47282L12.2736 7.86762C11.5715 7.98464 11.0226 8.53359 10.9056 9.2356L10.5108 11.6131C10.4694 11.8626 10.2526 12.049 10 12.049C9.74742 12.049 9.5306 11.8626 9.48922 11.6131L9.09442 9.2356C8.9774 8.53359 8.42845 7.98464 7.72644 7.86762L5.3489 7.47282C5.09949 7.43144 4.91298 7.21462 4.91298 6.96203C4.91298 6.70944 5.09949 6.49262 5.3489 6.45124L7.72644 6.05644C8.42845 5.93942 8.9774 5.39047 9.09442 4.68846L9.48922 2.31092C9.5306 2.06151 9.74742 1.875 10 1.875Z"
         fill={c}
       />
       <Path
-        fillRule="evenodd"
-        clipRule="evenodd"
-        d="M5.28513 4.61781C5.5292 4.37373 5.92093 4.37373 6.16501 4.61781L7.04834 5.50114C7.29242 5.74522 7.29242 6.13695 7.04834 6.38103C6.80426 6.6251 6.41253 6.6251 6.16846 6.38103L5.28513 5.49769C5.04105 5.25362 5.04105 4.86189 5.28513 4.61781Z"
+        d="M14.635 11.7188C14.7919 11.7188 14.9264 11.8346 14.9521 11.9896L15.106 12.9217C15.1667 13.2866 15.4524 13.5723 15.8173 13.633L16.7494 13.7869C16.9044 13.8126 17.0202 13.9471 17.0202 14.104C17.0202 14.2609 16.9044 14.3954 16.7494 14.4211L15.8173 14.575C15.4524 14.6357 15.1667 14.9214 15.106 15.2863L14.9521 16.2184C14.9264 16.3734 14.7919 16.4892 14.635 16.4892C14.4781 16.4892 14.3436 16.3734 14.3179 16.2184L14.164 15.2863C14.1033 14.9214 13.8176 14.6357 13.4527 14.575L12.5206 14.4211C12.3656 14.3954 12.2498 14.2609 12.2498 14.104C12.2498 13.9471 12.3656 13.8126 12.5206 13.7869L13.4527 13.633C13.8176 13.5723 14.1033 13.2866 14.164 12.9217L14.3179 11.9896C14.3436 11.8346 14.4781 11.7188 14.635 11.7188Z"
         fill={c}
       />
       <Path
-        fillRule="evenodd"
-        clipRule="evenodd"
-        d="M14.7149 4.61781C14.959 4.86189 14.959 5.25362 14.7149 5.49769L13.8315 6.38103C13.5875 6.6251 13.1957 6.6251 12.9517 6.38103C12.7076 6.13695 12.7076 5.74522 12.9517 5.50114L13.835 4.61781C14.0791 4.37373 14.4708 4.37373 14.7149 4.61781Z"
-        fill={c}
-      />
-      <Path
-        fillRule="evenodd"
-        clipRule="evenodd"
-        d="M4.79175 8.95801C4.79175 8.26766 5.35139 7.70801 6.04175 7.70801H13.9584C14.6488 7.70801 15.2084 8.26766 15.2084 8.95801V12.2913C15.2084 13.0972 14.846 13.8596 14.2199 14.3762L12.7084 15.6247V16.6663C12.7084 17.0115 12.4286 17.2913 12.0834 17.2913C11.7382 17.2913 11.4584 17.0115 11.4584 16.6663V15.4163H8.54175V16.6663C8.54175 17.0115 8.26093 17.2913 7.91575 17.2913C7.57057 17.2913 7.29075 17.0115 7.29075 16.6663V15.6247L5.77923 14.3762C5.15313 13.8596 4.79175 13.0972 4.79175 12.2913V8.95801ZM6.04175 8.95801V12.2913C6.04175 12.6287 6.19275 12.9488 6.45371 13.1638L7.29175 13.8546V12.9163H12.7084V13.8546L13.5465 13.1638C13.8074 12.9488 13.9584 12.6287 13.9584 12.2913V8.95801H6.04175Z"
+        d="M5.73902 12.5762C5.89592 12.5762 6.03042 12.692 6.05611 12.847L6.14846 13.4033C6.18412 13.6169 6.35093 13.7837 6.56452 13.8194L7.12086 13.9117C7.27586 13.9374 7.39161 14.0719 7.39161 14.2288C7.39161 14.3857 7.27586 14.5202 7.12086 14.5459L6.56452 14.6383C6.35093 14.6739 6.18412 14.8407 6.14846 15.0543L6.05611 15.6107C6.03042 15.7657 5.89592 15.8814 5.73902 15.8814C5.58213 15.8814 5.44763 15.7657 5.42194 15.6107L5.32959 15.0543C5.29393 14.8407 5.12712 14.6739 4.91353 14.6383L4.35719 14.5459C4.20219 14.5202 4.08644 14.3857 4.08644 14.2288C4.08644 14.0719 4.20219 13.9374 4.35719 13.9117L4.91353 13.8194C5.12712 13.7837 5.29393 13.6169 5.32959 13.4033L5.42194 12.847C5.44763 12.692 5.58213 12.5762 5.73902 12.5762Z"
         fill={c}
       />
     </Svg>
@@ -110,6 +100,43 @@ const ICONS: Record<string, React.FC<{ active: boolean }>> = {
 /* ─── Custom floating tab bar ───────────────────────────── */
 
 const HIDDEN_TAB_NAMES = new Set<string>()
+
+/** Account tab avatar — the signed-in user's profile picture. */
+function AccountTabAvatar({ active }: { active: boolean }) {
+  const userId = useAuthStore(s => s.user?.id)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [initial, setInitial] = useState('?')
+
+  const load = useCallback(async () => {
+    if (!userId) return
+    const { data } = await supabase
+      .from('profiles')
+      .select('avatar_url, full_name')
+      .eq('id', userId)
+      .single()
+    if (!data) return
+    setAvatarUrl((data as { avatar_url?: string | null }).avatar_url ?? null)
+    setInitial(
+      (((data as { full_name?: string | null }).full_name ?? '?').trim()[0] ?? '?').toUpperCase()
+    )
+  }, [userId])
+
+  useFocusEffect(
+    useCallback(() => {
+      void load()
+    }, [load])
+  )
+
+  return (
+    <View style={[styles.avatar, active && styles.avatarActive]}>
+      {avatarUrl ? (
+        <Image source={{ uri: avatarUrl }} style={styles.avatarImg} />
+      ) : (
+        <Text style={styles.avatarFallback}>{initial}</Text>
+      )}
+    </View>
+  )
+}
 
 function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets()
@@ -147,9 +174,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
               {isActive && <View style={styles.indicator} />}
 
               {route.name === 'account' ? (
-                <View style={[styles.avatar, isActive && styles.avatarActive]}>
-                  <Image source={akAvatar} style={styles.avatarImg} />
-                </View>
+                <AccountTabAvatar active={isActive} />
               ) : Icon ? (
                 <Icon active={isActive} />
               ) : null}
@@ -176,7 +201,7 @@ export default function TabLayout() {
     <Tabs tabBar={props => <CustomTabBar {...props} />} screenOptions={{ headerShown: false }}>
       <Tabs.Screen name="index" options={{ title: 'Home' }} />
       <Tabs.Screen name="groups" options={{ title: 'Groups' }} />
-      <Tabs.Screen name="ai" options={{ title: 'AI Assist' }} />
+      <Tabs.Screen name="ai" options={{ title: 'Squarer' }} />
       <Tabs.Screen name="activity" options={{ title: 'Activity' }} />
       <Tabs.Screen name="account" options={{ title: 'Account' }} />
     </Tabs>
@@ -208,9 +233,18 @@ const styles = StyleSheet.create({
     borderRadius: 1.5,
     backgroundColor: '#141414',
   },
-  avatar: { width: 28, height: 28, borderRadius: 14, overflow: 'hidden' },
+  avatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: '#E5E7EB',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   avatarActive: { borderWidth: 2, borderColor: '#141414' },
   avatarImg: { width: '100%', height: '100%', borderRadius: 14 },
+  avatarFallback: { fontSize: 13, fontWeight: '600', color: '#6B6B6B' },
   label: { fontFamily: 'Nunito_400Regular', fontSize: 10, color: '#6B6B6B', marginTop: 4 },
   labelActive: { color: '#141414', fontFamily: 'Nunito_600SemiBold', fontWeight: '600' },
 })

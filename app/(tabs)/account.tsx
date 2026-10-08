@@ -17,6 +17,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Toast from 'react-native-toast-message'
 
+import { hasEmailIdentity, isValidEmail, updateEmailAddress, updatePassword } from '@/lib/auth'
 import { deleteAccount, getProfile, saveProfile, uploadAvatar } from '@/lib/supabase/profile'
 import { useAuthStore } from '@/store/authStore'
 import { useCurrencyStore } from '@/store/currencyStore'
@@ -36,6 +37,14 @@ export default function AccountScreen() {
   const [isSaving, setIsSaving] = useState(false)
   const [showCurrencyModal, setShowCurrencyModal] = useState(false)
   const [nameEditing, setNameEditing] = useState(false)
+
+  // Email / password credential editing
+  const [showEmailModal, setShowEmailModal] = useState(false)
+  const [emailDraft, setEmailDraft] = useState('')
+  const [showPasswordModal, setShowPasswordModal] = useState(false)
+  const [passwordDraft, setPasswordDraft] = useState('')
+  const [passwordConfirm, setPasswordConfirm] = useState('')
+  const [credentialBusy, setCredentialBusy] = useState(false)
 
   useEffect(() => {
     if (!user?.id) return
@@ -145,6 +154,61 @@ export default function AccountScreen() {
     } else {
       Toast.show({ type: 'success', text1: `Currency set to ${code}` })
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+    }
+  }
+
+  // ── Email + password credentials ────────────────────────────────────────
+
+  const openEmailModal = () => {
+    setEmailDraft(user?.email ?? '')
+    setShowEmailModal(true)
+  }
+
+  const handleEmailSave = async () => {
+    if (!isValidEmail(emailDraft)) {
+      Toast.show({ type: 'error', text1: 'Enter a valid email address' })
+      return
+    }
+    if (emailDraft.trim() === (user?.email ?? '')) {
+      setShowEmailModal(false)
+      return
+    }
+    setCredentialBusy(true)
+    const { success, error } = await updateEmailAddress(emailDraft)
+    setCredentialBusy(false)
+    if (!success) {
+      Toast.show({ type: 'error', text1: 'Could not update email', text2: error })
+    } else {
+      Toast.show({ type: 'success', text1: 'Email updated' })
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+      setShowEmailModal(false)
+    }
+  }
+
+  const openPasswordModal = () => {
+    setPasswordDraft('')
+    setPasswordConfirm('')
+    setShowPasswordModal(true)
+  }
+
+  const handlePasswordSave = async () => {
+    if (passwordDraft.length < 6) {
+      Toast.show({ type: 'error', text1: 'Password must be at least 6 characters' })
+      return
+    }
+    if (passwordDraft !== passwordConfirm) {
+      Toast.show({ type: 'error', text1: 'Passwords do not match' })
+      return
+    }
+    setCredentialBusy(true)
+    const { success, error } = await updatePassword(passwordDraft)
+    setCredentialBusy(false)
+    if (!success) {
+      Toast.show({ type: 'error', text1: 'Could not update password', text2: error })
+    } else {
+      Toast.show({ type: 'success', text1: 'Password updated' })
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+      setShowPasswordModal(false)
     }
   }
 
@@ -273,6 +337,27 @@ export default function AccountScreen() {
         </View>
       </View>
 
+      {/* ── Email ── */}
+      <View style={styles.section}>
+        <Text style={styles.sectionLabel}>Email</Text>
+        <TouchableOpacity style={styles.fieldRow} onPress={openEmailModal}>
+          <Text style={styles.fieldValue}>{user?.email ?? 'Add an email'}</Text>
+          <Text style={styles.editHint}>{user?.email ? 'Edit' : 'Add'}</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* ── Password ── */}
+      <View style={styles.section}>
+        <Text style={styles.sectionLabel}>Password</Text>
+        <TouchableOpacity style={styles.fieldRow} onPress={openPasswordModal}>
+          <Text style={styles.fieldValue}>
+            {hasEmailIdentity(user) ? '••••••••' : 'Set a password'}
+          </Text>
+          <Text style={styles.editHint}>{hasEmailIdentity(user) ? 'Change' : 'Set'}</Text>
+        </TouchableOpacity>
+        <Text style={styles.fieldHint}>Used to sign in with your email</Text>
+      </View>
+
       {/* ── Currency ── */}
       <View style={styles.section}>
         <Text style={styles.sectionLabel}>Currency</Text>
@@ -293,6 +378,109 @@ export default function AccountScreen() {
       <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteAccount}>
         <Text style={styles.deleteText}>Delete account</Text>
       </TouchableOpacity>
+
+      {/* ── Email edit modal ── */}
+      <Modal
+        visible={showEmailModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowEmailModal(false)}
+      >
+        <View style={[styles.modalContainer, { paddingTop: insets.top + 16 }]}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>{user?.email ? 'Change email' : 'Add email'}</Text>
+            <TouchableOpacity onPress={() => setShowEmailModal(false)}>
+              <Text style={styles.modalClose}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.credentialHint}>
+            This email becomes your sign-in identity for email + password login.
+          </Text>
+          <TextInput
+            style={styles.credentialInput}
+            value={emailDraft}
+            onChangeText={setEmailDraft}
+            placeholder="you@example.com"
+            placeholderTextColor="#9CA3AF"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="email"
+            autoFocus
+            accessibilityLabel="New email address"
+          />
+          <TouchableOpacity
+            style={[styles.credentialSaveBtn, credentialBusy && styles.credentialSaveDisabled]}
+            onPress={handleEmailSave}
+            disabled={credentialBusy}
+          >
+            {credentialBusy ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={styles.credentialSaveText}>Save email</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </Modal>
+
+      {/* ── Password edit modal ── */}
+      <Modal
+        visible={showPasswordModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowPasswordModal(false)}
+      >
+        <View style={[styles.modalContainer, { paddingTop: insets.top + 16 }]}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>
+              {hasEmailIdentity(user) ? 'Change password' : 'Set password'}
+            </Text>
+            <TouchableOpacity onPress={() => setShowPasswordModal(false)}>
+              <Text style={styles.modalClose}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.credentialHint}>
+            {hasEmailIdentity(user)
+              ? 'Pick a new password for email sign-in.'
+              : 'Set a password so you can also sign in with your email.'}
+          </Text>
+          <TextInput
+            style={styles.credentialInput}
+            value={passwordDraft}
+            onChangeText={setPasswordDraft}
+            placeholder="New password"
+            placeholderTextColor="#9CA3AF"
+            secureTextEntry
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="new-password"
+            accessibilityLabel="New password"
+          />
+          <TextInput
+            style={[styles.credentialInput, styles.credentialInputSpaced]}
+            value={passwordConfirm}
+            onChangeText={setPasswordConfirm}
+            placeholder="Confirm password"
+            placeholderTextColor="#9CA3AF"
+            secureTextEntry
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="new-password"
+            accessibilityLabel="Confirm new password"
+          />
+          <TouchableOpacity
+            style={[styles.credentialSaveBtn, credentialBusy && styles.credentialSaveDisabled]}
+            onPress={handlePasswordSave}
+            disabled={credentialBusy}
+          >
+            {credentialBusy ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={styles.credentialSaveText}>Save password</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </Modal>
 
       {/* ── Currency picker modal ── */}
       <Modal
@@ -386,6 +574,29 @@ const styles = StyleSheet.create({
   },
   fieldValue: { fontSize: 15, color: '#141414', flex: 1 },
   editHint: { fontSize: 13, color: '#3B82F6', fontWeight: '500' },
+  fieldHint: { fontSize: 12, color: '#9CA3AF', marginTop: 6, marginLeft: 4 },
+  credentialHint: { fontSize: 13, color: '#6B6B6B', marginBottom: 16, lineHeight: 18 },
+  credentialInput: {
+    height: 52,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    fontSize: 16,
+    color: '#141414',
+    backgroundColor: '#FFFFFF',
+  },
+  credentialInputSpaced: { marginTop: 10 },
+  credentialSaveBtn: {
+    height: 52,
+    backgroundColor: '#141414',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  credentialSaveDisabled: { backgroundColor: '#9CA3AF' },
+  credentialSaveText: { fontSize: 15, fontWeight: '600', color: '#FFFFFF' },
   nameEditRow: { flexDirection: 'row', gap: 8 },
   nameInput: {
     flex: 1,
