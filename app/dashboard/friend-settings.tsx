@@ -13,6 +13,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { formatAmount } from '@/lib/currency'
+import { blockUser } from '@/lib/supabase/account'
 import { getFriendMuted, setFriendMuted } from '@/lib/supabase/friends'
 import { useAuthStore } from '@/store/authStore'
 import { useCurrencyStore } from '@/store/currencyStore'
@@ -78,6 +79,31 @@ export default function FriendSettingsScreen() {
     },
     [userId, friendId]
   )
+
+  const handleBlock = useCallback(() => {
+    if (!friendId || !friendName) return
+    Alert.alert(
+      'Block user',
+      `${friendName} will not be able to add you to splits or groups, and you cannot add them either.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Block',
+          style: 'destructive',
+          onPress: async () => {
+            const result = userId
+              ? await blockUser(userId, friendId)
+              : { success: false, error: 'Not signed in' }
+            if (!result.success) {
+              Alert.alert('Could not block', result.error)
+              return
+            }
+            router.back()
+          },
+        },
+      ]
+    )
+  }, [friendId, friendName, userId, router])
 
   const handleExport = useCallback(async () => {
     if (!friendName) return
@@ -152,6 +178,10 @@ export default function FriendSettingsScreen() {
             <Text style={styles.statLabel}>your share</Text>
           </View>
         </View>
+        <TouchableOpacity style={styles.blockBtn} onPress={handleBlock} activeOpacity={0.85}>
+          <Text style={styles.blockBtnText}>Block user</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.exportBtn} onPress={handleExport} activeOpacity={0.85}>
           <Text style={styles.exportBtnText}>Export history</Text>
         </TouchableOpacity>
@@ -249,6 +279,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   exportBtnText: { color: '#FFFFFF', fontSize: 15, fontFamily: 'Nunito_600SemiBold' },
+  blockBtn: {
+    borderWidth: 1,
+    borderColor: '#EF4444',
+    borderRadius: 14,
+    height: 52,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  blockBtnText: { color: '#EF4444', fontSize: 15, fontFamily: 'Nunito_600SemiBold' },
   meta: {
     marginTop: 8,
     color: '#9CA3AF',

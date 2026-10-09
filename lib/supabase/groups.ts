@@ -574,3 +574,30 @@ export async function promoteGroupAdmin(
   if (error) return { success: false, error: error.message || 'Could not promote member' }
   return { success: true }
 }
+
+/** Leave a group (blocked while you have an outstanding balance). */
+export async function exitGroup(groupId: string): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase.rpc('exit_group', { p_group_id: groupId })
+  if (error) {
+    if (error.message.includes('SS812')) {
+      return { success: false, error: 'Settle your balance before leaving this group.' }
+    }
+    return { success: false, error: error.message || 'Could not leave group' }
+  }
+  return { success: true }
+}
+
+/** Admin: delete the group once every balance is settled. */
+export async function deleteGroup(groupId: string): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase.rpc('delete_group', { p_group_id: groupId })
+  if (error) {
+    if (error.message.includes('SS814')) {
+      return {
+        success: false,
+        error: 'All balances must be settled before deleting this group.',
+      }
+    }
+    return { success: false, error: error.message || 'Could not delete group' }
+  }
+  return { success: true }
+}

@@ -68,6 +68,39 @@ export type Database = {
           },
         ]
       }
+      blocked_users: {
+        Row: {
+          blocked_id: string
+          blocker_id: string
+          created_at: string
+        }
+        Insert: {
+          blocked_id: string
+          blocker_id: string
+          created_at?: string
+        }
+        Update: {
+          blocked_id?: string
+          blocker_id?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'blocked_users_blocked_id_fkey'
+            columns: ['blocked_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'blocked_users_blocker_id_fkey'
+            columns: ['blocker_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       device_tokens: {
         Row: {
           created_at: string | null
@@ -603,6 +636,7 @@ export type Database = {
           avatar_url: string | null
           created_at: string | null
           currency: string | null
+          deactivated_at: string | null
           email: string | null
           full_name: string | null
           has_onboarded: boolean
@@ -620,6 +654,7 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string | null
           currency?: string | null
+          deactivated_at?: string | null
           email?: string | null
           full_name?: string | null
           has_onboarded?: boolean
@@ -637,6 +672,7 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string | null
           currency?: string | null
+          deactivated_at?: string | null
           email?: string | null
           full_name?: string | null
           has_onboarded?: boolean
@@ -766,6 +802,8 @@ export type Database = {
         Args: { p_group_id: string; p_user_id: string }
         Returns: undefined
       }
+      delete_group: { Args: { p_group_id: string }; Returns: undefined }
+      exit_group: { Args: { p_group_id: string }; Returns: undefined }
       friend_notes_pair_key: {
         Args: { p_a: string; p_b: string }
         Returns: string[]
@@ -814,6 +852,10 @@ export type Database = {
           paid_by: string
           share_amount: number
         }[]
+      }
+      has_block_between: {
+        Args: { p_a: string; p_b: string }
+        Returns: boolean
       }
       is_expense_participant: {
         Args: { p_expense_id: string }

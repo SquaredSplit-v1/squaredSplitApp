@@ -22,6 +22,8 @@ import {
   addGroupMembers,
   approveGroupMember,
   declineGroupMember,
+  deleteGroup,
+  exitGroup,
   getGroupById,
   promoteGroupAdmin,
   removeGroupMember,
@@ -219,6 +221,52 @@ export default function GroupDetailScreen() {
     },
     [groupId, load]
   )
+
+  const handleExitGroup = useCallback(() => {
+    if (!groupId || !group) return
+    Alert.alert(
+      'Exit group',
+      `Leave "${group.name}"? You can only rejoin if a member adds you back.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Exit group',
+          style: 'destructive',
+          onPress: async () => {
+            const result = await exitGroup(groupId)
+            if (!result.success) {
+              Alert.alert('Could not exit', result.error)
+              return
+            }
+            router.back()
+          },
+        },
+      ]
+    )
+  }, [groupId, group, router])
+
+  const handleDeleteGroup = useCallback(() => {
+    if (!groupId || !group) return
+    Alert.alert(
+      'Delete group',
+      `Permanently delete "${group.name}"? Every member loses access. Balances must be settled first.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete group',
+          style: 'destructive',
+          onPress: async () => {
+            const result = await deleteGroup(groupId)
+            if (!result.success) {
+              Alert.alert('Could not delete', result.error)
+              return
+            }
+            router.back()
+          },
+        },
+      ]
+    )
+  }, [groupId, group, router])
 
   const handlePromote = useCallback(
     (userId: string, name: string) => {
@@ -593,6 +641,8 @@ export default function GroupDetailScreen() {
         onClose={() => setSettingsVisible(false)}
         onToggle={handleToggleSetting}
         onSaveRules={handleSaveRules}
+        onExitGroup={handleExitGroup}
+        onDeleteGroup={handleDeleteGroup}
       />
     </View>
   )
@@ -635,6 +685,8 @@ function GroupSettingsModal({
   onClose,
   onToggle,
   onSaveRules,
+  onExitGroup,
+  onDeleteGroup,
 }: {
   visible: boolean
   groupName: string
@@ -644,6 +696,8 @@ function GroupSettingsModal({
   onClose: () => void
   onToggle: (key: keyof GroupSettings, value: boolean) => void
   onSaveRules: (rulesText: string) => Promise<boolean | void>
+  onExitGroup: () => void
+  onDeleteGroup: () => void
 }) {
   const insets = useSafeAreaInsets()
   const [rulesDraft, setRulesDraft] = useState('')
@@ -786,6 +840,31 @@ function GroupSettingsModal({
           <Text style={styles.settingFootnote}>
             When on, balances are combined into the fewest payments needed to square everyone up.
           </Text>
+
+          {/* ── Danger zone ── */}
+          <Text style={styles.settingsSectionTitle}>Danger zone</Text>
+          <TouchableOpacity
+            style={[styles.dangerRow, styles.dangerRowOrange]}
+            onPress={onExitGroup}
+            disabled={busy}
+            accessibilityRole="button"
+            accessibilityLabel="Exit group"
+          >
+            <Text style={styles.dangerTextOrange}>Exit group</Text>
+            <Text style={styles.dangerChevron}>›</Text>
+          </TouchableOpacity>
+          {isAdmin && (
+            <TouchableOpacity
+              style={[styles.dangerRow, styles.dangerRowRed]}
+              onPress={onDeleteGroup}
+              disabled={busy}
+              accessibilityRole="button"
+              accessibilityLabel="Delete group"
+            >
+              <Text style={styles.dangerTextRed}>Delete group</Text>
+              <Text style={styles.dangerChevronRed}>›</Text>
+            </TouchableOpacity>
+          )}
         </ScrollView>
       </View>
     </Modal>
@@ -1238,4 +1317,20 @@ const styles = StyleSheet.create({
   },
   rulesCancelBtn: { justifyContent: 'center', paddingHorizontal: 8 },
   rulesCancelText: { color: '#6B6B6B', fontSize: 14, fontFamily: 'Nunito_600SemiBold' },
+  dangerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+  },
+  dangerRowOrange: { borderColor: '#DE8334', backgroundColor: '#FEF3E8' },
+  dangerRowRed: { borderColor: '#EF4444', backgroundColor: '#FEF2F2' },
+  dangerTextOrange: { color: '#DE8334', fontSize: 15, fontFamily: 'Nunito_600SemiBold' },
+  dangerTextRed: { color: '#EF4444', fontSize: 15, fontFamily: 'Nunito_600SemiBold' },
+  dangerChevron: { color: '#DE8334', fontSize: 20 },
+  dangerChevronRed: { color: '#EF4444', fontSize: 20 },
 })

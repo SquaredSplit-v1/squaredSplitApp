@@ -21,6 +21,7 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
+import CameraCaptureModal from '@/components/CameraCaptureModal'
 import SignaturePad from '@/components/SignaturePad'
 import { createExpense } from '@/lib/api/createExpense'
 import { labelForMatchedPhone } from '@/lib/contacts'
@@ -159,6 +160,7 @@ export default function AddExpenseModal({
 
   // Receipt + agreement state (local — not part of the persisted form store).
   const [receiptUri, setReceiptUri] = useState<string | null>(null)
+  const [cameraVisible, setCameraVisible] = useState(false)
   const [wantsAgreement, setWantsAgreement] = useState(false)
   const [showSignature, setShowSignature] = useState(false)
   const [signatureBase64, setSignatureBase64] = useState<string | null>(null)
@@ -779,10 +781,26 @@ export default function AddExpenseModal({
                 <Text style={s.label}>Receipt & agreement</Text>
                 <Pressable
                   style={s.attachRow}
-                  onPress={async () => {
-                    const uri = await pickReceiptImage()
-                    if (uri) setReceiptUri(uri)
-                  }}
+                  onPress={() =>
+                    Alert.alert(
+                      'Add receipt',
+                      'Capture with the camera or pick from your library',
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Take photo',
+                          onPress: () => setCameraVisible(true),
+                        },
+                        {
+                          text: 'Choose from library',
+                          onPress: async () => {
+                            const uri = await pickReceiptImage()
+                            if (uri) setReceiptUri(uri)
+                          },
+                        },
+                      ]
+                    )
+                  }
                   accessibilityRole="button"
                   accessibilityLabel="Attach receipt photo"
                 >
@@ -917,6 +935,16 @@ export default function AddExpenseModal({
           </View>
         </View>
       </Modal>
+
+      <CameraCaptureModal
+        visible={cameraVisible}
+        onClose={() => setCameraVisible(false)}
+        onCapture={uri => {
+          setCameraVisible(false)
+          setReceiptUri(uri)
+        }}
+        hint="Position the receipt in the frame"
+      />
     </Modal>
   )
 }
