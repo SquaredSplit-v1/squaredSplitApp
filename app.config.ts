@@ -78,11 +78,17 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     bundleIdentifier: env.bundleIdentifier,
     supportsTablet: false,
-    entitlements: {
-      // Required for native Sign in with Apple (expo-apple-authentication).
-      // EAS syncs this capability into the provisioning profile at build time.
-      'com.apple.developer.applesignin': ['Default'],
-    },
+    // Sign in with Apple requires the capability to be enabled on the App ID
+    // in the Apple Developer portal. Until that one-time toggle is done, set
+    // EXPO_PUBLIC_APPLE_LOGIN_DISABLED=true (EAS production env) to build
+    // without the entitlement; the app hides the Apple button to match.
+    ...(process.env.EXPO_PUBLIC_APPLE_LOGIN_DISABLED === 'true'
+      ? {}
+      : {
+          entitlements: {
+            'com.apple.developer.applesignin': ['Default'],
+          },
+        }),
     infoPlist: {
       NSPhotoLibraryUsageDescription:
         'SquaredSplit needs access to your photo library to set a profile picture.',
