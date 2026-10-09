@@ -100,6 +100,142 @@ export type Database = {
           },
         ]
       }
+      expense_agreements: {
+        Row: {
+          agreed_at: string
+          expense_id: string
+          id: string
+          signer_id: string
+          signer_name: string | null
+          storage_path: string
+        }
+        Insert: {
+          agreed_at?: string
+          expense_id: string
+          id?: string
+          signer_id: string
+          signer_name?: string | null
+          storage_path: string
+        }
+        Update: {
+          agreed_at?: string
+          expense_id?: string
+          id?: string
+          signer_id?: string
+          signer_name?: string | null
+          storage_path?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'expense_agreements_expense_id_fkey'
+            columns: ['expense_id']
+            isOneToOne: false
+            referencedRelation: 'expenses'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'expense_agreements_signer_id_fkey'
+            columns: ['signer_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      expense_approvals: {
+        Row: {
+          created_at: string
+          expense_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expense_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expense_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'expense_approvals_expense_id_fkey'
+            columns: ['expense_id']
+            isOneToOne: false
+            referencedRelation: 'expenses'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'expense_approvals_user_id_fkey'
+            columns: ['user_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      expense_invites: {
+        Row: {
+          accepted_at: string | null
+          accepted_by: string | null
+          created_at: string
+          expense_id: string
+          id: string
+          invitee_name: string | null
+          invitee_phone: string
+          inviter_id: string
+          share_amount: number
+          status: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          created_at?: string
+          expense_id: string
+          id?: string
+          invitee_name?: string | null
+          invitee_phone: string
+          inviter_id: string
+          share_amount: number
+          status?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          created_at?: string
+          expense_id?: string
+          id?: string
+          invitee_name?: string | null
+          invitee_phone?: string
+          inviter_id?: string
+          share_amount?: number
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'expense_invites_accepted_by_fkey'
+            columns: ['accepted_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'expense_invites_expense_id_fkey'
+            columns: ['expense_id']
+            isOneToOne: false
+            referencedRelation: 'expenses'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'expense_invites_inviter_id_fkey'
+            columns: ['inviter_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       expense_participants: {
         Row: {
           created_at: string | null
@@ -134,6 +270,45 @@ export type Database = {
             columns: ['expense_id']
             isOneToOne: false
             referencedRelation: 'expenses'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      expense_receipts: {
+        Row: {
+          created_at: string
+          expense_id: string
+          id: string
+          storage_path: string
+          uploaded_by: string
+        }
+        Insert: {
+          created_at?: string
+          expense_id: string
+          id?: string
+          storage_path: string
+          uploaded_by: string
+        }
+        Update: {
+          created_at?: string
+          expense_id?: string
+          id?: string
+          storage_path?: string
+          uploaded_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'expense_receipts_expense_id_fkey'
+            columns: ['expense_id']
+            isOneToOne: false
+            referencedRelation: 'expenses'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'expense_receipts_uploaded_by_fkey'
+            columns: ['uploaded_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
             referencedColumns: ['id']
           },
         ]
@@ -225,99 +400,6 @@ export type Database = {
         }
         Relationships: []
       }
-      expense_receipts: {
-        Row: {
-          id: string
-          expense_id: string
-          uploaded_by: string
-          storage_path: string
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          expense_id: string
-          uploaded_by: string
-          storage_path: string
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          expense_id?: string
-          uploaded_by?: string
-          storage_path?: string
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'expense_receipts_expense_id_fkey'
-            columns: ['expense_id']
-            isOneToOne: false
-            referencedRelation: 'expenses'
-            referencedColumns: ['id']
-          },
-        ]
-      }
-      expense_agreements: {
-        Row: {
-          id: string
-          expense_id: string
-          signer_id: string
-          signer_name: string | null
-          storage_path: string
-          agreed_at: string
-        }
-        Insert: {
-          id?: string
-          expense_id: string
-          signer_id: string
-          signer_name?: string | null
-          storage_path: string
-          agreed_at?: string
-        }
-        Update: {
-          id?: string
-          expense_id?: string
-          signer_id?: string
-          signer_name?: string | null
-          storage_path?: string
-          agreed_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'expense_agreements_expense_id_fkey'
-            columns: ['expense_id']
-            isOneToOne: false
-            referencedRelation: 'expenses'
-            referencedColumns: ['id']
-          },
-        ]
-      }
-      expense_approvals: {
-        Row: {
-          expense_id: string
-          user_id: string
-          created_at: string
-        }
-        Insert: {
-          expense_id: string
-          user_id: string
-          created_at?: string
-        }
-        Update: {
-          expense_id?: string
-          user_id?: string
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'expense_approvals_expense_id_fkey'
-            columns: ['expense_id']
-            isOneToOne: false
-            referencedRelation: 'expenses'
-            referencedColumns: ['id']
-          },
-        ]
-      }
       friend_notes: {
         Row: {
           friend_id: string
@@ -400,67 +482,26 @@ export type Database = {
           },
         ]
       }
-      expense_invites: {
-        Row: {
-          id: string
-          expense_id: string
-          inviter_id: string
-          invitee_phone: string
-          invitee_name: string | null
-          share_amount: number
-          status: string
-          accepted_by: string | null
-          accepted_at: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          expense_id: string
-          inviter_id: string
-          invitee_phone: string
-          invitee_name?: string | null
-          share_amount: number
-          status?: string
-          accepted_by?: string | null
-          accepted_at?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          expense_id?: string
-          inviter_id?: string
-          invitee_phone?: string
-          invitee_name?: string | null
-          share_amount?: number
-          status?: string
-          accepted_by?: string | null
-          accepted_at?: string | null
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'expense_invites_expense_id_fkey'
-            columns: ['expense_id']
-            isOneToOne: false
-            referencedRelation: 'expenses'
-            referencedColumns: ['id']
-          },
-        ]
-      }
       group_members: {
         Row: {
           created_at: string | null
           group_id: string
+          role: string
+          status: string
           user_id: string
         }
         Insert: {
           created_at?: string | null
           group_id: string
+          role?: string
+          status?: string
           user_id: string
         }
         Update: {
           created_at?: string | null
           group_id?: string
+          role?: string
+          status?: string
           user_id?: string
         }
         Relationships: [
@@ -482,27 +523,56 @@ export type Database = {
       }
       groups: {
         Row: {
+          admin_approval_required: boolean
           avatar_url: string | null
           created_at: string | null
+          created_by: string | null
           emoji: string | null
           id: string
+          member_can_add_members: boolean
+          member_can_edit_settings: boolean
+          member_can_send_messages: boolean
           name: string
+          rules_text: string | null
+          simplify_debts: boolean
         }
         Insert: {
+          admin_approval_required?: boolean
           avatar_url?: string | null
           created_at?: string | null
+          created_by?: string | null
           emoji?: string | null
           id?: string
+          member_can_add_members?: boolean
+          member_can_edit_settings?: boolean
+          member_can_send_messages?: boolean
           name: string
+          rules_text?: string | null
+          simplify_debts?: boolean
         }
         Update: {
+          admin_approval_required?: boolean
           avatar_url?: string | null
           created_at?: string | null
+          created_by?: string | null
           emoji?: string | null
           id?: string
+          member_can_add_members?: boolean
+          member_can_edit_settings?: boolean
+          member_can_send_messages?: boolean
           name?: string
+          rules_text?: string | null
+          simplify_debts?: boolean
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: 'groups_created_by_fkey'
+            columns: ['created_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
       }
       otp_rate_limits: {
         Row: {
@@ -626,8 +696,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_expense_invite: { Args: { p_invite_id: string }; Returns: Json }
       add_group_members: {
         Args: { p_group_id: string; p_member_ids: string[] }
+        Returns: Json
+      }
+      approve_expense: { Args: { p_expense_id: string }; Returns: Json }
+      approve_group_member: {
+        Args: { p_group_id: string; p_user_id: string }
         Returns: undefined
       }
       calculate_balance: {
@@ -652,6 +728,20 @@ export type Database = {
         }
         Returns: Json
       }
+      create_expense_with_invites: {
+        Args: {
+          p_amount: number
+          p_category?: string
+          p_due_date?: string
+          p_group_id?: string
+          p_invites?: Json
+          p_note?: string
+          p_paid_by?: string
+          p_participants?: Json
+          p_title: string
+        }
+        Returns: Json
+      }
       create_expense_with_splits: {
         Args: {
           p_amount: number
@@ -672,10 +762,15 @@ export type Database = {
         Args: { p_emoji?: string; p_member_ids?: string[]; p_name: string }
         Returns: Json
       }
+      decline_group_member: {
+        Args: { p_group_id: string; p_user_id: string }
+        Returns: undefined
+      }
       friend_notes_pair_key: {
         Args: { p_a: string; p_b: string }
         Returns: string[]
       }
+      get_expense_invite: { Args: { p_invite_id: string }; Returns: Json }
       get_friend_balances: {
         Args: { p_user_id: string }
         Returns: {
@@ -698,6 +793,16 @@ export type Database = {
           next_due_date: string
         }[]
       }
+      get_group_settlement_plan: {
+        Args: { p_group_id: string }
+        Returns: {
+          amount: number
+          from_name: string
+          from_user: string
+          to_name: string
+          to_user: string
+        }[]
+      }
       get_shared_expenses: {
         Args: { p_friend_id: string; p_user_id: string }
         Returns: {
@@ -714,6 +819,7 @@ export type Database = {
         Args: { p_expense_id: string }
         Returns: boolean
       }
+      is_group_admin: { Args: { p_group_id: string }; Returns: boolean }
       is_group_member: { Args: { p_group_id: string }; Returns: boolean }
       mark_activity_feed_seen: {
         Args: { p_activity_ids?: number[]; p_user_id: string }
@@ -729,37 +835,36 @@ export type Database = {
         }[]
       }
       normalize_phone_e164_like: { Args: { p_phone: string }; Returns: string }
+      promote_group_admin: {
+        Args: { p_group_id: string; p_user_id: string }
+        Returns: undefined
+      }
       reject_expense: {
         Args: { p_expense_id: string; p_other_text?: string; p_reason: string }
         Returns: undefined
       }
-      settle_up_with_friend: { Args: { p_friend_id: string }; Returns: Json }
-      upsert_friend_note: {
-        Args: { p_friend_id: string; p_note: string }
-        Returns: undefined
-      }
-      create_expense_with_invites: {
-        Args: {
-          p_title: string
-          p_amount: number
-          p_category?: string
-          p_paid_by: string
-          p_group_id?: string | null
-          p_due_date?: string | null
-          p_note?: string | null
-          p_participants: Json
-          p_invites: Json
-        }
-        Returns: Json
-      }
-      get_expense_invite: { Args: { p_invite_id: string }; Returns: Json }
-      accept_expense_invite: { Args: { p_invite_id: string }; Returns: Json }
       remove_group_member: {
         Args: { p_group_id: string; p_user_id: string }
         Returns: undefined
       }
       settle_up_group: { Args: { p_group_id: string }; Returns: Json }
-      approve_expense: { Args: { p_expense_id: string }; Returns: Json }
+      settle_up_with_friend: { Args: { p_friend_id: string }; Returns: Json }
+      update_group_settings: {
+        Args: {
+          p_admin_approval_required?: boolean
+          p_group_id: string
+          p_member_can_add_members?: boolean
+          p_member_can_edit_settings?: boolean
+          p_member_can_send_messages?: boolean
+          p_rules_text?: string
+          p_simplify_debts?: boolean
+        }
+        Returns: undefined
+      }
+      upsert_friend_note: {
+        Args: { p_friend_id: string; p_note: string }
+        Returns: undefined
+      }
     }
     Enums: {
       split_type: 'equal' | 'exact' | 'percentage'

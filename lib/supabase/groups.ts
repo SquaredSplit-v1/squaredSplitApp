@@ -11,12 +11,38 @@ import { supabase } from '@/lib/supabase/client'
 
 export type GroupBalanceType = 'owes_you' | 'you_owe' | 'settled'
 
+export type GroupRole = 'admin' | 'member'
+
 export interface GroupMember {
   userId: string
   name: string
   avatarUrl: string | null
   amount: number
   balanceType: GroupBalanceType
+  role: GroupRole
+}
+
+export interface PendingMember {
+  userId: string
+  name: string
+  avatarUrl: string | null
+}
+
+export interface GroupSettings {
+  memberCanEditSettings: boolean
+  memberCanAddMembers: boolean
+  memberCanSendMessages: boolean
+  adminApprovalRequired: boolean
+  simplifyDebts: boolean
+  rulesText: string | null
+}
+
+export interface SettlementTransfer {
+  fromUserId: string
+  fromName: string
+  toUserId: string
+  toName: string
+  amount: number
 }
 
 export interface Group {
@@ -43,6 +69,10 @@ export interface GroupExpense {
 
 export interface GroupDetail extends Group {
   expenses: GroupExpense[]
+  settings: GroupSettings
+  myRole: GroupRole
+  pendingMembers: PendingMember[]
+  settlementPlan: SettlementTransfer[]
 }
 
 /**
@@ -106,11 +136,12 @@ function isTableMissingError(err: unknown): boolean {
 }
 
 export async function getGroups(userId: string): Promise<{ data: Group[]; error?: string }> {
-  // ── 1. Groups the user is a member of ──────────────────────────────────
+  // ── 1. Groups the user is an active member of ───────────────────────────
   const { data: memberRows, error: memberErr } = await supabase
     .from('group_members')
     .select('group_id')
     .eq('user_id', userId)
+    .neq('status', 'pending')
 
   if (memberErr) {
     if (isTableMissingError(memberErr)) return { data: [] }
@@ -137,8 +168,9 @@ export async function getGroups(userId: string): Promise<{ data: Group[]; error?
   // ── 3. All members for those groups ────────────────────────────────────
   const { data: allMembers, error: allMembersErr } = await supabase
     .from('group_members')
-    .select('group_id, user_id, profiles(full_name, avatar_url)')
+    .select('group_id, user_id, role, status, profiles(full_name, avatar_url)')
     .in('group_id', groupIds)
+    .neq('status', 'pending')
 
   if (allMembersErr) {
     if (isTableMissingError(allMembersErr)) return { data: [] }
@@ -205,6 +237,7 @@ export async function getGroups(userId: string): Promise<{ data: Group[]; error?
       avatarUrl: profile?.avatar_url ?? null,
       amount: 0,
       balanceType: 'settled',
+      role: (row as { role?: string }).role === 'admin' ? 'admin' : 'member',
     })
     memberMap.set(row.group_id, list)
   }
@@ -235,7 +268,9 @@ export async function getGroupById(
 ): Promise<{ data: GroupDetail | null; error?: string }> {
   const { data: g, error: gErr } = await supabase
     .from('groups')
-    .select('id, name, emoji, avatar_url')
+    .select(
+      'id, name, emoji, avatar_url, created_by, member_can_edit_settings, member_can_add_members, member_can_send_messages, admin_approval_required, simplify_debts, rules_text'
+    )
     .eq('id', groupId)
     .single()
 
@@ -248,7 +283,7 @@ export async function getGroupById(
 
   const { data: members, error: mErr } = await supabase
     .from('group_members')
-    .select('user_id, profiles(full_name, avatar_url)')
+    .select('user_id, role, status, profiles(full_name, avatar_url)')
     .eq('group_id', groupId)
 
   if (mErr) {
@@ -256,6 +291,33 @@ export async function getGroupById(
     console.error('[getGroupById] group_members query failed:', mErr)
     return { data: null, error: mErr.message }
   }
+
+  const settings: GroupSettings = {
+    memberCanEditSettings: Boolean(g.member_can_edit_settings),
+    memberCanAddMembers: Boolean(g.member_can_add_members),
+    memberCanSendMessages: Boolean(g.member_can_send_messages),
+    adminApprovalRequired: Boolean(g.admin_approval_required),
+    simplifyDebts: g.simplify_debts !== false, // default true
+    rulesText: g.rules_text ?? null,
+  }
+
+  const activeRows = (members ?? []).filter(m => (m as { status?: string }).status !== 'pending')
+  const pendingRows = (members ?? []).filter(m => (m as { status?: string }).status === 'pending')
+
+  const pendingMembers: PendingMember[] = pendingRows.map(m => {
+    const p = (m as { profiles?: { full_name: string | null; avatar_url: string | null } | null })
+      .profiles
+    return {
+      userId: (m as { user_id: string }).user_id,
+      name: p?.full_name ?? 'Member',
+      avatarUrl: p?.avatar_url ?? null,
+    }
+  })
+
+  const myRole: GroupRole =
+    activeRows.find(m => (m as { user_id: string }).user_id === userId)?.role === 'admin'
+      ? 'admin'
+      : 'member'
 
   // ── Expenses + participants for real balance computation ────────────────
   const { data: expenseRows, error: expErr } = await supabase
@@ -308,7 +370,7 @@ export async function getGroupById(
 
   for (const exp of expenses) {
     const total = Number(exp.amount)
-    for (const m of members ?? []) {
+    for (const m of activeRows) {
       const myShare = shareFor(exp.id, m.user_id)
       const net = memberNet.get(m.user_id) ?? 0
       if (exp.paid_by === m.user_id) {
@@ -319,7 +381,7 @@ export async function getGroupById(
     }
   }
 
-  const memberList: GroupMember[] = (members ?? []).map(m => {
+  const memberList: GroupMember[] = activeRows.map(m => {
     const p = m.profiles as { full_name: string | null; avatar_url: string | null } | null
     const net = roundMoney(memberNet.get(m.user_id) ?? 0)
     return {
@@ -332,10 +394,32 @@ export async function getGroupById(
         : net < -0.005
           ? 'you_owe'
           : 'settled') as GroupBalanceType,
+      role: (m.role === 'admin' ? 'admin' : 'member') as GroupRole,
     }
   })
 
   const myNet = roundMoney(memberNet.get(userId ?? '') ?? 0)
+
+  // Minimised transfer plan for the "simplify group debts" view.
+  let settlementPlan: SettlementTransfer[] = []
+  if (settings.simplifyDebts) {
+    const { data: planRows, error: planErr } = await supabase.rpc('get_group_settlement_plan', {
+      p_group_id: groupId,
+    })
+    if (planErr) {
+      if (!isTableMissingError(planErr)) {
+        console.warn('[getGroupById] settlement plan failed:', planErr.message)
+      }
+    } else {
+      settlementPlan = ((planRows ?? []) as Record<string, unknown>[]).map(r => ({
+        fromUserId: String(r.from_user),
+        fromName: String(r.from_name ?? 'Member'),
+        toUserId: String(r.to_user),
+        toName: String(r.to_name ?? 'Member'),
+        amount: roundMoney(Number(r.amount ?? 0)),
+      }))
+    }
+  }
 
   const groupExpenses: GroupExpense[] = expenses.map(exp => {
     const myShare = shareFor(exp.id, userId ?? '')
@@ -366,6 +450,10 @@ export async function getGroupById(
       amount: Math.abs(myNet),
       members: memberList,
       expenses: groupExpenses,
+      settings,
+      myRole,
+      pendingMembers,
+      settlementPlan,
     },
   }
 }
@@ -393,13 +481,14 @@ export async function removeGroupMember(
 export async function addGroupMembers(
   groupId: string,
   memberIds: string[]
-): Promise<{ success: boolean; error?: string }> {
-  const { error } = await supabase.rpc('add_group_members', {
+): Promise<{ success: boolean; pending?: number; error?: string }> {
+  const { data, error } = await supabase.rpc('add_group_members', {
     p_group_id: groupId,
     p_member_ids: memberIds,
   })
   if (error) return { success: false, error: error.message || 'Could not add members' }
-  return { success: true }
+  const row = (Array.isArray(data) ? data[0] : data) as { pending?: number } | undefined
+  return { success: true, pending: Number(row?.pending ?? 0) }
 }
 
 /** Settle the caller's shares on every unsettled expense in a group. */
@@ -410,4 +499,78 @@ export async function settleUpGroup(
   if (error) return { success: false, error: error.message || 'Could not square up' }
   const row = (Array.isArray(data) ? data[0] : data) as { settled_shares?: number } | undefined
   return { success: true, settledShares: row ? Number(row.settled_shares ?? 0) : 0 }
+}
+
+// ── Group settings, roles & approvals ────────────────────────────────────────
+
+export interface GroupSettingsPatch {
+  memberCanEditSettings?: boolean
+  memberCanAddMembers?: boolean
+  memberCanSendMessages?: boolean
+  adminApprovalRequired?: boolean
+  simplifyDebts?: boolean
+  /** Send '' to clear the rules. */
+  rulesText?: string
+}
+
+/** Update permissions / rules / simplify-debts (server enforces admin rights). */
+export async function updateGroupSettings(
+  groupId: string,
+  patch: GroupSettingsPatch
+): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase.rpc('update_group_settings', {
+    p_group_id: groupId,
+    p_member_can_edit_settings: patch.memberCanEditSettings ?? undefined,
+    p_member_can_add_members: patch.memberCanAddMembers ?? undefined,
+    p_member_can_send_messages: patch.memberCanSendMessages ?? undefined,
+    p_admin_approval_required: patch.adminApprovalRequired ?? undefined,
+    p_simplify_debts: patch.simplifyDebts ?? undefined,
+    p_rules_text: patch.rulesText ?? undefined,
+  })
+  if (error) {
+    if (error.message.includes('SS803')) {
+      return { success: false, error: 'Only group admins can change these settings.' }
+    }
+    return { success: false, error: error.message || 'Could not update settings' }
+  }
+  return { success: true }
+}
+
+/** Admin: accept a pending join request. */
+export async function approveGroupMember(
+  groupId: string,
+  userId: string
+): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase.rpc('approve_group_member', {
+    p_group_id: groupId,
+    p_user_id: userId,
+  })
+  if (error) return { success: false, error: error.message || 'Could not approve member' }
+  return { success: true }
+}
+
+/** Admin: reject a pending join request. */
+export async function declineGroupMember(
+  groupId: string,
+  userId: string
+): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase.rpc('decline_group_member', {
+    p_group_id: groupId,
+    p_user_id: userId,
+  })
+  if (error) return { success: false, error: error.message || 'Could not decline request' }
+  return { success: true }
+}
+
+/** Admin: promote a member to group admin. */
+export async function promoteGroupAdmin(
+  groupId: string,
+  userId: string
+): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase.rpc('promote_group_admin', {
+    p_group_id: groupId,
+    p_user_id: userId,
+  })
+  if (error) return { success: false, error: error.message || 'Could not promote member' }
+  return { success: true }
 }

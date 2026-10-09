@@ -8,6 +8,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native'
@@ -19,11 +20,15 @@ import { labelForMatchedPhone } from '@/lib/contacts'
 import { formatAmount } from '@/lib/currency'
 import {
   addGroupMembers,
+  approveGroupMember,
+  declineGroupMember,
   getGroupById,
+  promoteGroupAdmin,
   removeGroupMember,
   settleUpGroup,
+  updateGroupSettings,
 } from '@/lib/supabase/groups'
-import type { GroupDetail } from '@/lib/supabase/groups'
+import type { GroupDetail, GroupSettings, GroupSettingsPatch } from '@/lib/supabase/groups'
 import { useAuthStore } from '@/store/authStore'
 import { useContactsStore } from '@/store/contactsStore'
 import { useCurrencyStore } from '@/store/currencyStore'
@@ -53,6 +58,10 @@ export default function GroupDetailScreen() {
   const [isSettling, setIsSettling] = useState(false)
   const [membersEditing, setMembersEditing] = useState(false)
   const [addMemberVisible, setAddMemberVisible] = useState(false)
+  const [settingsVisible, setSettingsVisible] = useState(false)
+  const [settingsBusy, setSettingsBusy] = useState(false)
+
+  const isAdmin = group?.myRole === 'admin'
 
   useEffect(() => {
     void loadContacts()
@@ -138,8 +147,96 @@ export default function GroupDetailScreen() {
         Alert.alert('Could not add members', result.error)
         return
       }
+      if ((result.pending ?? 0) > 0) {
+        Alert.alert(
+          'Approval required',
+          `Admins will approve ${result.pending} new member${(result.pending ?? 0) > 1 ? 's' : ''} shortly.`
+        )
+      }
       setAddMemberVisible(false)
       await load()
+    },
+    [groupId, load]
+  )
+
+  /** Toggle a group setting; optimistic update with revert on failure. */
+  const handleToggleSetting = useCallback(
+    async (key: keyof GroupSettings, value: boolean) => {
+      if (!groupId || !group || settingsBusy) return
+      const prev = group.settings
+      setGroup({ ...group, settings: { ...prev, [key]: value } as GroupSettings })
+      setSettingsBusy(true)
+      const result = await updateGroupSettings(groupId, { [key]: value } as GroupSettingsPatch)
+      setSettingsBusy(false)
+      if (!result.success) {
+        setGroup(g => (g ? { ...g, settings: prev } : g))
+        Alert.alert('Could not update setting', result.error)
+        return
+      }
+      await load()
+    },
+    [groupId, group, settingsBusy, load]
+  )
+
+  const handleSaveRules = useCallback(
+    async (rulesText: string) => {
+      if (!groupId) return
+      setSettingsBusy(true)
+      const result = await updateGroupSettings(groupId, { rulesText })
+      setSettingsBusy(false)
+      if (!result.success) {
+        Alert.alert('Could not save rules', result.error)
+        return false
+      }
+      await load()
+      return true
+    },
+    [groupId, load]
+  )
+
+  const handleApprove = useCallback(
+    async (userId: string) => {
+      if (!groupId) return
+      const result = await approveGroupMember(groupId, userId)
+      if (!result.success) {
+        Alert.alert('Could not approve', result.error)
+        return
+      }
+      await load()
+    },
+    [groupId, load]
+  )
+
+  const handleDecline = useCallback(
+    async (userId: string) => {
+      if (!groupId) return
+      const result = await declineGroupMember(groupId, userId)
+      if (!result.success) {
+        Alert.alert('Could not decline', result.error)
+        return
+      }
+      await load()
+    },
+    [groupId, load]
+  )
+
+  const handlePromote = useCallback(
+    (userId: string, name: string) => {
+      if (!groupId) return
+      Alert.alert('Make admin', `Give ${name} admin rights in this group?`, [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Make admin',
+          onPress: async () => {
+            const result = await promoteGroupAdmin(groupId, userId)
+            if (!result.success) {
+              Alert.alert('Could not promote', result.error)
+              return
+            }
+            await load()
+          },
+        },
+      ])
     },
     [groupId, load]
   )
@@ -185,6 +282,14 @@ export default function GroupDetailScreen() {
         <View style={styles.topBar}>
           <TouchableOpacity onPress={() => router.back()} hitSlop={12}>
             <Text style={styles.backText}>{'< Back'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setSettingsVisible(true)}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Group settings"
+          >
+            <Text style={styles.settingsGlyph}>⚙︎</Text>
           </TouchableOpacity>
         </View>
 
@@ -265,13 +370,71 @@ export default function GroupDetailScreen() {
               </TouchableOpacity>
             ) : null}
 
+            {/* Simplified settlement plan (when enabled in settings) */}
+            {group.settings.simplifyDebts && group.settlementPlan.length > 0 && (
+              <View style={styles.planCard}>
+                <Text style={styles.planTitle}>Suggested settlements · simplified</Text>
+                <Text style={styles.planHint}>Fewer payments to square everyone up</Text>
+                {group.settlementPlan.map((t, i) => (
+                  <View key={i} style={styles.planRow}>
+                    <Text style={styles.planNames} numberOfLines={1}>
+                      {t.fromUserId === user?.id ? 'You' : t.fromName}
+                      <Text style={styles.planArrow}> → </Text>
+                      {t.toUserId === user?.id ? 'you' : t.toName}
+                    </Text>
+                    <Text style={styles.planAmount}>{formatAmount(t.amount, currency)}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Pending join requests (admin view) */}
+            {isAdmin && group.pendingMembers.length > 0 && (
+              <>
+                <Text style={styles.sectionTitle}>
+                  Pending approval ({group.pendingMembers.length})
+                </Text>
+                {group.pendingMembers.map(m => (
+                  <View key={m.userId} style={styles.memberRow}>
+                    <View style={styles.memberAvatar}>
+                      <Text style={styles.memberAvatarText}>
+                        {(m.name ?? 'M')[0].toUpperCase()}
+                      </Text>
+                    </View>
+                    <View style={styles.memberInfo}>
+                      <Text style={styles.memberName}>{m.name}</Text>
+                      <Text style={styles.pendingHint}>Wants to join this group</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.declineBtn}
+                      onPress={() => handleDecline(m.userId)}
+                      disabled={settingsBusy}
+                      accessibilityLabel={`Decline ${m.name}`}
+                    >
+                      <Text style={styles.declineText}>✕</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.approveBtn}
+                      onPress={() => handleApprove(m.userId)}
+                      disabled={settingsBusy}
+                      accessibilityLabel={`Approve ${m.name}`}
+                    >
+                      <Text style={styles.approveText}>Approve</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </>
+            )}
+
             {/* Members */}
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Members ({group.members.length})</Text>
               <View style={{ flexDirection: 'row', gap: 16 }}>
-                <TouchableOpacity onPress={() => setAddMemberVisible(true)} hitSlop={8}>
-                  <Text style={styles.actionLink}>Add</Text>
-                </TouchableOpacity>
+                {group.settings.memberCanAddMembers || isAdmin ? (
+                  <TouchableOpacity onPress={() => setAddMemberVisible(true)} hitSlop={8}>
+                    <Text style={styles.actionLink}>Add</Text>
+                  </TouchableOpacity>
+                ) : null}
                 <TouchableOpacity onPress={() => setMembersEditing(e => !e)} hitSlop={8}>
                   <Text style={styles.actionLink}>{membersEditing ? 'Done' : 'Edit'}</Text>
                 </TouchableOpacity>
@@ -290,8 +453,15 @@ export default function GroupDetailScreen() {
                       </Text>
                     </View>
                     <View style={styles.memberInfo}>
-                      <Text style={styles.memberName}>{isMe ? 'You' : m.name}</Text>
-                      {!isMe && m.amount > 0 && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={styles.memberName}>{isMe ? 'You' : m.name}</Text>
+                        {m.role === 'admin' && (
+                          <View style={styles.adminBadge}>
+                            <Text style={styles.adminBadgeText}>Admin</Text>
+                          </View>
+                        )}
+                      </View>
+                      {!group.settings.simplifyDebts && !isMe && m.amount > 0 && (
                         <Text
                           style={[
                             styles.memberBalance,
@@ -304,18 +474,29 @@ export default function GroupDetailScreen() {
                           {formatAmount(m.amount, currency)}
                         </Text>
                       )}
-                      {!isMe && m.amount <= 0 && (
+                      {!group.settings.simplifyDebts && !isMe && m.amount <= 0 && (
                         <Text style={styles.memberBalanceSettled}>settled up</Text>
                       )}
                     </View>
                     {membersEditing && !isMe ? (
-                      <TouchableOpacity
-                        style={styles.removeMemberBtn}
-                        onPress={() => handleRemoveMember(m.userId, m.name)}
-                        accessibilityLabel={`Remove ${m.name}`}
-                      >
-                        <Text style={styles.removeMemberText}>Remove</Text>
-                      </TouchableOpacity>
+                      <View style={{ flexDirection: 'row', gap: 8 }}>
+                        {isAdmin && m.role !== 'admin' && (
+                          <TouchableOpacity
+                            style={styles.promoteBtn}
+                            onPress={() => handlePromote(m.userId, m.name)}
+                            accessibilityLabel={`Make ${m.name} admin`}
+                          >
+                            <Text style={styles.promoteText}>Make admin</Text>
+                          </TouchableOpacity>
+                        )}
+                        <TouchableOpacity
+                          style={styles.removeMemberBtn}
+                          onPress={() => handleRemoveMember(m.userId, m.name)}
+                          accessibilityLabel={`Remove ${m.name}`}
+                        >
+                          <Text style={styles.removeMemberText}>Remove</Text>
+                        </TouchableOpacity>
+                      </View>
                     ) : null}
                   </View>
                 )
@@ -401,7 +582,213 @@ export default function GroupDetailScreen() {
         onClose={() => setAddMemberVisible(false)}
         onAdd={handleAddMembers}
       />
+
+      {/* Group settings: permissions, rules, simplify debts */}
+      <GroupSettingsModal
+        visible={settingsVisible}
+        groupName={group?.name ?? ''}
+        settings={group?.settings ?? null}
+        myRole={group?.myRole ?? 'member'}
+        busy={settingsBusy}
+        onClose={() => setSettingsVisible(false)}
+        onToggle={handleToggleSetting}
+        onSaveRules={handleSaveRules}
+      />
     </View>
+  )
+}
+
+function ToggleRow({
+  label,
+  value,
+  disabled,
+  onValueChange,
+}: {
+  label: string
+  value: boolean
+  disabled?: boolean
+  onValueChange: (v: boolean) => void
+}) {
+  return (
+    <TouchableOpacity
+      style={[styles.settingRow, disabled && styles.settingRowDisabled]}
+      onPress={() => !disabled && onValueChange(!value)}
+      disabled={disabled}
+      accessibilityRole="switch"
+      accessibilityState={{ checked: value, disabled }}
+      accessibilityLabel={label}
+    >
+      <Text style={styles.settingLabel}>{label}</Text>
+      <View style={[styles.switchTrack, value && styles.switchTrackOn]}>
+        <View style={[styles.switchThumb, value ? styles.switchThumbOn : styles.switchThumbOff]} />
+      </View>
+    </TouchableOpacity>
+  )
+}
+
+function GroupSettingsModal({
+  visible,
+  groupName,
+  settings,
+  myRole,
+  busy,
+  onClose,
+  onToggle,
+  onSaveRules,
+}: {
+  visible: boolean
+  groupName: string
+  settings: GroupSettings | null
+  myRole: 'admin' | 'member'
+  busy: boolean
+  onClose: () => void
+  onToggle: (key: keyof GroupSettings, value: boolean) => void
+  onSaveRules: (rulesText: string) => Promise<boolean | void>
+}) {
+  const insets = useSafeAreaInsets()
+  const [rulesDraft, setRulesDraft] = useState('')
+  const [rulesEditing, setRulesEditing] = useState(false)
+
+  useEffect(() => {
+    if (visible) {
+      setRulesDraft(settings?.rulesText ?? '')
+      setRulesEditing(false)
+    }
+  }, [visible, settings?.rulesText])
+
+  if (!settings) return null
+
+  const isAdmin = myRole === 'admin'
+  // Members may flip the basic settings only when the admin allows it;
+  // rules + admin approval + simplify stay admin-owned.
+  const memberMayEdit = settings.memberCanEditSettings
+  const canEditBasic = isAdmin || memberMayEdit
+  const canEditRules = isAdmin
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}
+    >
+      <View style={[styles.screen, { paddingTop: insets.top + 16, paddingHorizontal: 24 }]}>
+        <View style={styles.addMembersHeader}>
+          <Text style={styles.addMembersTitle}>Group settings</Text>
+          <TouchableOpacity onPress={onClose} hitSlop={12}>
+            <Text style={{ fontSize: 18, color: '#6B6B6B' }}>✕</Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.settingsGroupHint}>
+          {groupName} · you are {isAdmin ? 'an admin' : 'a member'}
+        </Text>
+
+        <ScrollView
+          contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* ── Permissions ── */}
+          <Text style={styles.settingsSectionTitle}>Group permissions</Text>
+          <ToggleRow
+            label="Members can edit group settings"
+            value={settings.memberCanEditSettings}
+            disabled={!canEditBasic || busy}
+            onValueChange={v => onToggle('memberCanEditSettings', v)}
+          />
+          <ToggleRow
+            label="Members can add other members"
+            value={settings.memberCanAddMembers}
+            disabled={!canEditBasic || busy}
+            onValueChange={v => onToggle('memberCanAddMembers', v)}
+          />
+          <ToggleRow
+            label="Members can send new messages"
+            value={settings.memberCanSendMessages}
+            disabled={!canEditBasic || busy}
+            onValueChange={v => onToggle('memberCanSendMessages', v)}
+          />
+          <ToggleRow
+            label="Admins approve new members"
+            value={settings.adminApprovalRequired}
+            disabled={!isAdmin || busy}
+            onValueChange={v => onToggle('adminApprovalRequired', v)}
+          />
+
+          {/* ── Rules ── */}
+          <Text style={styles.settingsSectionTitle}>Group rules</Text>
+          {canEditRules ? (
+            rulesEditing ? (
+              <View>
+                <TextInput
+                  style={styles.rulesInput}
+                  value={rulesDraft}
+                  onChangeText={setRulesDraft}
+                  placeholder={'e.g. Settle every Sunday…'}
+                  placeholderTextColor="#9CA3AF"
+                  multiline
+                  textAlignVertical="top"
+                  accessibilityLabel="Group rules"
+                />
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+                  <TouchableOpacity
+                    style={[styles.rulesSaveBtn, busy && { opacity: 0.6 }]}
+                    disabled={busy}
+                    onPress={async () => {
+                      const ok = await onSaveRules(rulesDraft)
+                      if (ok !== false) setRulesEditing(false)
+                    }}
+                  >
+                    <Text style={styles.settleBtnText}>Save rules</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.rulesCancelBtn}
+                    disabled={busy}
+                    onPress={() => {
+                      setRulesDraft(settings.rulesText ?? '')
+                      setRulesEditing(false)
+                    }}
+                  >
+                    <Text style={styles.rulesCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.rulesCard}
+                onPress={() => setRulesEditing(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Edit group rules"
+              >
+                <Text style={styles.rulesText}>
+                  {settings.rulesText?.trim()
+                    ? settings.rulesText
+                    : 'No rules yet — tap to add house rules, split policy, due dates…'}
+                </Text>
+                <Text style={styles.editHintSmall}>Edit</Text>
+              </TouchableOpacity>
+            )
+          ) : (
+            <View style={styles.rulesCard}>
+              <Text style={styles.rulesText}>
+                {settings.rulesText?.trim() ? settings.rulesText : 'No rules set for this group.'}
+              </Text>
+            </View>
+          )}
+
+          {/* ── Advanced ── */}
+          <Text style={styles.settingsSectionTitle}>Advanced</Text>
+          <ToggleRow
+            label="Simplify group debts"
+            value={settings.simplifyDebts}
+            disabled={!canEditBasic || busy}
+            onValueChange={v => onToggle('simplifyDebts', v)}
+          />
+          <Text style={styles.settingFootnote}>
+            When on, balances are combined into the fewest payments needed to square everyone up.
+          </Text>
+        </ScrollView>
+      </View>
+    </Modal>
   )
 }
 
@@ -517,8 +904,10 @@ const styles = StyleSheet.create({
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 20,
   },
+  settingsGlyph: { fontSize: 20, color: '#3273CD' },
   backText: {
     color: '#3273CD',
     fontSize: 16,
@@ -711,4 +1100,142 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   addMembersBtnText: { color: '#FFFFFF', fontSize: 16, fontFamily: 'Nunito_600SemiBold' },
+  planCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#D4E7FF',
+    backgroundColor: '#F5F9FF',
+    padding: 14,
+    marginBottom: 8,
+  },
+  planTitle: { fontSize: 14, fontFamily: 'Nunito_700Bold', color: '#141414' },
+  planHint: { fontSize: 12, fontFamily: 'Nunito_400Regular', color: '#6B6B6B', marginTop: 2 },
+  planRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E1ECFB',
+  },
+  planNames: { fontSize: 14, fontFamily: 'Nunito_600SemiBold', color: '#141414', flex: 1 },
+  planArrow: { color: '#3273CD', fontFamily: 'Nunito_400Regular' },
+  planAmount: { fontSize: 14, fontFamily: 'Nunito_700Bold', color: '#141414', marginLeft: 8 },
+  pendingHint: { fontSize: 12, fontFamily: 'Nunito_400Regular', color: '#DE8334' },
+  approveBtn: {
+    backgroundColor: '#141414',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  approveText: { color: '#FFFFFF', fontSize: 12, fontFamily: 'Nunito_600SemiBold' },
+  declineBtn: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  declineText: { color: '#6B6B6B', fontSize: 12, fontFamily: 'Nunito_600SemiBold' },
+  adminBadge: {
+    backgroundColor: '#F9F0BF',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+  },
+  adminBadgeText: { fontSize: 10, fontFamily: 'Nunito_600SemiBold', color: '#141414' },
+  promoteBtn: {
+    borderWidth: 1,
+    borderColor: '#3273CD',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  promoteText: { color: '#3273CD', fontSize: 12, fontFamily: 'Nunito_600SemiBold' },
+  settingsGroupHint: {
+    fontSize: 13,
+    fontFamily: 'Nunito_400Regular',
+    color: '#6B6B6B',
+    marginBottom: 8,
+  },
+  settingsSectionTitle: {
+    fontSize: 13,
+    fontFamily: 'Nunito_700Bold',
+    color: '#9CA3AF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: 20,
+    marginBottom: 6,
+  },
+  settingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+  },
+  settingRowDisabled: { opacity: 0.45 },
+  settingLabel: {
+    flex: 1,
+    fontSize: 15,
+    fontFamily: 'Nunito_400Regular',
+    color: '#141414',
+    paddingRight: 12,
+  },
+  settingFootnote: {
+    fontSize: 12,
+    fontFamily: 'Nunito_400Regular',
+    color: '#9CA3AF',
+    lineHeight: 17,
+    marginTop: 2,
+  },
+  switchTrack: {
+    width: 44,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#D1D5DB',
+    padding: 2,
+    justifyContent: 'center',
+  },
+  switchTrackOn: { backgroundColor: '#141414' },
+  switchThumb: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#FFFFFF',
+  },
+  switchThumbOn: { alignSelf: 'flex-end' },
+  switchThumbOff: { alignSelf: 'flex-start' },
+  rulesCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+    padding: 14,
+  },
+  rulesText: {
+    fontSize: 14,
+    fontFamily: 'Nunito_400Regular',
+    color: '#141414',
+    lineHeight: 20,
+  },
+  editHintSmall: { fontSize: 12, color: '#3B82F6', fontWeight: '500', marginTop: 8 },
+  rulesInput: {
+    minHeight: 120,
+    borderWidth: 1,
+    borderColor: '#141414',
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 14,
+    color: '#141414',
+    backgroundColor: '#FFFFFF',
+    textAlignVertical: 'top',
+  },
+  rulesSaveBtn: {
+    backgroundColor: '#141414',
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+  rulesCancelBtn: { justifyContent: 'center', paddingHorizontal: 8 },
+  rulesCancelText: { color: '#6B6B6B', fontSize: 14, fontFamily: 'Nunito_600SemiBold' },
 })
