@@ -114,6 +114,19 @@ function Notifications() {
     async (item: NotificationRequest) => {
       setToastGroupName(item.groupName)
       setToastVisible(true)
+
+      // Record the approval so the creator sees this participant signed off.
+      if (item.expenseId) {
+        try {
+          const { error } = await supabase.rpc('approve_expense', {
+            p_expense_id: item.expenseId,
+          })
+          if (error) console.warn('[notifications] approve_expense', error.message)
+        } catch (e) {
+          console.warn('[notifications] approve_expense', e)
+        }
+      }
+
       await removeAndDismiss(item)
       if (item.expenseId) {
         router.push(`/dashboard/expense/${item.expenseId}`)

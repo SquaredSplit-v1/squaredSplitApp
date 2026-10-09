@@ -1,7 +1,7 @@
 // components/AddExpenseModal.tsx
 import * as Haptics from 'expo-haptics'
 import { Image } from 'expo-image'
-import React, { useCallback, useEffect, useMemo } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   Keyboard,
@@ -21,11 +21,14 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
+import CameraCaptureModal from '@/components/CameraCaptureModal'
+import SignaturePad from '@/components/SignaturePad'
 import { createExpense } from '@/lib/api/createExpense'
 import { labelForMatchedPhone } from '@/lib/contacts'
 import { formatAmount } from '@/lib/currency'
 import type { MatchedContact } from '@/lib/supabase/contacts'
 import { createExpenseWithInvites, type CreatedExpenseWithInvites } from '@/lib/supabase/invites'
+import { pickReceiptImage, uploadReceipt, uploadSignature } from '@/lib/supabase/receipts'
 import { expenseInviteMessage, inviteLink, whatsappUrl } from '@/lib/whatsapp'
 import {
   dueDatePresetToIsoDate,
@@ -155,7 +158,21 @@ export default function AddExpenseModal({
     reset,
   } = useAddExpenseStore()
 
-  // Preselect participants (a friend or a whole group) each time the modal opens.
+  // Receipt + agreement state (local — not part of the persisted form store).
+  const [receiptUri, setReceiptUri] = useState<string | null>(null)
+  const [cameraVisible, setCameraVisible] = useState(false)
+  const [wantsAgreement, setWantsAgreement] = useState(false)
+  const [showSignature, setShowSignature] = useState(false)
+  const [signatureBase64, setSignatureBase64] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!visible) {
+      setReceiptUri(null)
+      setWantsAgreement(false)
+      setShowSignature(false)
+      setSignatureBase64(null)
+    }
+  }, [visible])
   useEffect(() => {
     if (visible && presetParticipantIds && presetParticipantIds.length > 0) {
       setParticipants(presetParticipantIds)
@@ -267,6 +284,8 @@ export default function AddExpenseModal({
     try {
       let createdWithInvites: CreatedExpenseWithInvites | null = null
 
+      let createdExpenseId: string | null = null
+
       if (invites.length > 0) {
         // Invite flow — equal split across app users + invitees, then send
         // WhatsApp links for each invite.
@@ -281,8 +300,9 @@ export default function AddExpenseModal({
           note: note.trim() ? note.trim() : null,
           dueDate: dueDatePresetToIsoDate(dueDatePreset),
         })
+        createdExpenseId = createdWithInvites.id
       } else {
-        await createExpense({
+        const created = await createExpense({
           title: title.trim(),
           amount: amountFloat,
           paid_by: effectivePaidBy,
@@ -300,6 +320,19 @@ export default function AddExpenseModal({
                 )
               : undefined,
         })
+        createdExpenseId = created.id
+      }
+
+      // Attach receipt / agreement to the created expense (best-effort —
+      // a failed upload must never lose the expense).
+      if (createdExpenseId && receiptUri) {
+        const r = await uploadReceipt(user.id, createdExpenseId, receiptUri)
+        if (!r.success) console.warn('[AddExpense] receipt upload failed:', r.error)
+      }
+      if (createdExpenseId && signatureBase64) {
+        const signerName = user.user_metadata?.full_name?.trim() || 'You'
+        const a = await uploadSignature(user.id, signerName, createdExpenseId, signatureBase64)
+        if (!a.success) console.warn('[AddExpense] signature upload failed:', a.error)
       }
 
       reset()
@@ -350,6 +383,8 @@ export default function AddExpenseModal({
     splitPreview,
     percentages,
     currency,
+    receiptUri,
+    signatureBase64,
     reset,
     onSuccess,
     onClose,
@@ -741,6 +776,95 @@ export default function AddExpenseModal({
                 <Text style={s.hint}>Select a friend or invite a contact to split with</Text>
               )}
 
+              {/* Receipt + agreement */}
+              <View style={s.section}>
+                <Text style={s.label}>Receipt & agreement</Text>
+                <Pressable
+                  style={s.attachRow}
+                  onPress={() =>
+                    Alert.alert(
+                      'Add receipt',
+                      'Capture with the camera or pick from your library',
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Take photo',
+                          onPress: () => setCameraVisible(true),
+                        },
+                        {
+                          text: 'Choose from library',
+                          onPress: async () => {
+                            const uri = await pickReceiptImage()
+                            if (uri) setReceiptUri(uri)
+                          },
+                        },
+                      ]
+                    )
+                  }
+                  accessibilityRole="button"
+                  accessibilityLabel="Attach receipt photo"
+                >
+                  <Text style={s.attachEmoji}>🧾</Text>
+                  <View style={s.attachTextWrap}>
+                    <Text style={s.attachTitle}>
+                      {receiptUri ? 'Receipt attached ✓' : 'Attach receipt photo'}
+                    </Text>
+                    <Text style={s.attachHint}>Optional — visible to everyone in the split</Text>
+                  </View>
+                  {receiptUri ? (
+                    <TouchableOpacity
+                      onPress={() => setReceiptUri(null)}
+                      hitSlop={8}
+                      accessibilityLabel="Remove receipt"
+                    >
+                      <Text style={s.removeBtnText}>✕</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <Text style={s.attachChevron}>＋</Text>
+                  )}
+                </Pressable>
+
+                <Pressable
+                  style={s.attachRow}
+                  onPress={() => {
+                    if (wantsAgreement && signatureBase64) {
+                      setWantsAgreement(false)
+                      setSignatureBase64(null)
+                    } else {
+                      setShowSignature(true)
+                    }
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add agreement signature"
+                >
+                  <Text style={s.attachEmoji}>✍️</Text>
+                  <View style={s.attachTextWrap}>
+                    <Text style={s.attachTitle}>
+                      {signatureBase64
+                        ? 'Agreement signed ✓'
+                        : wantsAgreement
+                          ? 'Agreement (no signature)'
+                          : 'Agreement with signature'}
+                    </Text>
+                    <Text style={s.attachHint}>Optional — everyone signs to confirm the split</Text>
+                  </View>
+                  {signatureBase64 ? (
+                    <TouchableOpacity
+                      onPress={() => {
+                        setWantsAgreement(false)
+                        setSignatureBase64(null)
+                      }}
+                      hitSlop={8}
+                      accessibilityLabel="Remove signature"
+                    >
+                      <Text style={s.removeBtnText}>✕</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <Text style={s.attachChevron}>＋</Text>
+                  )}
+                </Pressable>
+              </View>
+
               {/* Note */}
               <View style={s.section}>
                 <Text style={s.label}>Note (optional)</Text>
@@ -778,6 +902,49 @@ export default function AddExpenseModal({
           </View>
         </KeyboardAvoidingView>
       </TouchableWithoutFeedback>
+
+      {/* Signature capture */}
+      <Modal
+        visible={showSignature}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowSignature(false)}
+      >
+        <View style={[s.root, { paddingTop: insets.top + 16 }]}>
+          <View style={s.header}>
+            <Text style={s.headerTitle}>Agreement signature</Text>
+            <TouchableOpacity onPress={() => setShowSignature(false)} hitSlop={12}>
+              <Text style={s.closeBtn}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={{ paddingHorizontal: 24, paddingTop: 8 }}>
+            <Text style={s.sigIntro}>
+              Signing confirms you agree to this split. It’s stored with the expense and visible to
+              its participants.
+            </Text>
+            <SignaturePad
+              width={320}
+              height={200}
+              onComplete={base64 => {
+                setSignatureBase64(base64)
+                setWantsAgreement(true)
+                setShowSignature(false)
+              }}
+              onCancel={() => setShowSignature(false)}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      <CameraCaptureModal
+        visible={cameraVisible}
+        onClose={() => setCameraVisible(false)}
+        onCapture={uri => {
+          setCameraVisible(false)
+          setReceiptUri(uri)
+        }}
+        hint="Position the receipt in the frame"
+      />
     </Modal>
   )
 }
@@ -927,6 +1094,30 @@ const s = StyleSheet.create({
   validationError: { fontSize: 12, color: '#EF4444', marginTop: 6 },
   hint: { fontSize: 13, color: '#9CA3AF', textAlign: 'center', marginTop: 8 },
   noteInput: { height: 84, textAlignVertical: 'top', paddingTop: 12 },
+  attachRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    height: 60,
+    marginBottom: 8,
+  },
+  attachEmoji: { fontSize: 20 },
+  attachTextWrap: { flex: 1, minWidth: 0, gap: 2 },
+  attachTitle: { fontSize: 15, fontFamily: 'Nunito_600SemiBold', color: '#141414' },
+  attachHint: { fontSize: 12, color: '#9CA3AF' },
+  attachChevron: { fontSize: 22, color: '#9CA3AF', fontWeight: '600' },
+  removeBtnText: { fontSize: 18, color: '#6B6B6B', padding: 4 },
+  sigIntro: {
+    fontSize: 13,
+    fontFamily: 'Nunito_400Regular',
+    color: '#6B6B6B',
+    lineHeight: 18,
+    marginBottom: 16,
+  },
   footer: {
     paddingHorizontal: 24,
     paddingTop: 12,

@@ -3,9 +3,12 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import React, { useCallback, useEffect, useState } from 'react'
 import {
   ActivityIndicator,
+  Alert,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native'
@@ -14,6 +17,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { fetchExpenseDetail } from '@/lib/api/getExpenseDetail'
 import { formatAmount } from '@/lib/currency'
 import type { ExpenseDetail } from '@/lib/supabase/home'
+import {
+  deleteReceipt,
+  fetchAgreements,
+  fetchReceipts,
+  updateExpenseNote,
+  type Agreement,
+  type Receipt,
+} from '@/lib/supabase/receipts'
 import { useAuthStore } from '@/store/authStore'
 import { useCurrencyStore } from '@/store/currencyStore'
 
@@ -63,6 +74,13 @@ export default function ExpenseDetailScreen() {
   const [expense, setExpense] = useState<ExpenseDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [receipts, setReceipts] = useState<Receipt[]>([])
+  const [agreements, setAgreements] = useState<Agreement[]>([])
+  const [noteDraft, setNoteDraft] = useState<string | null>(null)
+  const [noteEditing, setNoteEditing] = useState(false)
+  const [noteSaving, setNoteSaving] = useState(false)
+  const [viewerUrl, setViewerUrl] = useState<string | null>(null)
+  const [isOwner, setIsOwner] = useState(false)
 
   const load = useCallback(async () => {
     if (!expenseId) {
@@ -76,8 +94,44 @@ export default function ExpenseDetailScreen() {
     const { data, error: err } = await fetchExpenseDetail(expenseId)
     if (err) setError(err)
     setExpense(data)
+    setNoteDraft(data?.note ?? null)
+    setIsOwner(Boolean(data && userId && data.paidBy === userId))
     setLoading(false)
-  }, [expenseId])
+    const [rs, ags] = await Promise.all([fetchReceipts(expenseId), fetchAgreements(expenseId)])
+    setReceipts(rs)
+    setAgreements(ags)
+  }, [expenseId, userId])
+
+  const saveNote = useCallback(
+    async (value: string | null) => {
+      if (!expenseId || noteSaving) return
+      setNoteSaving(true)
+      const result = await updateExpenseNote(expenseId, value)
+      setNoteSaving(false)
+      if (!result.success) {
+        Alert.alert('Could not save note', result.error ?? 'Please try again.')
+        return
+      }
+      setNoteDraft(value)
+      setNoteEditing(false)
+      setExpense(prev => (prev ? { ...prev, note: value } : prev))
+    },
+    [expenseId, noteSaving]
+  )
+
+  const removeReceipt = useCallback((receipt: Receipt) => {
+    Alert.alert('Delete receipt', 'Remove this receipt from the expense?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          const ok = await deleteReceipt(receipt)
+          if (ok) setReceipts(prev => prev.filter(r => r.id !== receipt.id))
+        },
+      },
+    ])
+  }, [])
 
   useEffect(() => {
     load()
@@ -222,15 +276,137 @@ export default function ExpenseDetailScreen() {
           </View>
         ) : null}
 
-        {expense.note ? (
-          <View style={styles.noteBox}>
-            <Text style={styles.noteText}>
-              <Text style={styles.noteLabelBold}>Note:</Text>
-              <Text style={styles.noteBody}> {expense.note}</Text>
-            </Text>
+        {/* Note — owner can edit or delete */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Note</Text>
+            {isOwner && !noteEditing && (
+              <View style={styles.sectionActions}>
+                <TouchableOpacity onPress={() => setNoteEditing(true)} hitSlop={8}>
+                  <Text style={styles.actionLink}>{noteDraft ? 'Edit' : 'Add'}</Text>
+                </TouchableOpacity>
+                {noteDraft ? (
+                  <TouchableOpacity
+                    onPress={() => void saveNote(null)}
+                    hitSlop={8}
+                    accessibilityLabel="Delete note"
+                  >
+                    <Text style={styles.actionDanger}>Delete</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            )}
           </View>
-        ) : null}
+          {noteEditing ? (
+            <View style={styles.noteEditWrap}>
+              <TextInput
+                style={styles.noteInput}
+                value={noteDraft ?? ''}
+                onChangeText={setNoteDraft}
+                placeholder="Add a note…"
+                placeholderTextColor="#9CA3AF"
+                multiline
+                maxLength={500}
+                autoFocus
+              />
+              <View style={styles.noteEditBtns}>
+                <TouchableOpacity
+                  onPress={() => setNoteEditing(false)}
+                  style={styles.noteCancelBtn}
+                >
+                  <Text style={styles.noteCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => void saveNote(noteDraft?.trim() ? noteDraft.trim() : null)}
+                  style={styles.noteSaveBtn}
+                  disabled={noteSaving}
+                >
+                  <Text style={styles.noteSaveText}>{noteSaving ? 'Saving…' : 'Save'}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : noteDraft ? (
+            <Text style={styles.noteBodyText}>{noteDraft}</Text>
+          ) : (
+            <Text style={styles.emptySectionText}>
+              No note{isOwner ? ' — tap Add to write one' : ''}.
+            </Text>
+          )}
+        </View>
+
+        {/* Receipts */}
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Receipts</Text>
+          {receipts.length === 0 ? (
+            <Text style={styles.emptySectionText}>
+              No receipts — attach one when adding or from the expense later.
+            </Text>
+          ) : (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.receiptRow}
+            >
+              {receipts.map(r => (
+                <View key={r.id} style={styles.receiptWrap}>
+                  <TouchableOpacity onPress={() => setViewerUrl(r.url)} activeOpacity={0.85}>
+                    <Image source={{ uri: r.url }} style={styles.receiptThumb} contentFit="cover" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.receiptDelete}
+                    onPress={() => removeReceipt(r)}
+                    accessibilityLabel="Delete receipt"
+                  >
+                    <Text style={styles.receiptDeleteText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </ScrollView>
+          )}
+        </View>
+
+        {/* Agreement signatures */}
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Agreement</Text>
+          {agreements.length === 0 ? (
+            <Text style={styles.emptySectionText}>No signatures on this expense.</Text>
+          ) : (
+            agreements.map(a => (
+              <TouchableOpacity
+                key={a.id}
+                style={styles.agreementRow}
+                onPress={() => setViewerUrl(a.url)}
+                activeOpacity={0.85}
+              >
+                <Image source={{ uri: a.url }} style={styles.signatureThumb} contentFit="contain" />
+                <View style={styles.agreementText}>
+                  <Text style={styles.agreementName}>{a.signerName ?? 'Signed'}</Text>
+                  <Text style={styles.agreementDate}>
+                    signed {new Date(a.agreedAt).toLocaleDateString()}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ))
+          )}
+        </View>
       </ScrollView>
+
+      {/* Full-screen image viewer */}
+      <Modal visible={viewerUrl !== null} transparent onRequestClose={() => setViewerUrl(null)}>
+        <View style={styles.viewerRoot}>
+          <TouchableOpacity style={styles.viewerClose} onPress={() => setViewerUrl(null)}>
+            <Text style={styles.viewerCloseText}>✕</Text>
+          </TouchableOpacity>
+          {viewerUrl ? (
+            <Image
+              source={{ uri: viewerUrl }}
+              style={styles.viewerImage}
+              contentFit="contain"
+              transition={150}
+            />
+          ) : null}
+        </View>
+      </Modal>
     </View>
   )
 }
@@ -409,6 +585,102 @@ const styles = StyleSheet.create({
     fontFamily: 'Nunito_600SemiBold',
     lineHeight: 18,
   },
+  sectionCard: {
+    marginTop: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    padding: 14,
+    backgroundColor: '#FAFAFC',
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  sectionTitle: {
+    fontSize: 13,
+    fontFamily: 'Nunito_700Bold',
+    color: '#9CA3AF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  sectionActions: { flexDirection: 'row', gap: 16 },
+  actionLink: { fontSize: 13, fontFamily: 'Nunito_600SemiBold', color: '#3273CD' },
+  actionDanger: { fontSize: 13, fontFamily: 'Nunito_600SemiBold', color: '#EF4444' },
+  noteBodyText: {
+    fontSize: 15,
+    fontFamily: 'Nunito_400Regular',
+    color: '#141414',
+    lineHeight: 21,
+  },
+  emptySectionText: { fontSize: 13, fontFamily: 'Nunito_400Regular', color: '#9CA3AF' },
+  noteEditWrap: { gap: 10 },
+  noteInput: {
+    minHeight: 80,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    padding: 10,
+    fontSize: 14,
+    fontFamily: 'Nunito_400Regular',
+    color: '#141414',
+    textAlignVertical: 'top',
+  },
+  noteEditBtns: { flexDirection: 'row', gap: 8, justifyContent: 'flex-end' },
+  noteCancelBtn: { paddingVertical: 6, paddingHorizontal: 12 },
+  noteCancelText: { color: '#6B6B6B', fontSize: 14, fontFamily: 'Nunito_600SemiBold' },
+  noteSaveBtn: {
+    backgroundColor: '#141414',
+    borderRadius: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+  },
+  noteSaveText: { color: '#FFFFFF', fontSize: 14, fontFamily: 'Nunito_600SemiBold' },
+  receiptRow: { gap: 10, paddingTop: 4 },
+  receiptWrap: { position: 'relative' },
+  receiptThumb: { width: 88, height: 88, borderRadius: 12, backgroundColor: '#E5E7EB' },
+  receiptDelete: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#EF4444',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  receiptDeleteText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
+  agreementRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 6,
+  },
+  signatureThumb: {
+    width: 96,
+    height: 44,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  agreementText: { flex: 1, gap: 2 },
+  agreementName: { fontSize: 14, fontFamily: 'Nunito_600SemiBold', color: '#141414' },
+  agreementDate: { fontSize: 12, fontFamily: 'Nunito_400Regular', color: '#9CA3AF' },
+  viewerRoot: {
+    flex: 1,
+    backgroundColor: 'rgba(10,10,14,0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  viewerClose: { position: 'absolute', top: 54, right: 20, padding: 8, zIndex: 1 },
+  viewerCloseText: { color: '#FFFFFF', fontSize: 24 },
+  viewerImage: { width: '100%', height: '80%' },
   noteText: {
     color: '#141414',
     fontSize: 16,

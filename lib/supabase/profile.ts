@@ -35,7 +35,7 @@ export async function saveProfile(
 export async function getProfile(userId: string) {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, full_name, avatar_url, has_onboarded, onboarding_complete')
+    .select('id, full_name, avatar_url, has_onboarded, onboarding_complete, language, timezone')
     .eq('id', userId)
     .single()
 
@@ -82,9 +82,7 @@ export async function uploadAvatar(userId: string, localUri: string): Promise<st
  *     handler takes care of resetting all stores and routing to login.
  *  3. On failure, return the error message so the caller can surface it.
  */
-export async function deleteAccount(
-  userId: string
-): Promise<{ success: boolean; error?: string }> {
+export async function deleteAccount(userId: string): Promise<{ success: boolean; error?: string }> {
   try {
     const { data, error } = await supabase.functions.invoke('delete-account', {
       body: { userId },
@@ -97,7 +95,9 @@ export async function deleteAccount(
         try {
           const body = (await (error.context as Response).json()) as { error?: string }
           if (typeof body.error === 'string' && body.error.trim()) msg = body.error
-        } catch { /* ignore parse errors */ }
+        } catch {
+          /* ignore parse errors */
+        }
       }
       return { success: false, error: msg }
     }

@@ -68,9 +68,9 @@ export async function createExpenseWithInvites(input: {
     p_amount: input.amount,
     p_category: input.category ?? 'general',
     p_paid_by: input.paidBy,
-    p_group_id: input.groupId ?? null,
-    p_due_date: input.dueDate ?? null,
-    p_note: input.note ?? null,
+    p_group_id: input.groupId ?? undefined,
+    p_due_date: input.dueDate ?? undefined,
+    p_note: input.note ?? undefined,
     p_participants: input.participants.map(id => ({ id })),
     p_invites: input.invites.map(i => ({ phone: i.phone, name: i.name ?? null })),
   })

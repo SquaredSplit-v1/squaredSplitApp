@@ -23,7 +23,9 @@ import Animated, {
 } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { sendOtp } from '@/lib/auth'
+import { AppleButton, GoogleButton, OrContinueWithDivider } from '@/components/auth/SocialButtons'
+import { isValidEmail, sendOtp, signInWithEmail, signUpWithEmail } from '@/lib/auth'
+import { signInWithApple, useAppleAvailability, useGoogleSignIn } from '@/lib/socialAuth'
 
 import AppIcon from '../../assets/app-icon.svg'
 import BlurEllipse from '../../assets/auth/Blur-Ellipse.svg'
@@ -220,10 +222,80 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false)
   const [showPicker, setShowPicker] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const [socialError, setSocialError] = useState('')
+  const [isAppleBusy, setIsAppleBusy] = useState(false)
+
+  // Email + password mode
+  const [mode, setMode] = useState<'phone' | 'email'>('phone')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [isSigningUp, setIsSigningUp] = useState(false)
+
+  const appleAvailable = useAppleAvailability()
+
+  // useCallback keeps the hook's response effect stable across renders
+  const handleGoogleOutcome = React.useCallback((outcome: { success: boolean; error?: string }) => {
+    if (!outcome.success && outcome.error) setSocialError(outcome.error)
+  }, [])
+  const {
+    canUseGoogle,
+    isSigningIn: isGoogleBusy,
+    signInWithGoogle,
+  } = useGoogleSignIn(handleGoogleOutcome)
+
+  const handleAppleSignIn = async () => {
+    setSocialError('')
+    setIsAppleBusy(true)
+    await signInWithApple(outcome => {
+      if (!outcome.success && outcome.error) setSocialError(outcome.error)
+    })
+    setIsAppleBusy(false)
+  }
 
   const handlePhoneChange = (text: string) => {
     if (errorMessage) setErrorMessage('')
     setPhoneNumber(text.replace(/\D/g, ''))
+  }
+
+  // ── Email + password handlers ────────────────────────────────────────────
+
+  const validateEmailForm = (): string | null => {
+    if (!isValidEmail(email)) return 'Please enter a valid email address.'
+    if (password.length < 6) return 'Password must be at least 6 characters.'
+    return null
+  }
+
+  const handleEmailSignIn = async () => {
+    const validation = validateEmailForm()
+    if (validation) {
+      setErrorMessage(validation)
+      return
+    }
+    setIsLoading(true)
+    setErrorMessage('')
+    const result = await signInWithEmail(email, password)
+    if (!result.success) setErrorMessage(result.error ?? 'Sign in failed.')
+    // Success: onAuthStateChange routes to onboarding / dashboard.
+    setIsLoading(false)
+  }
+
+  const handleEmailSignUp = async () => {
+    const validation = validateEmailForm()
+    if (validation) {
+      setErrorMessage(validation)
+      return
+    }
+    setIsSigningUp(true)
+    setErrorMessage('')
+    const result = await signUpWithEmail(email, password)
+    if (!result.success) setErrorMessage(result.error ?? 'Could not create account.')
+    setIsSigningUp(false)
+  }
+
+  const switchMode = (next: 'phone' | 'email') => {
+    setMode(next)
+    setErrorMessage('')
+    setPassword('')
   }
 
   const handleGetStarted = async () => {
@@ -255,7 +327,8 @@ export default function LoginScreen() {
     }
   }
 
-  const isValid = phoneNumber.length >= 7
+  const isValid =
+    mode === 'phone' ? phoneNumber.length >= 7 : isValidEmail(email) && password.length >= 6
 
   return (
     <KeyboardAvoidingView
@@ -282,49 +355,145 @@ export default function LoginScreen() {
 
         <Marquee />
 
-        {/* Phone input with country picker */}
-        <View style={styles.inputSection}>
-          <Text style={styles.inputLabel}>Enter your mobile number to continue</Text>
-          <View style={styles.phoneRow}>
+        {mode === 'phone' ? (
+          <>
+            {/* Phone input with country picker */}
+            <View style={styles.inputSection}>
+              <Text style={styles.inputLabel}>Enter your mobile number to continue</Text>
+              <View style={styles.phoneRow}>
+                <TouchableOpacity
+                  style={styles.countryPicker}
+                  onPress={() => setShowPicker(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Country code ${selectedCountry.code}`}
+                >
+                  <Text style={styles.countryFlag}>
+                    {countryCodeToEmoji(selectedCountry.country)}
+                  </Text>
+                  <Text style={styles.countryCodeText}>{selectedCountry.code}</Text>
+                  <Ionicons name="chevron-down" size={14} color="#6B6B6B" />
+                </TouchableOpacity>
+
+                <TextInput
+                  style={[styles.phoneInput, !!errorMessage && styles.phoneInputError]}
+                  placeholder="XXX XXX XXXX"
+                  placeholderTextColor="#9CA3AF"
+                  value={phoneNumber}
+                  onChangeText={handlePhoneChange}
+                  keyboardType="number-pad"
+                  maxLength={15}
+                  returnKeyType="done"
+                  accessibilityLabel="Phone number"
+                />
+              </View>
+
+              {!!errorMessage && <Text style={styles.errorText}>{errorMessage}</Text>}
+            </View>
+
             <TouchableOpacity
-              style={styles.countryPicker}
-              onPress={() => setShowPicker(true)}
-              accessibilityRole="button"
-              accessibilityLabel={`Country code ${selectedCountry.code}`}
+              style={[styles.button, (!isValid || isLoading) && styles.buttonDisabled]}
+              onPress={handleGetStarted}
+              disabled={!isValid || isLoading}
             >
-              <Text style={styles.countryFlag}>{countryCodeToEmoji(selectedCountry.country)}</Text>
-              <Text style={styles.countryCodeText}>{selectedCountry.code}</Text>
-              <Ionicons name="chevron-down" size={14} color="#6B6B6B" />
+              {isLoading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.buttonText}>Get Started</Text>
+              )}
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            {/* Email + password */}
+            <View style={styles.inputSection}>
+              <Text style={styles.inputLabel}>Enter your email and password to continue</Text>
+              <TextInput
+                style={[styles.emailInput, !!errorMessage && styles.phoneInputError]}
+                placeholder="you@example.com"
+                placeholderTextColor="#9CA3AF"
+                value={email}
+                onChangeText={text => {
+                  if (errorMessage) setErrorMessage('')
+                  setEmail(text)
+                }}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="email"
+                returnKeyType="next"
+                accessibilityLabel="Email address"
+              />
+              <TextInput
+                style={[
+                  styles.emailInput,
+                  styles.emailInputSpaced,
+                  !!errorMessage && styles.phoneInputError,
+                ]}
+                placeholder="Password"
+                placeholderTextColor="#9CA3AF"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="password"
+                returnKeyType="done"
+                onSubmitEditing={handleEmailSignIn}
+                accessibilityLabel="Password"
+              />
+
+              {!!errorMessage && <Text style={styles.errorText}>{errorMessage}</Text>}
+            </View>
+
+            <TouchableOpacity
+              style={[styles.button, (!isValid || isLoading) && styles.buttonDisabled]}
+              onPress={handleEmailSignIn}
+              disabled={!isValid || isLoading || isSigningUp}
+            >
+              {isLoading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.buttonText}>Continue</Text>
+              )}
             </TouchableOpacity>
 
-            <TextInput
-              style={[styles.phoneInput, !!errorMessage && styles.phoneInputError]}
-              placeholder="XXX XXX XXXX"
-              placeholderTextColor="#9CA3AF"
-              value={phoneNumber}
-              onChangeText={handlePhoneChange}
-              keyboardType="number-pad"
-              maxLength={15}
-              returnKeyType="done"
-              accessibilityLabel="Phone number"
-            />
-          </View>
-
-          {/* ← inline error — fixes the unused vars warning */}
-          {!!errorMessage && <Text style={styles.errorText}>{errorMessage}</Text>}
-        </View>
+            <TouchableOpacity
+              style={styles.switchAuthRow}
+              onPress={handleEmailSignUp}
+              disabled={isLoading || isSigningUp}
+              accessibilityRole="button"
+              accessibilityLabel="Create an account with email"
+            >
+              <Text style={styles.switchAuthText}>
+                {isSigningUp ? 'Creating your account…' : 'New to SquaredSplit? Create an account'}
+              </Text>
+            </TouchableOpacity>
+          </>
+        )}
 
         <TouchableOpacity
-          style={[styles.button, (!isValid || isLoading) && styles.buttonDisabled]}
-          onPress={handleGetStarted}
-          disabled={!isValid || isLoading}
+          style={styles.modeToggle}
+          onPress={() => switchMode(mode === 'phone' ? 'email' : 'phone')}
+          accessibilityRole="button"
+          accessibilityLabel={
+            mode === 'phone' ? 'Sign in with email instead' : 'Sign in with phone number instead'
+          }
         >
-          {isLoading ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={styles.buttonText}>Get Started</Text>
-          )}
+          <Text style={styles.modeToggleText}>
+            {mode === 'phone' ? 'Use email instead' : 'Use phone instead'}
+          </Text>
         </TouchableOpacity>
+
+        {(canUseGoogle || appleAvailable) && (
+          <>
+            <OrContinueWithDivider />
+            <View style={styles.socialRow}>
+              {canUseGoogle && <GoogleButton onPress={signInWithGoogle} busy={isGoogleBusy} />}
+              {appleAvailable && <AppleButton onPress={handleAppleSignIn} busy={isAppleBusy} />}
+            </View>
+            {!!socialError && <Text style={styles.socialErrorText}>{socialError}</Text>}
+          </>
+        )}
 
         <View style={styles.footerLinks}>
           <TouchableOpacity
@@ -482,6 +651,51 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  socialRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 24,
+  },
+  socialErrorText: {
+    fontSize: 13,
+    color: '#EF4444',
+    marginTop: -16,
+    marginBottom: 16,
+  },
+  emailInput: {
+    height: 52,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    fontSize: 16,
+    color: '#141414',
+    backgroundColor: '#FFFFFF',
+  },
+  emailInputSpaced: {
+    marginTop: 8,
+  },
+  switchAuthRow: {
+    alignItems: 'center',
+    paddingVertical: 4,
+    marginBottom: 8,
+  },
+  switchAuthText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#3B82F6',
+  },
+  modeToggle: {
+    alignItems: 'center',
+    paddingVertical: 8,
+    marginBottom: 8,
+  },
+  modeToggleText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#6B6B6B',
+    textDecorationLine: 'underline',
   },
   footerLinks: {
     flexDirection: 'row',

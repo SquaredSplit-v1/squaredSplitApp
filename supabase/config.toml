@@ -202,3 +202,11 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/invite/deno.json"
 entrypoint = "./functions/invite/index.ts"
+
+# Scheduled settle-up reminders — invoked by pg_cron with the REMINDERS_KEY
+# query secret; no JWT (there is no user context).
+[functions.reminders]
+enabled = true
+verify_jwt = false
+import_map = "./functions/reminders/deno.json"
+entrypoint = "./functions/reminders/index.ts"

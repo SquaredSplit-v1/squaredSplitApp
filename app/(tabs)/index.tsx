@@ -1,6 +1,6 @@
 // app/(tabs)/index.tsx
 import { Image } from 'expo-image'
-import { useRouter } from 'expo-router'
+import { useFocusEffect, useRouter } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
@@ -30,6 +30,7 @@ import type { FriendOverview } from '@/lib/supabase/home'
 import { useAuthStore } from '@/store/authStore'
 import { useCurrencyStore } from '@/store/currencyStore'
 import { useHomeStore } from '@/store/homeStore'
+import { usePendingSplitStore } from '@/store/pendingSplitStore'
 
 function BellIcon() {
   return (
@@ -247,6 +248,8 @@ export default function HomeScreen() {
 
   const [addExpenseVisible, setAddExpenseVisible] = useState(false)
   const [presetFriendIds, setPresetFriendIds] = useState<string[] | undefined>(undefined)
+  const pendingSplitUserId = usePendingSplitStore(s => s.userId)
+  const clearPendingSplit = usePendingSplitStore(s => s.clear)
   const [addFriendVisible, setAddFriendVisible] = useState(false)
   const [filterVisible, setFilterVisible] = useState(false)
   const [selectedFilter, setSelectedFilter] = useState<FilterOption>('none')
@@ -271,6 +274,16 @@ export default function HomeScreen() {
     setPresetFriendIds(presetIds)
     setAddExpenseVisible(true)
   }, [])
+
+  // A friend scanned via QR code (Account → Scan code) opens a prefilled expense.
+  useFocusEffect(
+    useCallback(() => {
+      if (pendingSplitUserId) {
+        openAddExpense([pendingSplitUserId])
+        clearPendingSplit()
+      }
+    }, [pendingSplitUserId, clearPendingSplit]) // eslint-disable-line react-hooks/exhaustive-deps
+  )
 
   const closeAddExpense = useCallback(() => {
     setAddExpenseVisible(false)
