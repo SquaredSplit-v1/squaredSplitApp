@@ -78,18 +78,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     bundleIdentifier: env.bundleIdentifier,
     supportsTablet: false,
-    // Sign in with Apple needs its capability enabled on the App ID in the
-    // Apple Developer portal (one-time toggle). Until that's done the app
-    // builds WITHOUT the entitlement and hides the Apple button. Once the
-    // portal capability is on, set EXPO_PUBLIC_APPLE_LOGIN_ENABLED=true in
-    // EAS env and rebuild — no code changes needed.
-    ...(process.env.EXPO_PUBLIC_APPLE_LOGIN_ENABLED === 'true'
-      ? {
-          entitlements: {
-            'com.apple.developer.applesignin': ['Default'],
-          },
-        }
-      : {}),
+    // Sign in with Apple is gated by plugins/withAppleSignInGate.js (the
+    // expo-apple-authentication plugin adds the entitlement unconditionally;
+    // it needs the App ID capability enabled in the Apple Developer portal
+    // first). Enable via EXPO_PUBLIC_APPLE_LOGIN_ENABLED=true and rebuild.
     infoPlist: {
       NSPhotoLibraryUsageDescription:
         'SquaredSplit needs access to your photo library to set a profile picture.',
@@ -175,6 +167,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       },
     ],
     './plugins/withAndroidReadContacts.js',
+    './plugins/withAppleSignInGate.js',
   ],
   experiments: {
     typedRoutes: true,
