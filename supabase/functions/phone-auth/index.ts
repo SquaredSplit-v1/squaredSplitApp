@@ -213,7 +213,29 @@ Deno.serve(async (req: Request) => {
         )
       }
 
-      await supabase.auth.signInWithOtp({ phone })
+      const { error: otpError } = await supabase.auth.signInWithOtp({ phone })
+
+      if (otpError) {
+        // Don't count provider failures against the user's send budget —
+        // a broken SMS provider would otherwise lock them out after 5 tries.
+        await supabase
+          .from("otp_rate_limits")
+          .update({ attempt_count: 0 })
+          .eq("phone", phone)
+
+        const msg = otpError.message ?? ""
+        const smsFailed = /sms_send_failed|error sending/i.test(msg)
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: smsFailed
+              ? "We couldn't send the SMS right now. Please try again in a moment."
+              : msg || "Failed to send OTP",
+            code: otpError.code ?? null,
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        )
+      }
 
       return new Response(
         JSON.stringify({ success: true }),

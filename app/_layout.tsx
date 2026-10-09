@@ -1,4 +1,4 @@
-import { SplashScreen, Stack } from 'expo-router'
+import { SplashScreen, Stack, useRouter } from 'expo-router'
 import { useEffect, useRef } from 'react'
 import { View } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
@@ -10,6 +10,7 @@ import { useAppUpdates } from '@/hooks/useAppUpdates'
 import { useGlobalErrorHandler } from '@/hooks/useGlobalErrorHandler'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 import { useAuthStore } from '@/store/authStore'
+import { usePendingInviteStore } from '@/store/pendingInviteStore'
 
 SplashScreen.preventAutoHideAsync()
 
@@ -18,6 +19,9 @@ export default function RootLayout() {
   useGlobalErrorHandler()
 
   const { session, hasOnboarded, isLoading, initialize, user } = useAuthStore()
+  const pendingInviteToken = usePendingInviteStore(s => s.token)
+  const setPendingInviteToken = usePendingInviteStore(s => s.setToken)
+  const router = useRouter()
   const unsubRef = useRef<(() => void) | null>(null)
   usePushNotifications(session && hasOnboarded ? user?.id : undefined)
 
@@ -29,6 +33,20 @@ export default function RootLayout() {
   useEffect(() => {
     if (!isLoading) SplashScreen.hideAsync()
   }, [isLoading])
+
+  // Resume a WhatsApp invite after the user finished signing in / onboarding.
+  useEffect(() => {
+    if (session && hasOnboarded && pendingInviteToken) {
+      const token = pendingInviteToken
+      setPendingInviteToken(null)
+      // '/invite' is a new route; the typed-routes map regenerates on the
+      // next dev-server start, so cast here until then.
+      router.replace({
+        pathname: '/invite',
+        params: { token },
+      } as unknown as Parameters<typeof router.replace>[0])
+    }
+  }, [session, hasOnboarded, pendingInviteToken, setPendingInviteToken, router])
 
   // Hold render until auth state is resolved — prevents
   // Stack.Protected from flashing the wrong screen on boot

@@ -109,11 +109,14 @@ max_frequency = "5s"
 15559999999 = "123456"
 11234567890 = "123456"
 
+# Local-stack SMS config — unused: the team never runs `supabase start`
+# (no Docker). Remote dev/staging/prod are configured via the Supabase
+# dashboard (Auth → Providers → Phone, provider "twilio_verify").
+# Kept disabled so the CLI doesn't warn about the unset auth token env var.
 [auth.sms.twilio]
-enabled = true
+enabled = false
 account_sid = "AC86b6aca751b5597a6c12e8c6baff38ef"
 message_service_sid = "VA67d037f0ab9a11fecc33427ef1eb192c"
-auth_token = "env(SUPABASE_AUTH_SMS_TWILIO_AUTH_TOKEN)"
 
 [auth.mfa]
 max_enrolled_factors = 10
@@ -186,3 +189,24 @@ enabled = true
 verify_jwt = true
 import_map = "./functions/balance-calculation/deno.json"
 entrypoint = "./functions/balance-calculation/index.ts"
+
+[functions.delete-account]
+enabled = true
+verify_jwt = true
+import_map = "./functions/delete-account/deno.json"
+entrypoint = "./functions/delete-account/index.ts"
+
+# Public landing page for WhatsApp invites — must be reachable signed-out.
+[functions.invite]
+enabled = true
+verify_jwt = false
+import_map = "./functions/invite/deno.json"
+entrypoint = "./functions/invite/index.ts"
+
+# Scheduled settle-up reminders — invoked by pg_cron with the REMINDERS_KEY
+# query secret; no JWT (there is no user context).
+[functions.reminders]
+enabled = true
+verify_jwt = false
+import_map = "./functions/reminders/deno.json"
+entrypoint = "./functions/reminders/index.ts"

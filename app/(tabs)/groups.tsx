@@ -2,7 +2,6 @@ import { useFocusEffect, useRouter } from 'expo-router'
 import React, { useCallback, useState } from 'react'
 import {
   ActivityIndicator,
-  Alert,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -14,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Svg, { Path } from 'react-native-svg'
 
 import AddExpenseModal from '@/components/AddExpenseModal'
+import CreateGroupModal from '@/components/CreateGroupModal'
 import {
   AddExpenseButton,
   BalanceSummary,
@@ -70,12 +70,6 @@ function AddGroupIcon() {
   )
 }
 
-function showComingSoon() {
-  Alert.alert('Coming soon', 'Group creation is on the way in the next update. Stay tuned!', [
-    { text: 'Got it', style: 'default' },
-  ])
-}
-
 /**
  * Map Supabase Group → dashboard GroupsList shape.
  */
@@ -106,6 +100,8 @@ export default function GroupsScreen() {
   const [filterVisible, setFilterVisible] = useState(false)
   const [selectedFilter, setSelectedFilter] = useState<FilterOption>('none')
   const [addExpenseVisible, setAddExpenseVisible] = useState(false)
+  const [createGroupVisible, setCreateGroupVisible] = useState(false)
+  const [squaredUpExpanded, setSquaredUpExpanded] = useState(false)
 
   useFocusEffect(
     useCallback(() => {
@@ -139,7 +135,18 @@ export default function GroupsScreen() {
     [router]
   )
 
-  const filteredGroups = groups
+  const handleGroupCreated = useCallback(
+    (groupId: string) => {
+      if (user) void refreshGroups(user.id)
+      router.push({ pathname: '/dashboard/group/[id]', params: { id: groupId } })
+    },
+    [user?.id, refreshGroups, router] // eslint-disable-line react-hooks/exhaustive-deps
+  )
+
+  const outstandingGroups = groups.filter(g => g.amount > 0.005)
+  const squaredUpGroups = groups.filter(g => g.amount <= 0.005)
+
+  const filteredGroups = outstandingGroups
     .filter(g => {
       if (selectedFilter === 'owes_you') return g.balanceType === 'owes_you'
       if (selectedFilter === 'you_owe') return g.balanceType === 'you_owe'
@@ -147,6 +154,8 @@ export default function GroupsScreen() {
       return true
     })
     .map(mapToDashboardGroup)
+
+  const squaredUpDashboardGroups = squaredUpGroups.map(mapToDashboardGroup)
 
   const isEmpty = !isLoading && groups.length === 0
 
@@ -185,7 +194,7 @@ export default function GroupsScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.navIcon}
-              onPress={showComingSoon}
+              onPress={() => setCreateGroupVisible(true)}
               accessibilityLabel="Add group"
             >
               <AddGroupIcon />
@@ -216,14 +225,27 @@ export default function GroupsScreen() {
             <Text style={styles.emptySubtitle}>
               Create a group to start splitting expenses with multiple friends.
             </Text>
-            <TouchableOpacity style={styles.emptyAction} onPress={showComingSoon}>
+            <TouchableOpacity
+              style={styles.emptyAction}
+              onPress={() => setCreateGroupVisible(true)}
+            >
               <Text style={styles.emptyActionText}>Create a group</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <>
             <GroupsList groups={filteredGroups} onGroupPress={handleGroupPress} />
-            <SquaredUpSection onPress={() => console.log('Show squared-up')} />
+            {squaredUpDashboardGroups.length > 0 ? (
+              <>
+                <SquaredUpSection
+                  expanded={squaredUpExpanded}
+                  onPress={() => setSquaredUpExpanded(e => !e)}
+                />
+                {squaredUpExpanded && (
+                  <GroupsList groups={squaredUpDashboardGroups} onGroupPress={handleGroupPress} />
+                )}
+              </>
+            ) : null}
           </>
         )}
       </ScrollView>
@@ -241,6 +263,12 @@ export default function GroupsScreen() {
         visible={addExpenseVisible}
         onClose={() => setAddExpenseVisible(false)}
         onSuccess={handleExpenseCreated}
+      />
+
+      <CreateGroupModal
+        visible={createGroupVisible}
+        onClose={() => setCreateGroupVisible(false)}
+        onCreated={handleGroupCreated}
       />
     </View>
   )

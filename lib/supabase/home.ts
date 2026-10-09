@@ -47,6 +47,17 @@ export interface ExpenseDetail {
   participants: ExpenseDetailParticipant[]
 }
 
+export interface FriendOverview {
+  friendId: string
+  fullName: string
+  avatarUrl: string | null
+  netBalance: number
+  expenseCount: number
+  lastActivityAt: string | null
+  hasOverdue: boolean
+  nextDueDate: string | null
+}
+
 function roundMoney(n: number): number {
   return Math.round(n * 100) / 100
 }
@@ -167,10 +178,9 @@ export async function fetchRecentActivity(
 
     const expenseIdsFromParts = [...new Set(participantExpenses?.map(p => p.expense_id) ?? [])]
 
-    // Base columns only — due_date/note/category require migration 20260508120001 on the project DB.
     let query = supabase
       .from('expenses')
-      .select('id, amount, description, paid_by, created_at')
+      .select('id, amount, description, paid_by, created_at, due_date')
       .order('created_at', { ascending: false })
       .limit(20)
 
@@ -264,14 +274,15 @@ export async function fetchRecentActivity(
       if (displayAmount <= 0) continue
 
       const prof = profileMap.get(counterpartyId)
-      const sub = classifySubtitle(expense.created_at, undefined)
+      const createdAt = expense.created_at ?? new Date().toISOString()
+      const sub = classifySubtitle(createdAt, expense.due_date)
 
       activities.push({
         id: expense.id,
         description: expense.description || 'Expense',
         amount: displayAmount,
         type: 'expense',
-        createdAt: expense.created_at,
+        createdAt,
         otherPartyId: counterpartyId,
         otherPartyName: prof?.name ?? 'Friend',
         otherPartyAvatar: prof?.avatar ?? null,
@@ -297,7 +308,7 @@ export async function getExpense(
   try {
     const { data: expense, error: expErr } = await supabase
       .from('expenses')
-      .select('id, amount, description, paid_by, created_at')
+      .select('id, amount, description, paid_by, created_at, note, due_date, category')
       .eq('id', expenseId)
       .single()
 
@@ -341,10 +352,10 @@ export async function getExpense(
         title: expense.description || 'Expense',
         amount: roundMoney(Number(expense.amount)),
         paidBy: expense.paid_by,
-        createdAt: expense.created_at,
-        note: null,
-        dueDate: null,
-        category: null,
+        createdAt: expense.created_at ?? new Date().toISOString(),
+        note: expense.note ?? null,
+        dueDate: expense.due_date ?? null,
+        category: expense.category ?? null,
         participants,
       },
     }
@@ -352,6 +363,96 @@ export async function getExpense(
     console.error('[getExpense]', error)
     return {
       data: null,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    }
+  }
+}
+
+type OverviewRow = {
+  friend_id: string
+  full_name: string | null
+  avatar_url: string | null
+  net_balance: number | string
+  expense_count: number | string
+  last_activity_at: string | null
+  has_overdue: boolean | null
+  next_due_date: string | null
+}
+
+/**
+ * True per-friend balances via the get_friends_overview RPC, including
+ * squared-up friends (net 0). Returns null when the RPC is not deployed yet
+ * (PGRST202) so callers can fall back to client-side aggregation.
+ */
+export async function fetchFriendsOverview(
+  userId: string
+): Promise<{ data: FriendOverview[] | null; error?: string }> {
+  try {
+    const { data, error } = await supabase.rpc('get_friends_overview', {
+      p_user_id: userId,
+    })
+
+    if (error) {
+      const code = (error as { code?: string }).code ?? ''
+      if (code === 'PGRST202' || /function .* does not exist/i.test(error.message)) {
+        return { data: null }
+      }
+      throw error
+    }
+
+    const rows = (Array.isArray(data) ? data : []) as unknown as OverviewRow[]
+    const overview: FriendOverview[] = rows.map(row => ({
+      friendId: row.friend_id,
+      fullName: row.full_name ?? 'Friend',
+      avatarUrl: row.avatar_url ?? null,
+      netBalance: roundMoney(Number(row.net_balance ?? 0)),
+      expenseCount: Number(row.expense_count ?? 0),
+      lastActivityAt: row.last_activity_at ?? null,
+      hasOverdue: row.has_overdue ?? false,
+      nextDueDate: row.next_due_date ?? null,
+    }))
+
+    overview.sort((a, b) => {
+      const aTime = a.lastActivityAt ? new Date(a.lastActivityAt).getTime() : 0
+      const bTime = b.lastActivityAt ? new Date(b.lastActivityAt).getTime() : 0
+      return bTime - aTime
+    })
+
+    return { data: overview }
+  } catch (error) {
+    console.error('[fetchFriendsOverview]', error)
+    return {
+      data: null,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    }
+  }
+}
+
+/**
+ * Settle every unsettled share between the caller and a friend.
+ */
+export async function settleUpWithFriend(
+  friendId: string
+): Promise<{ success: boolean; settledShares?: number; error?: string }> {
+  try {
+    const { data, error } = await supabase.rpc('settle_up_with_friend', {
+      p_friend_id: friendId,
+    })
+
+    if (error) throw error
+
+    const result = (Array.isArray(data) ? data[0] : data) as
+      | { settled_shares?: number | string }
+      | undefined
+
+    return {
+      success: true,
+      settledShares: result ? Number(result.settled_shares ?? 0) : 0,
+    }
+  } catch (error) {
+    console.error('[settleUpWithFriend]', error)
+    return {
+      success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
     }
   }

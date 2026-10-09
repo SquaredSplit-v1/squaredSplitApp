@@ -1,6 +1,7 @@
 // components/AddExpenseModal.tsx
+import * as Haptics from 'expo-haptics'
 import { Image } from 'expo-image'
-import React, { useCallback, useEffect, useMemo } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   Keyboard,
@@ -20,11 +21,20 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
+import CameraCaptureModal from '@/components/CameraCaptureModal'
+import SignaturePad from '@/components/SignaturePad'
 import { createExpense } from '@/lib/api/createExpense'
 import { labelForMatchedPhone } from '@/lib/contacts'
 import { formatAmount } from '@/lib/currency'
 import type { MatchedContact } from '@/lib/supabase/contacts'
-import { useAddExpenseStore } from '@/store/addExpenseStore'
+import { createExpenseWithInvites, type CreatedExpenseWithInvites } from '@/lib/supabase/invites'
+import { pickReceiptImage, uploadReceipt, uploadSignature } from '@/lib/supabase/receipts'
+import { expenseInviteMessage, inviteLink, whatsappUrl } from '@/lib/whatsapp'
+import {
+  dueDatePresetToIsoDate,
+  useAddExpenseStore,
+  type DueDatePreset,
+} from '@/store/addExpenseStore'
 import { useAuthStore } from '@/store/authStore'
 import { useContactsStore } from '@/store/contactsStore'
 import { useCurrencyStore } from '@/store/currencyStore'
@@ -33,7 +43,28 @@ interface Props {
   visible: boolean
   onClose: () => void
   onSuccess: () => void
+  /** When set, the expense is created inside this group. */
+  groupId?: string
+  groupName?: string
+  /** Participant ids to preselect (group members or a single friend). */
+  presetParticipantIds?: string[]
 }
+
+const CATEGORIES = [
+  { id: 'general', label: 'General', emoji: '🧾' },
+  { id: 'food', label: 'Food', emoji: '🍽️' },
+  { id: 'travel', label: 'Travel', emoji: '✈️' },
+  { id: 'shopping', label: 'Shopping', emoji: '🛍️' },
+  { id: 'bills', label: 'Bills', emoji: '💡' },
+  { id: 'entertainment', label: 'Fun', emoji: '🎬' },
+]
+
+const DUE_PRESETS: { id: DueDatePreset; label: string }[] = [
+  { id: 'none', label: 'None' },
+  { id: '1w', label: '1 week' },
+  { id: '2w', label: '2 weeks' },
+  { id: '1m', label: '1 month' },
+]
 
 // Equal split helper (integer cents)
 function calcEqualSplits(amount: number, ids: string[]): Record<string, number> {
@@ -49,13 +80,45 @@ function calcEqualSplits(amount: number, ids: string[]): Record<string, number> 
   return result
 }
 
-export default function AddExpenseModal({ visible, onClose, onSuccess }: Props) {
+/**
+ * After creating an expense with invites, walk the user through opening
+ * WhatsApp for each invitee (one at a time — the OS allows one external app
+ * open at a time). Each step can be skipped.
+ */
+async function openWhatsAppInvitesChain(
+  items: { name: string | null; phone: string; url: string }[]
+): Promise<void> {
+  for (const item of items) {
+    await new Promise<void>(resolve => {
+      Alert.alert('Send WhatsApp invite', `Invite ${item.name || item.phone} on WhatsApp?`, [
+        { text: 'Skip', style: 'cancel', onPress: () => resolve() },
+        {
+          text: 'Send',
+          onPress: () => {
+            void Linking.openURL(item.url).catch(() => {})
+            resolve()
+          },
+        },
+      ])
+    })
+  }
+}
+
+export default function AddExpenseModal({
+  visible,
+  onClose,
+  onSuccess,
+  groupId,
+  groupName,
+  presetParticipantIds,
+}: Props) {
   const insets = useSafeAreaInsets()
   const user = useAuthStore(s => s.user)
   const { current: currency } = useCurrencyStore()
 
   const loadContacts = useContactsStore(s => s.loadContacts)
   const matchedContacts = useContactsStore(s => s.matched)
+  const unmatchedContacts = useContactsStore(s => s.unmatched)
   const rawWithPhones = useContactsStore(s => s.rawWithPhones)
   const contactsLoading = useContactsStore(s => s.isLoading)
   const permissionStatus = useContactsStore(s => s.permissionStatus)
@@ -69,22 +132,53 @@ export default function AddExpenseModal({ visible, onClose, onSuccess }: Props) 
   const {
     amount,
     title,
+    note,
+    category,
+    dueDatePreset,
     paidBy,
     participants,
+    invites,
     splitType,
     exactAmounts,
     percentages,
     isSubmitting,
     setAmount,
     setTitle,
+    setNote,
+    setCategory,
+    setDueDatePreset,
     setPaidBy,
     toggleParticipant,
+    setParticipants,
+    toggleInvite,
     setSplitType,
     setExactAmount,
     setPercentage,
     setSubmitting,
     reset,
   } = useAddExpenseStore()
+
+  // Receipt + agreement state (local — not part of the persisted form store).
+  const [receiptUri, setReceiptUri] = useState<string | null>(null)
+  const [cameraVisible, setCameraVisible] = useState(false)
+  const [wantsAgreement, setWantsAgreement] = useState(false)
+  const [showSignature, setShowSignature] = useState(false)
+  const [signatureBase64, setSignatureBase64] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!visible) {
+      setReceiptUri(null)
+      setWantsAgreement(false)
+      setShowSignature(false)
+      setSignatureBase64(null)
+    }
+  }, [visible])
+  useEffect(() => {
+    if (visible && presetParticipantIds && presetParticipantIds.length > 0) {
+      setParticipants(presetParticipantIds)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible])
 
   const myId = user?.id ?? ''
 
@@ -104,8 +198,26 @@ export default function AddExpenseModal({ visible, onClose, onSuccess }: Props) 
     [participants, myId]
   )
 
+  /** Device contacts NOT on SquaredSplit — invite candidates. */
+  const unmatchedRows = useMemo(() => {
+    return [...unmatchedContacts]
+      .map(c => ({ id: c.id, name: c.name, phone: c.phones[0] }))
+      .filter(c => Boolean(c.phone))
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
+  }, [unmatchedContacts])
+
+  const invitedPhones = useMemo(() => new Set(invites.map(i => i.phone)), [invites])
+
+  /** Everyone in the split: app users + WhatsApp invitees. */
+  const peopleCount = allParticipants.length + invites.length
+
   const effectivePaidBy = paidBy ?? myId
   const amountFloat = parseFloat(amount) || 0
+
+  const inviteSharePreview = useMemo(() => {
+    if (!peopleCount || amountFloat <= 0) return 0
+    return Math.floor(Math.round(amountFloat * 100) / peopleCount) / 100
+  }, [peopleCount, amountFloat])
 
   const splitPreview = useMemo<Record<string, number>>(() => {
     if (!allParticipants.length || amountFloat <= 0) return {}
@@ -144,11 +256,15 @@ export default function AddExpenseModal({ visible, onClose, onSuccess }: Props) 
       allParticipants.reduce((a, id) => a + (parseFloat(percentages[id] ?? '0') || 0), 0) - 100
     ) < 0.5
 
+  /** Invited people join with an equal share, so invites require equal split. */
+  const invitesNeedEqual = invites.length > 0 && splitType !== 'equally'
+
   const canSubmit =
     amountFloat > 0 &&
     title.trim().length > 0 &&
-    allParticipants.length >= 2 &&
+    peopleCount >= 2 &&
     !isSubmitting &&
+    !invitesNeedEqual &&
     exactSumOk &&
     pctSumOk
 
@@ -166,26 +282,87 @@ export default function AddExpenseModal({ visible, onClose, onSuccess }: Props) 
     Keyboard.dismiss()
     setSubmitting(true)
     try {
-      await createExpense({
-        title: title.trim(),
-        amount: amountFloat,
-        paid_by: effectivePaidBy,
-        participants: allParticipants,
-        split_type: splitType,
-        exact_amounts: splitType === 'exact' ? { ...splitPreview } : undefined,
-        percentages:
-          splitType === 'percentage'
-            ? Object.fromEntries(
-                allParticipants.map(id => [id, parseFloat(percentages[id] ?? '0') || 0])
-              )
-            : undefined,
-      })
+      let createdWithInvites: CreatedExpenseWithInvites | null = null
+
+      let createdExpenseId: string | null = null
+
+      if (invites.length > 0) {
+        // Invite flow — equal split across app users + invitees, then send
+        // WhatsApp links for each invite.
+        createdWithInvites = await createExpenseWithInvites({
+          title: title.trim(),
+          amount: amountFloat,
+          paidBy: effectivePaidBy,
+          participants: allParticipants,
+          invites,
+          groupId: groupId ?? null,
+          category,
+          note: note.trim() ? note.trim() : null,
+          dueDate: dueDatePresetToIsoDate(dueDatePreset),
+        })
+        createdExpenseId = createdWithInvites.id
+      } else {
+        const created = await createExpense({
+          title: title.trim(),
+          amount: amountFloat,
+          paid_by: effectivePaidBy,
+          participants: allParticipants,
+          split_type: splitType,
+          category,
+          note: note.trim() ? note.trim() : null,
+          due_date: dueDatePresetToIsoDate(dueDatePreset),
+          group_id: groupId ?? null,
+          exact_amounts: splitType === 'exact' ? { ...splitPreview } : undefined,
+          percentages:
+            splitType === 'percentage'
+              ? Object.fromEntries(
+                  allParticipants.map(id => [id, parseFloat(percentages[id] ?? '0') || 0])
+                )
+              : undefined,
+        })
+        createdExpenseId = created.id
+      }
+
+      // Attach receipt / agreement to the created expense (best-effort —
+      // a failed upload must never lose the expense).
+      if (createdExpenseId && receiptUri) {
+        const r = await uploadReceipt(user.id, createdExpenseId, receiptUri)
+        if (!r.success) console.warn('[AddExpense] receipt upload failed:', r.error)
+      }
+      if (createdExpenseId && signatureBase64) {
+        const signerName = user.user_metadata?.full_name?.trim() || 'You'
+        const a = await uploadSignature(user.id, signerName, createdExpenseId, signatureBase64)
+        if (!a.success) console.warn('[AddExpense] signature upload failed:', a.error)
+      }
+
       reset()
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
       onSuccess()
       onClose()
+
+      if (createdWithInvites && createdWithInvites.invites.length > 0) {
+        const inviterName = user.user_metadata?.full_name?.trim() || 'A friend'
+        await openWhatsAppInvitesChain(
+          createdWithInvites.invites.map(i => ({
+            name: i.name,
+            phone: i.phone,
+            url: whatsappUrl(
+              i.phone,
+              expenseInviteMessage({
+                inviterName,
+                expenseTitle: createdWithInvites.title,
+                amountLabel: formatAmount(createdWithInvites.amount, currency),
+                shareLabel: formatAmount(i.share_amount, currency),
+                link: inviteLink(i.invite_id),
+              })
+            ),
+          }))
+        )
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Could not create expense'
       console.error('[SS-021] createExpense', message)
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {})
       Alert.alert('Could not create expense', message)
     } finally {
       setSubmitting(false)
@@ -193,13 +370,21 @@ export default function AddExpenseModal({ visible, onClose, onSuccess }: Props) 
   }, [
     canSubmit,
     user,
+    invites,
     title,
+    note,
+    category,
+    dueDatePreset,
+    groupId,
     amountFloat,
     effectivePaidBy,
     allParticipants,
     splitType,
     splitPreview,
     percentages,
+    currency,
+    receiptUri,
+    signatureBase64,
     reset,
     onSuccess,
     onClose,
@@ -226,7 +411,16 @@ export default function AddExpenseModal({ visible, onClose, onSuccess }: Props) 
           <View style={[s.root, { paddingTop: insets.top + 16 }]}>
             {/* Header */}
             <View style={s.header}>
-              <Text style={s.headerTitle}>Add Expense</Text>
+              <View style={s.headerTitleWrap}>
+                <Text style={s.headerTitle}>Add Expense</Text>
+                {groupName ? (
+                  <View style={s.groupChip}>
+                    <Text style={s.groupChipText} numberOfLines={1}>
+                      👥 {groupName}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
               <TouchableOpacity onPress={handleClose} hitSlop={12}>
                 <Text style={s.closeBtn}>✕</Text>
               </TouchableOpacity>
@@ -268,6 +462,50 @@ export default function AddExpenseModal({ visible, onClose, onSuccess }: Props) 
                   returnKeyType="done"
                   accessibilityLabel="Expense description"
                 />
+              </View>
+
+              {/* Category */}
+              <View style={s.section}>
+                <Text style={s.label}>Category</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={s.pillRow}>
+                    {CATEGORIES.map(c => (
+                      <Pressable
+                        key={c.id}
+                        style={[s.pill, category === c.id && s.pillActive]}
+                        onPress={() => setCategory(c.id)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: category === c.id }}
+                      >
+                        <Text style={[s.pillText, category === c.id && s.pillTextActive]}>
+                          {c.emoji} {c.label}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </ScrollView>
+              </View>
+
+              {/* Due date */}
+              <View style={s.section}>
+                <Text style={s.label}>Pay back by</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={s.pillRow}>
+                    {DUE_PRESETS.map(d => (
+                      <Pressable
+                        key={d.id}
+                        style={[s.pill, dueDatePreset === d.id && s.pillActive]}
+                        onPress={() => setDueDatePreset(d.id)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: dueDatePreset === d.id }}
+                      >
+                        <Text style={[s.pillText, dueDatePreset === d.id && s.pillTextActive]}>
+                          {d.label}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </ScrollView>
               </View>
 
               {/* Paid by */}
@@ -385,6 +623,41 @@ export default function AddExpenseModal({ visible, onClose, onSuccess }: Props) 
                 )}
               </View>
 
+              {/* Invite via WhatsApp — contacts not on SquaredSplit */}
+              {unmatchedRows.length > 0 && (
+                <View style={s.section}>
+                  <Text style={s.label}>
+                    Not on SquaredSplit
+                    <Text style={s.labelSub}> · invite via WhatsApp</Text>
+                  </Text>
+                  {unmatchedRows.map(c => {
+                    const selected = invitedPhones.has(c.phone)
+                    return (
+                      <Pressable
+                        key={c.id}
+                        style={s.contactRow}
+                        onPress={() => toggleInvite({ phone: c.phone, name: c.name })}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: selected }}
+                      >
+                        <View style={[s.avatar, { backgroundColor: '#FEF3E8' }]}>
+                          <Text style={s.avatarText}>{c.name[0]?.toUpperCase() ?? '?'}</Text>
+                        </View>
+                        <View style={s.inviteNameBlock}>
+                          <Text style={s.contactName} numberOfLines={1}>
+                            {c.name}
+                          </Text>
+                          <Text style={s.invitePhoneHint}>Invite on WhatsApp</Text>
+                        </View>
+                        <View style={[s.checkbox, selected && s.checkboxChecked]}>
+                          {selected && <Text style={s.checkmark}>✓</Text>}
+                        </View>
+                      </Pressable>
+                    )
+                  })}
+                </View>
+              )}
+
               {/* Split toggle */}
               <View style={s.section}>
                 <Text style={s.label}>Split</Text>
@@ -396,11 +669,13 @@ export default function AddExpenseModal({ visible, onClose, onSuccess }: Props) 
                       onPress={() => setSplitType(t)}
                     >
                       <Text style={[s.splitOptionText, splitType === t && s.splitOptionTextActive]}>
-                        {{
-                          equally: 'Equally',
-                          exact: `Exact ${currency.symbol}`,
-                          percentage: 'By %',
-                        }[t]}
+                        {
+                          {
+                            equally: 'Equally',
+                            exact: `Exact ${currency.symbol}`,
+                            percentage: 'By %',
+                          }[t]
+                        }
                       </Text>
                     </Pressable>
                   ))}
@@ -408,7 +683,7 @@ export default function AddExpenseModal({ visible, onClose, onSuccess }: Props) 
               </View>
 
               {/* Preview */}
-              {allParticipants.length >= 2 && amountFloat > 0 && (
+              {peopleCount >= 2 && amountFloat > 0 && (
                 <View style={s.section}>
                   <Text style={s.label}>Preview</Text>
                   {allParticipants.map(id => (
@@ -460,6 +735,27 @@ export default function AddExpenseModal({ visible, onClose, onSuccess }: Props) 
                     </View>
                   ))}
 
+                  {invites.map(i => (
+                    <View key={i.phone} style={s.previewRow}>
+                      <View style={[s.previewAvatar, { backgroundColor: '#FEF3E8' }]}>
+                        <Text style={s.previewAvatarText}>
+                          {(i.name?.[0] ?? '?').toUpperCase()}
+                        </Text>
+                      </View>
+                      <View style={s.inviteNameBlock}>
+                        <Text style={s.previewName} numberOfLines={1}>
+                          {i.name || i.phone}
+                        </Text>
+                        <Text style={s.invitePhoneHint}>will be invited</Text>
+                      </View>
+                      {splitType === 'equally' && (
+                        <Text style={s.previewAmount}>
+                          {formatAmount(inviteSharePreview, currency)}
+                        </Text>
+                      )}
+                    </View>
+                  ))}
+
                   {splitType === 'exact' && !exactSumOk && (
                     <Text style={s.validationError}>
                       Total must equal {formatAmount(amountFloat, currency)}
@@ -468,12 +764,121 @@ export default function AddExpenseModal({ visible, onClose, onSuccess }: Props) 
                   {splitType === 'percentage' && !pctSumOk && (
                     <Text style={s.validationError}>Percentages must sum to 100%</Text>
                   )}
+                  {invitesNeedEqual && (
+                    <Text style={s.validationError}>
+                      Invited friends split equally — switch to “Equally”
+                    </Text>
+                  )}
                 </View>
               )}
 
-              {allParticipants.length < 2 && (
-                <Text style={s.hint}>Select at least 1 friend to split with</Text>
+              {peopleCount < 2 && (
+                <Text style={s.hint}>Select a friend or invite a contact to split with</Text>
               )}
+
+              {/* Receipt + agreement */}
+              <View style={s.section}>
+                <Text style={s.label}>Receipt & agreement</Text>
+                <Pressable
+                  style={s.attachRow}
+                  onPress={() =>
+                    Alert.alert(
+                      'Add receipt',
+                      'Capture with the camera or pick from your library',
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Take photo',
+                          onPress: () => setCameraVisible(true),
+                        },
+                        {
+                          text: 'Choose from library',
+                          onPress: async () => {
+                            const uri = await pickReceiptImage()
+                            if (uri) setReceiptUri(uri)
+                          },
+                        },
+                      ]
+                    )
+                  }
+                  accessibilityRole="button"
+                  accessibilityLabel="Attach receipt photo"
+                >
+                  <Text style={s.attachEmoji}>🧾</Text>
+                  <View style={s.attachTextWrap}>
+                    <Text style={s.attachTitle}>
+                      {receiptUri ? 'Receipt attached ✓' : 'Attach receipt photo'}
+                    </Text>
+                    <Text style={s.attachHint}>Optional — visible to everyone in the split</Text>
+                  </View>
+                  {receiptUri ? (
+                    <TouchableOpacity
+                      onPress={() => setReceiptUri(null)}
+                      hitSlop={8}
+                      accessibilityLabel="Remove receipt"
+                    >
+                      <Text style={s.removeBtnText}>✕</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <Text style={s.attachChevron}>＋</Text>
+                  )}
+                </Pressable>
+
+                <Pressable
+                  style={s.attachRow}
+                  onPress={() => {
+                    if (wantsAgreement && signatureBase64) {
+                      setWantsAgreement(false)
+                      setSignatureBase64(null)
+                    } else {
+                      setShowSignature(true)
+                    }
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add agreement signature"
+                >
+                  <Text style={s.attachEmoji}>✍️</Text>
+                  <View style={s.attachTextWrap}>
+                    <Text style={s.attachTitle}>
+                      {signatureBase64
+                        ? 'Agreement signed ✓'
+                        : wantsAgreement
+                          ? 'Agreement (no signature)'
+                          : 'Agreement with signature'}
+                    </Text>
+                    <Text style={s.attachHint}>Optional — everyone signs to confirm the split</Text>
+                  </View>
+                  {signatureBase64 ? (
+                    <TouchableOpacity
+                      onPress={() => {
+                        setWantsAgreement(false)
+                        setSignatureBase64(null)
+                      }}
+                      hitSlop={8}
+                      accessibilityLabel="Remove signature"
+                    >
+                      <Text style={s.removeBtnText}>✕</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <Text style={s.attachChevron}>＋</Text>
+                  )}
+                </Pressable>
+              </View>
+
+              {/* Note */}
+              <View style={s.section}>
+                <Text style={s.label}>Note (optional)</Text>
+                <TextInput
+                  style={[s.textInput, s.noteInput]}
+                  value={note}
+                  onChangeText={setNote}
+                  placeholder="Add a note for the group…"
+                  placeholderTextColor="#C7C7C7"
+                  maxLength={500}
+                  multiline
+                  accessibilityLabel="Expense note"
+                />
+              </View>
             </ScrollView>
 
             {/* Submit */}
@@ -497,6 +902,49 @@ export default function AddExpenseModal({ visible, onClose, onSuccess }: Props) 
           </View>
         </KeyboardAvoidingView>
       </TouchableWithoutFeedback>
+
+      {/* Signature capture */}
+      <Modal
+        visible={showSignature}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowSignature(false)}
+      >
+        <View style={[s.root, { paddingTop: insets.top + 16 }]}>
+          <View style={s.header}>
+            <Text style={s.headerTitle}>Agreement signature</Text>
+            <TouchableOpacity onPress={() => setShowSignature(false)} hitSlop={12}>
+              <Text style={s.closeBtn}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={{ paddingHorizontal: 24, paddingTop: 8 }}>
+            <Text style={s.sigIntro}>
+              Signing confirms you agree to this split. It’s stored with the expense and visible to
+              its participants.
+            </Text>
+            <SignaturePad
+              width={320}
+              height={200}
+              onComplete={base64 => {
+                setSignatureBase64(base64)
+                setWantsAgreement(true)
+                setShowSignature(false)
+              }}
+              onCancel={() => setShowSignature(false)}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      <CameraCaptureModal
+        visible={cameraVisible}
+        onClose={() => setCameraVisible(false)}
+        onCapture={uri => {
+          setCameraVisible(false)
+          setReceiptUri(uri)
+        }}
+        hint="Position the receipt in the frame"
+      />
     </Modal>
   )
 }
@@ -510,7 +958,15 @@ const s = StyleSheet.create({
     paddingHorizontal: 24,
     marginBottom: 8,
   },
+  headerTitleWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#141414' },
+  groupChip: {
+    backgroundColor: '#F3F4F5',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  groupChipText: { fontSize: 12, fontWeight: '600', color: '#6B6B6B' },
   closeBtn: { fontSize: 18, color: '#6B6B6B', padding: 4 },
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 24, paddingTop: 16 },
@@ -579,6 +1035,8 @@ const s = StyleSheet.create({
   },
   avatarText: { fontSize: 14, fontWeight: '600', color: '#141414' },
   contactName: { flex: 1, fontSize: 15, color: '#141414' },
+  inviteNameBlock: { flex: 1, minWidth: 0, gap: 2 },
+  invitePhoneHint: { fontSize: 12, color: '#9CA3AF' },
   checkbox: {
     width: 22,
     height: 22,
@@ -635,6 +1093,31 @@ const s = StyleSheet.create({
   pctSymbol: { fontSize: 14, color: '#6B6B6B' },
   validationError: { fontSize: 12, color: '#EF4444', marginTop: 6 },
   hint: { fontSize: 13, color: '#9CA3AF', textAlign: 'center', marginTop: 8 },
+  noteInput: { height: 84, textAlignVertical: 'top', paddingTop: 12 },
+  attachRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    height: 60,
+    marginBottom: 8,
+  },
+  attachEmoji: { fontSize: 20 },
+  attachTextWrap: { flex: 1, minWidth: 0, gap: 2 },
+  attachTitle: { fontSize: 15, fontFamily: 'Nunito_600SemiBold', color: '#141414' },
+  attachHint: { fontSize: 12, color: '#9CA3AF' },
+  attachChevron: { fontSize: 22, color: '#9CA3AF', fontWeight: '600' },
+  removeBtnText: { fontSize: 18, color: '#6B6B6B', padding: 4 },
+  sigIntro: {
+    fontSize: 13,
+    fontFamily: 'Nunito_400Regular',
+    color: '#6B6B6B',
+    lineHeight: 18,
+    marginBottom: 16,
+  },
   footer: {
     paddingHorizontal: 24,
     paddingTop: 12,

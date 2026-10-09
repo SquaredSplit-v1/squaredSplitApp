@@ -45,11 +45,13 @@ This document covers the complete phone-OTP authentication architecture, environ
 
 The app reads env variables from `.env.*` files loaded automatically by Expo:
 
-| File              | Branch    | Supabase Instance                |
-| ----------------- | --------- | -------------------------------- |
-| `.env.dev`        | `dev`     | Local — `http://127.0.0.1:54321` |
-| `.env.staging`    | `staging` | Remote staging project           |
-| `.env.production` | `main`    | Remote production project        |
+Expo auto-loads files by `NODE_ENV` mode (SDK 54 has no `--env-file` flag):
+
+| File               | Loaded when                  | Supabase Instance        |
+| ------------------ | ---------------------------- | ------------------------ |
+| `.env.development` | `expo start` (dev server)    | Dev branch project       |
+| `.env.local`       | always (highest priority)    | Per-developer overrides  |
+| `.env.production`  | release builds / `expo export` | Production project     |
 
 ### Required variables
 
@@ -289,11 +291,11 @@ supabase functions deploy phone-auth --project-ref <production-project-ref>
 
 ### GitHub branch → Supabase project mapping
 
-| Branch    | Supabase Project       | Env File          |
-| --------- | ---------------------- | ----------------- |
-| `dev`     | Local (supabase start) | `.env.dev`        |
-| `staging` | Staging project        | `.env.staging`    |
-| `main`    | Production project     | `.env.production` |
+| Branch    | Supabase Project       | Env File               |
+| --------- | ---------------------- | ---------------------- |
+| `dev`     | Dev branch project     | `.env.development`     |
+| `staging` | Staging project        | `.env.local` overrides |
+| `main`    | Production project     | `.env.production`      |
 
 Supabase is connected via GitHub integration — pushing to a branch auto-deploys migrations and edge functions to the corresponding project.
 
@@ -352,8 +354,8 @@ Supabase is connected via GitHub integration — pushing to a branch auto-deploy
 You're running without the correct `.env` file loaded. Make sure you're using the right start command:
 
 ```bash
-npm run start:dev       # loads .env.dev
-npm run start:staging   # loads .env.staging
+npm run start:dev       # auto-loads .env.development
+npm run start:staging   # put staging overrides in .env.local
 ```
 
 ### OTP never arrives (staging/production)

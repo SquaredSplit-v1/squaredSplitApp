@@ -1,6 +1,6 @@
 // app/(tabs)/index.tsx
 import { Image } from 'expo-image'
-import { useRouter } from 'expo-router'
+import { useFocusEffect, useRouter } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
@@ -26,10 +26,11 @@ import {
   SquaredUpSection,
 } from '@/components/dashboard'
 import { formatAmount, type Currency } from '@/lib/currency'
-import type { ActivityDirection, ActivityItem, ActivitySubtitleKind } from '@/lib/supabase/home'
+import type { FriendOverview } from '@/lib/supabase/home'
 import { useAuthStore } from '@/store/authStore'
 import { useCurrencyStore } from '@/store/currencyStore'
 import { useHomeStore } from '@/store/homeStore'
+import { usePendingSplitStore } from '@/store/pendingSplitStore'
 
 function BellIcon() {
   return (
@@ -63,80 +64,27 @@ function formatShortActivityDate(iso: string): string {
   return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' }).format(new Date(iso))
 }
 
-interface AggregatedFriend {
-  friendId: string
-  expenseId: string
-  otherPartyName: string
-  otherPartyAvatar: string | null
-  direction: ActivityDirection
-  amount: number
-  subtitleKind: ActivitySubtitleKind
-  subtitle: string
-  latestCreatedAt: string
+const EPSILON = 0.005
+
+type FriendDirection = 'owes_you' | 'you_owe'
+
+function friendDirection(f: FriendOverview): FriendDirection {
+  return f.netBalance >= 0 ? 'owes_you' : 'you_owe'
 }
 
-function roundMoney(n: number): number {
-  return Math.round(n * 100) / 100
-}
-
-function aggregateByFriend(activity: ActivityItem[]): AggregatedFriend[] {
-  const groups = new Map<string, ActivityItem[]>()
-  for (const item of activity) {
-    const key = `${item.otherPartyId}\0${item.direction}`
-    const list = groups.get(key) ?? []
-    list.push(item)
-    groups.set(key, list)
+function subtitleFor(f: FriendOverview): { text: string; color: string } {
+  if (f.hasOverdue) {
+    return friendDirection(f) === 'you_owe'
+      ? { text: 'Alert!', color: '#F06767' }
+      : { text: 'Overdue', color: '#F06767' }
   }
-
-  const out: AggregatedFriend[] = []
-  for (const items of groups.values()) {
-    items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    const amount = roundMoney(items.reduce((s, i) => s + i.amount, 0))
-    const overdue = items.find(i => i.subtitleKind === 'overdue')
-    const upcoming = items.find(i => i.subtitleKind === 'upcoming')
-    const primary = items[0]
-
-    let subtitleKind: ActivitySubtitleKind
-    let subtitle: string
-    if (overdue) {
-      subtitleKind = 'overdue'
-      subtitle = overdue.subtitle
-    } else if (upcoming) {
-      subtitleKind = 'upcoming'
-      subtitle = 'Upcoming due'
-    } else {
-      subtitleKind = 'date'
-      subtitle = formatShortActivityDate(primary.createdAt)
-    }
-
-    out.push({
-      friendId: primary.otherPartyId,
-      expenseId: primary.id,
-      otherPartyName: primary.otherPartyName,
-      otherPartyAvatar: primary.otherPartyAvatar,
-      direction: primary.direction,
-      amount,
-      subtitleKind,
-      subtitle,
-      latestCreatedAt: primary.createdAt,
-    })
-  }
-
-  out.sort((a, b) => new Date(b.latestCreatedAt).getTime() - new Date(a.latestCreatedAt).getTime())
-  return out
-}
-
-function subtitleDisplay(f: AggregatedFriend): { text: string; color: string } {
-  if (f.subtitleKind === 'overdue') {
-    if (f.direction === 'you_owe') {
-      return { text: 'Alert!', color: '#F06767' }
-    }
-    return { text: f.subtitle, color: '#F06767' }
-  }
-  if (f.subtitleKind === 'upcoming') {
+  if (f.nextDueDate) {
     return { text: 'Upcoming due', color: '#F09E42' }
   }
-  return { text: f.subtitle, color: '#9CA3AF' }
+  return {
+    text: f.lastActivityAt ? formatShortActivityDate(f.lastActivityAt) : '',
+    color: '#9CA3AF',
+  }
 }
 
 function FriendBalanceRow({
@@ -144,12 +92,12 @@ function FriendBalanceRow({
   currency,
   onPress,
 }: {
-  friend: AggregatedFriend
+  friend: FriendOverview
   currency: Currency
-  onPress: (friend: AggregatedFriend) => void
+  onPress: (friend: FriendOverview) => void
 }) {
-  const owesYou = friend.direction === 'owes_you'
-  const { text: subText, color: subColor } = subtitleDisplay(friend)
+  const owesYou = friend.netBalance >= 0
+  const { text: subText, color: subColor } = subtitleFor(friend)
   const amountColor = owesYou ? '#44BB73' : '#DE8334'
   const statusLabel = owesYou ? 'owes you' : 'you owe'
 
@@ -158,25 +106,25 @@ function FriendBalanceRow({
       onPress={() => onPress(friend)}
       style={({ pressed }) => [friendStyles.row, pressed && friendStyles.rowPressed]}
       accessibilityRole="button"
-      accessibilityLabel={`${friend.otherPartyName}, ${statusLabel} ${friend.amount}`}
+      accessibilityLabel={`${friend.fullName}, ${statusLabel} ${formatAmount(Math.abs(friend.netBalance), currency)}`}
     >
       <View style={friendStyles.rowLeft}>
-        {friend.otherPartyAvatar ? (
+        {friend.avatarUrl ? (
           <Image
-            source={{ uri: friend.otherPartyAvatar }}
+            source={{ uri: friend.avatarUrl }}
             style={friendStyles.avatar}
             contentFit="cover"
           />
         ) : (
           <View style={[friendStyles.avatar, friendStyles.avatarPlaceholder]}>
             <Text style={friendStyles.avatarInitial}>
-              {(friend.otherPartyName.trim().slice(0, 1) || '?').toUpperCase()}
+              {(friend.fullName.trim().slice(0, 1) || '?').toUpperCase()}
             </Text>
           </View>
         )}
         <View style={friendStyles.nameBlock}>
           <Text style={friendStyles.nameText} numberOfLines={2}>
-            {friend.otherPartyName}
+            {friend.fullName}
           </Text>
           <Text style={[friendStyles.subtitleText, { color: subColor }]}>{subText}</Text>
         </View>
@@ -184,7 +132,51 @@ function FriendBalanceRow({
       <View style={friendStyles.rowRight}>
         <Text style={friendStyles.statusLabel}>{statusLabel}</Text>
         <Text style={[friendStyles.amountText, { color: amountColor }]}>
-          {formatAmount(friend.amount, currency)}
+          {formatAmount(Math.abs(friend.netBalance), currency)}
+        </Text>
+      </View>
+    </Pressable>
+  )
+}
+
+function SquaredUpFriendRow({
+  friend,
+  onPress,
+}: {
+  friend: FriendOverview
+  onPress: (friend: FriendOverview) => void
+}) {
+  return (
+    <Pressable
+      onPress={() => onPress(friend)}
+      style={({ pressed }) => [friendStyles.row, pressed && friendStyles.rowPressed]}
+      accessibilityRole="button"
+      accessibilityLabel={`${friend.fullName}, squared up`}
+    >
+      <View style={friendStyles.rowLeft}>
+        {friend.avatarUrl ? (
+          <Image
+            source={{ uri: friend.avatarUrl }}
+            style={friendStyles.avatar}
+            contentFit="cover"
+          />
+        ) : (
+          <View style={[friendStyles.avatar, friendStyles.avatarPlaceholder]}>
+            <Text style={friendStyles.avatarInitial}>
+              {(friend.fullName.trim().slice(0, 1) || '?').toUpperCase()}
+            </Text>
+          </View>
+        )}
+        <View style={friendStyles.nameBlock}>
+          <Text style={friendStyles.nameText} numberOfLines={1}>
+            {friend.fullName}
+          </Text>
+          <Text style={[friendStyles.subtitleText, { color: '#44BB73' }]}>All settled ✓</Text>
+        </View>
+      </View>
+      <View style={friendStyles.rowRight}>
+        <Text style={friendStyles.squaredCount}>
+          {friend.expenseCount} expense{friend.expenseCount === 1 ? '' : 's'}
         </Text>
       </View>
     </Pressable>
@@ -240,6 +232,11 @@ const friendStyles = StyleSheet.create({
     fontFamily: 'Nunito_700Bold',
     lineHeight: 24,
   },
+  squaredCount: {
+    color: '#9CA3AF',
+    fontSize: 13,
+    fontFamily: 'Nunito_500Medium',
+  },
 })
 
 export default function HomeScreen() {
@@ -247,9 +244,12 @@ export default function HomeScreen() {
   const router = useRouter()
   const user = useAuthStore(s => s.user)
   const { current: currency } = useCurrencyStore()
-  const { balance, activity, isLoading, isRefreshing, fetch, refresh, reset } = useHomeStore()
+  const { balance, friends, isLoading, isRefreshing, fetch, refresh, reset } = useHomeStore()
 
   const [addExpenseVisible, setAddExpenseVisible] = useState(false)
+  const [presetFriendIds, setPresetFriendIds] = useState<string[] | undefined>(undefined)
+  const pendingSplitUserId = usePendingSplitStore(s => s.userId)
+  const clearPendingSplit = usePendingSplitStore(s => s.clear)
   const [addFriendVisible, setAddFriendVisible] = useState(false)
   const [filterVisible, setFilterVisible] = useState(false)
   const [selectedFilter, setSelectedFilter] = useState<FilterOption>('none')
@@ -270,25 +270,52 @@ export default function HomeScreen() {
     if (user) refresh(user.id)
   }, [user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const aggregated = useMemo(() => aggregateByFriend(activity), [activity])
+  const openAddExpense = useCallback((presetIds?: string[]) => {
+    setPresetFriendIds(presetIds)
+    setAddExpenseVisible(true)
+  }, [])
+
+  // A friend scanned via QR code (Account → Scan code) opens a prefilled expense.
+  useFocusEffect(
+    useCallback(() => {
+      if (pendingSplitUserId) {
+        openAddExpense([pendingSplitUserId])
+        clearPendingSplit()
+      }
+    }, [pendingSplitUserId, clearPendingSplit]) // eslint-disable-line react-hooks/exhaustive-deps
+  )
+
+  const closeAddExpense = useCallback(() => {
+    setAddExpenseVisible(false)
+    setPresetFriendIds(undefined)
+  }, [])
+
+  const outstandingFriends = useMemo(
+    () => friends.filter(f => Math.abs(f.netBalance) >= EPSILON),
+    [friends]
+  )
+  const squaredUpFriends = useMemo(
+    () => friends.filter(f => Math.abs(f.netBalance) < EPSILON),
+    [friends]
+  )
 
   const filteredFriends = useMemo(() => {
-    let list = aggregated
+    let list = outstandingFriends
     const q = searchQuery.trim().toLowerCase()
     if (q) {
-      list = list.filter(f => f.otherPartyName.toLowerCase().includes(q))
+      list = list.filter(f => f.fullName.toLowerCase().includes(q))
     }
     if (selectedFilter === 'owes_you') {
-      list = list.filter(f => f.direction === 'owes_you')
+      list = list.filter(f => f.netBalance > 0)
     } else if (selectedFilter === 'you_owe') {
-      list = list.filter(f => f.direction === 'you_owe')
+      list = list.filter(f => f.netBalance < 0)
     } else if (selectedFilter === 'outstanding') {
-      list = list.filter(f => f.amount > 0)
+      list = list.filter(f => Math.abs(f.netBalance) >= EPSILON)
     }
     return list
-  }, [aggregated, searchQuery, selectedFilter])
+  }, [outstandingFriends, searchQuery, selectedFilter])
 
-  const isEmpty = !isLoading && activity.length === 0 && balance.netBalance === 0
+  const isEmpty = !isLoading && friends.length === 0 && balance.netBalance === 0
 
   const handleFilterSelect = useCallback((filter: FilterOption) => {
     setSelectedFilter(filter)
@@ -299,6 +326,20 @@ export default function HomeScreen() {
     setSearchOpen(false)
     setSearchQuery('')
   }, [])
+
+  const goToFriend = useCallback(
+    (friend: FriendOverview) => {
+      router.push({
+        pathname: '/dashboard/friend',
+        params: {
+          friendId: friend.friendId,
+          friendName: friend.fullName,
+          ...(friend.avatarUrl ? { friendAvatar: friend.avatarUrl } : {}),
+        },
+      })
+    },
+    [router]
+  )
 
   return (
     <View style={styles.container}>
@@ -391,13 +432,13 @@ export default function HomeScreen() {
             <Text style={styles.emptySubtitle}>
               Add your first expense to start splitting with friends
             </Text>
-            <TouchableOpacity style={styles.emptyAction} onPress={() => setAddExpenseVisible(true)}>
+            <TouchableOpacity style={styles.emptyAction} onPress={() => openAddExpense()}>
               <Text style={styles.emptyActionText}>Add an expense</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.friendsSection}>
-            {!isLoading && filteredFriends.length === 0 ? (
+            {!isLoading && filteredFriends.length === 0 && outstandingFriends.length > 0 ? (
               <Text style={styles.noMatches}>
                 {searchQuery.trim()
                   ? 'No friends match your search'
@@ -407,40 +448,35 @@ export default function HomeScreen() {
               <View style={styles.friendsList}>
                 {filteredFriends.map(f => (
                   <FriendBalanceRow
-                    key={`${f.friendId}-${f.direction}`}
+                    key={f.friendId}
                     friend={f}
                     currency={currency}
-                    onPress={friend =>
-                      router.push({
-                        pathname: '/dashboard/friend',
-                        params: {
-                          friendId: friend.friendId,
-                          friendName: friend.otherPartyName,
-                          ...(friend.otherPartyAvatar
-                            ? { friendAvatar: friend.otherPartyAvatar }
-                            : {}),
-                        },
-                      })
-                    }
+                    onPress={goToFriend}
                   />
                 ))}
               </View>
             )}
 
-            <SquaredUpSection
-              expanded={squaredUpExpanded}
-              onPress={() => setSquaredUpExpanded(e => !e)}
-            />
-            {squaredUpExpanded && (
-              <Text style={styles.squaredUpHint}>
-                Squared-up balances will appear here once that data is connected.
-              </Text>
-            )}
+            {squaredUpFriends.length > 0 ? (
+              <>
+                <SquaredUpSection
+                  expanded={squaredUpExpanded}
+                  onPress={() => setSquaredUpExpanded(e => !e)}
+                />
+                {squaredUpExpanded && (
+                  <View style={styles.squaredUpList}>
+                    {squaredUpFriends.map(f => (
+                      <SquaredUpFriendRow key={f.friendId} friend={f} onPress={goToFriend} />
+                    ))}
+                  </View>
+                )}
+              </>
+            ) : null}
           </View>
         )}
       </ScrollView>
 
-      {!isEmpty && <AddExpenseButton onPress={() => setAddExpenseVisible(true)} />}
+      {!isEmpty && <AddExpenseButton onPress={() => openAddExpense()} />}
 
       <FilterModal
         visible={filterVisible}
@@ -451,16 +487,18 @@ export default function HomeScreen() {
 
       <AddExpenseModal
         visible={addExpenseVisible}
-        onClose={() => setAddExpenseVisible(false)}
+        onClose={closeAddExpense}
         onSuccess={handleExpenseCreated}
+        presetParticipantIds={presetFriendIds}
       />
 
       <AddFriendModal
         visible={addFriendVisible}
         onClose={() => setAddFriendVisible(false)}
-        onSelect={_id => {
+        onSelect={id => {
           setAddFriendVisible(false)
           if (user) refresh(user.id)
+          openAddExpense([id])
         }}
       />
     </View>
@@ -541,11 +579,5 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     paddingVertical: 16,
   },
-  squaredUpHint: {
-    fontSize: 13,
-    fontFamily: 'Nunito_400Regular',
-    color: '#9CA3AF',
-    lineHeight: 18,
-    marginBottom: 8,
-  },
+  squaredUpList: { marginBottom: 8 },
 })

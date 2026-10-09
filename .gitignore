@@ -32,10 +32,8 @@ yarn-error.*
 
 # Environment files
 .env
-.env.dev
-.env.staging
-.env.production
-.env.local
+.env.*
+!.env.example
 
 # typescript
 *.tsbuildinfo
@@ -50,3 +48,6 @@ env.json
 SquaredSplitDev.app/
 *.tar.gz
 *.app/
+
+# Play Store service account key (EAS Submit credentials)
+google-services.json

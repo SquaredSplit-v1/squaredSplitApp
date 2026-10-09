@@ -38,13 +38,18 @@ This project uses separate `.env` files per environment.
 
 ### Environment Files
 
-| File | Purpose | Committed? |
-|---|---|---|
-| `.env` | Local development fallback | ❌ No |
-| `.env.dev` | Dev Supabase branch | ❌ No |
-| `.env.staging` | Staging Supabase branch | ❌ No |
-| `.env.production` | Production Supabase branch | ❌ No |
-| `.env.example` | Template with all variable names | ✅ Yes |
+Expo CLI auto-loads env files based on `NODE_ENV` (see `@expo/env`):
+`expo start` uses `development`, release builds/`expo export` use `production`.
+There is **no** `--env-file` / `EXPO_ENV_FILE` mechanism in SDK 54 — the file
+name must match the mode.
+
+| File | Loaded when | Purpose | Committed? |
+|---|---|---|---|
+| `.env.development` | `expo start` (dev server) | Dev Supabase branch values | ❌ No |
+| `.env.local` | always (overrides the above) | Per-developer overrides | ❌ No |
+| `.env.production` | release builds / `expo export` | Production values | ❌ No |
+| `.env` | always (lowest priority) | Fallback | ❌ No |
+| `.env.example` | never | Template with all variable names | ✅ Yes |
 
 ### Required Variables
 
@@ -52,7 +57,7 @@ Copy `.env.example` and fill in the values (get them from the team lead or
 Supabase dashboard → Project Settings → API):
 
 ```bash
-cp .env.example .env.dev
+cp .env.example .env.development
 ```
 
 **Client-side variables** (must use `EXPO_PUBLIC_` prefix to be accessible in app code):
@@ -60,8 +65,12 @@ cp .env.example .env.dev
 ```bash
 EXPO_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
 EXPO_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+EXPO_PUBLIC_SUPABASE_PHONE_AUTH_URL=https://xxxx.supabase.co/functions/v1/phone-auth
 EXPO_PUBLIC_APP_ENV=development
 ```
+
+> `EXPO_PUBLIC_SUPABASE_PHONE_AUTH_URL` is required for login — without it the
+> OTP screens cannot reach the `phone-auth` Edge Function.
 
 **Build-time only variables** (no prefix — used in `app.config.ts` and build
 scripts only, never in app bundle):
@@ -85,10 +94,19 @@ This project uses **Supabase Branching** with three persistent branches:
 Supabase Pro is required for branching (already subscribed).
 GitHub is connected to Supabase for auto branch preview environments.
 
-To run migrations locally:
+To apply migrations to the linked project (after `supabase login` and
+`supabase link --project-ref <ref>`):
 
 ```bash
-npx supabase db push --db-url "$EXPO_PUBLIC_SUPABASE_URL"
+npx supabase db push
+```
+
+Edge Functions used by the app:
+
+```bash
+npx supabase functions deploy phone-auth
+npx supabase functions deploy create-expense
+npx supabase functions deploy delete-account
 ```
 
 ---
@@ -151,9 +169,11 @@ npm install
 ### 2. Start the app
 
 ```bash
-# With dev Supabase environment
-npx expo start --env-file .env.dev
+npm run start:dev
 ```
+
+This runs `expo start` with `APP_ENV=development`; the Supabase values are
+read automatically from `.env.development`.
 
 Press:
 - `i` — iOS Simulator

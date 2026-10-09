@@ -8,21 +8,17 @@
       "developmentClient": true,
       "distribution": "internal",
       "channel": "development",
-      "env": {
-        "APP_ENV": "development",
-        "EXPO_ENV_FILE": ".env.dev"
-      }
+      // Env vars (EXPO_PUBLIC_SUPABASE_*, APP_ENV, …) come from the linked
+      // "development" EAS environment (eas env:list --environment development).
+      "environment": "development"
     },
     "ios-simulator": {
       "extends": "development",
       "ios": {
         "simulator": true
-      },
-      "env": {
-        "APP_ENV": "development",
-        "EXPO_ENV_FILE": ".env.dev"
       }
     },
+    // QA / internal testing builds. Distribution: install via link.
     "staging": {
       "distribution": "internal",
       "channel": "staging",
@@ -32,9 +28,19 @@
       },
       "autoIncrement": true
     },
+    // Store builds. Run with the auto-submit flag to push the finished
+    // artifacts to the stores (npm run build:production does this):
+    //   eas build --profile production --platform all --auto-submit
+    // iOS lands in TestFlight, Android in the Play internal testing track.
+    //
+    // APP_ENV is pinned here (not just in the linked EAS environment) because
+    // app.config.ts derives the bundle identifier from it during config
+    // resolution — a production build that evaluated as "development" shipped
+    // with the .dev bundle id once already.
     "production": {
       "autoIncrement": true,
       "channel": "production",
+      "environment": "production",
       "env": {
         "APP_ENV": "production"
       }
@@ -43,24 +49,23 @@
   "submit": {
     "production": {
       "ios": {
-        "appleId": "your-apple-id@email.com",
-        "ascAppId": "your-app-store-connect-app-id",
-        "appleTeamId": "YOUR_TEAM_ID"
+        // Apple ID used by EAS Submit for App Store Connect access.
+        "appleId": "pedapati.basanth@gmail.com",
+        "appleTeamId": "GDG397AAU5",
+        // Apple ID of the com.squaredsplit.app record in App Store Connect.
+        // Pinning this makes submits independent of local APP_ENV — without
+        // it, eas submit evaluates app.config.ts in the local shell and can
+        // target the wrong (dev) app record.
+        "ascAppId": "6801000587"
       },
       "android": {
+        // Play Console → Setup → API access → service account JSON key.
+        // The service account must be invited to the app with
+        // "Release to testing tracks" permission.
         "serviceAccountKeyPath": "./google-services.json",
-        "track": "production"
-      }
-    },
-    "staging": {
-      "ios": {
-        "appleId": "your-apple-id@email.com",
-        "ascAppId": "your-app-store-connect-app-id",
-        "appleTeamId": "YOUR_TEAM_ID"
-      },
-      "android": {
-        "serviceAccountKeyPath": "./google-services.json",
-        "track": "internal"
+        // Internal testing track — no review, testers get updates in minutes.
+        "track": "internal",
+        "releaseStatus": "draft"
       }
     }
   }
