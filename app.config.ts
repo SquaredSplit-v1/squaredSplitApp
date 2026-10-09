@@ -16,9 +16,9 @@ const envConfig = {
     name: 'SquaredSplit (Preview)',
     bundleIdentifier: 'com.squaredsplit.app.preview',
     androidPackage: 'com.squaredsplit.app.preview',
-    supabaseUrl: 'https://eqqcqnfnfnzurfjfzwwp.supabase.co',
+    supabaseUrl: 'https://tldohvypnuirpsvrrxoh.supabase.co',
     supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '',
-    phoneAuthUrl: 'https://eqqcqnfnfnzurfjfzwwp.supabase.co/functions/v1/phone-auth',
+    phoneAuthUrl: 'https://tldohvypnuirpsvrrxoh.supabase.co/functions/v1/phone-auth',
     icon: './assets/icon-preview.png',
   },
   // staging is an alias for preview env — same Supabase project, internal distribution
@@ -26,9 +26,9 @@ const envConfig = {
     name: 'SquaredSplit (Staging)',
     bundleIdentifier: 'com.squaredsplit.app.preview',
     androidPackage: 'com.squaredsplit.app.preview',
-    supabaseUrl: 'https://eqqcqnfnfnzurfjfzwwp.supabase.co',
+    supabaseUrl: 'https://tldohvypnuirpsvrrxoh.supabase.co',
     supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '',
-    phoneAuthUrl: 'https://eqqcqnfnfnzurfjfzwwp.supabase.co/functions/v1/phone-auth',
+    phoneAuthUrl: 'https://tldohvypnuirpsvrrxoh.supabase.co/functions/v1/phone-auth',
     icon: './assets/icon-preview.png',
   },
   production: {
@@ -63,9 +63,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   name: env.name,
   slug: 'squaredSplitApp',
   scheme: 'squaredsplit',
-  // v0.1.0 — aligned with EAS build channel "production".
+  // v0.2.0 — v0.2–v0.3 feature wave (social+email auth, groups, account suite).
   // runtimeVersion uses sdkVersion so OTA updates only target compatible builds.
-  version: '0.1.0',
+  version: '0.2.0',
   orientation: 'portrait',
   icon: env.icon,
   userInterfaceStyle: 'light',
