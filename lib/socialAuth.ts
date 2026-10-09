@@ -171,9 +171,10 @@ export async function signInWithApple(onOutcome: OutcomeHandler): Promise<void> 
 
 /** True when native Sign in with Apple can be offered (iOS 13+ only). */
 export function useAppleAvailability(): boolean {
-  const [available, setAvailable] = useState(Platform.OS !== 'ios' ? false : false)
+  const [available, setAvailable] = useState(false)
+  const disabled = process.env.EXPO_PUBLIC_APPLE_LOGIN_DISABLED === 'true'
   useEffect(() => {
-    if (Platform.OS !== 'ios') return
+    if (Platform.OS !== 'ios' || disabled) return
     let cancelled = false
     AppleAuthentication.isAvailableAsync().then(isAvailable => {
       if (!cancelled) setAvailable(isAvailable)
@@ -181,6 +182,6 @@ export function useAppleAvailability(): boolean {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [disabled])
   return available
 }
