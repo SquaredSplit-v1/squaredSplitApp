@@ -1,15 +1,16 @@
-import * as AppleAuthentication from 'expo-apple-authentication'
-import * as Google from 'expo-auth-session/providers/google'
-import * as Crypto from 'expo-crypto'
 import { useEffect, useState } from 'react'
 import { Platform } from 'react-native'
 
+import { GOOGLE_ANDROID_CLIENT_ID, GOOGLE_IOS_CLIENT_ID } from './socialAuthEnv'
 import { supabase } from './supabase/client'
 
 // OAuth client IDs from Google Cloud Console (see docs/social-login-setup.md).
 // When a platform has no client ID configured, its button is hidden.
-const GOOGLE_IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID
-const GOOGLE_ANDROID_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID
+export { GOOGLE_ANDROID_CLIENT_ID, GOOGLE_IOS_CLIENT_ID } from './socialAuthEnv'
+
+// Apple sign-in also requires the App ID capability in the Apple Developer
+// portal; the entitlement is gated by plugins/withAppleSignInGate.js.
+const APPLE_LOGIN_ENABLED = process.env.EXPO_PUBLIC_APPLE_LOGIN_ENABLED === 'true'
 
 export interface SocialAuthOutcome {
   success: boolean
@@ -22,7 +23,7 @@ type OutcomeHandler = (outcome: SocialAuthOutcome) => void
 function friendlyError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error ?? '')
   if (message.includes('already registered') || message.includes('already been registered')) {
-    return 'An account with this email already exists. Sign in with your phone number instead.'
+    return 'An account with this email already exists. Sign in with your email instead.'
   }
   if (message.includes('Invalid') || message.includes('invalid')) {
     return 'Sign-in could not be verified. Please try again.'
@@ -30,89 +31,99 @@ function friendlyError(error: unknown): string {
   if (message.includes('provider is not enabled') || message.includes('SMTP')) {
     return 'Social sign-in is not configured on the server yet.'
   }
+  if (message.includes('Cannot find native module')) {
+    return 'This sign-in method needs an app update. Please update the app.'
+  }
   return 'Sign in failed. Please try again.'
 }
 
-// ─── Google (ID-token flow) ──────────────────────────────────────────────────
+// ─── Lazy native-module loading ──────────────────────────────────────────────
+// expo-crypto / expo-apple-authentication / expo-auth-session all pull native
+// modules. They are imported DYNAMICALLY and only when a social button is
+// actually offered, so the login screen (and app boot) never touches them —
+// email and phone login work even if these modules are missing entirely.
 
-/**
- * Google sign-in via expo-auth-session. The hook exchanges the returned ID
- * token for a Supabase session; navigation happens through the existing
- * onAuthStateChange listener in authStore.
- */
-export function useGoogleSignIn(onOutcome: OutcomeHandler) {
-  const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
-    iosClientId: GOOGLE_IOS_CLIENT_ID,
-    androidClientId: GOOGLE_ANDROID_CLIENT_ID,
-  })
+export type AppleAuthModule = typeof import('expo-apple-authentication')
+export type CryptoModule = typeof import('expo-crypto')
+export type GoogleProviderModule = typeof import('expo-auth-session/providers/google')
 
-  const [isSigningIn, setIsSigningIn] = useState(false)
+let appleModulePromise: Promise<AppleAuthModule> | null = null
+let cryptoModulePromise: Promise<CryptoModule> | null = null
+let googleModulePromise: Promise<GoogleProviderModule> | null = null
 
-  useEffect(() => {
-    if (!response) return
+export function loadAppleModule(): Promise<AppleAuthModule> {
+  appleModulePromise ??= import('expo-apple-authentication')
+  return appleModulePromise
+}
 
-    if (response.type === 'error') {
-      onOutcome({ success: false, error: friendlyError(response.error) })
-      return
-    }
-    if (response.type !== 'success') {
-      setIsSigningIn(false)
-      return
-    }
+export function loadCryptoModule(): Promise<CryptoModule> {
+  cryptoModulePromise ??= import('expo-crypto')
+  return cryptoModulePromise
+}
 
-    const idToken = response.params?.id_token
-    if (!idToken) {
-      onOutcome({
-        success: false,
-        error: 'Google did not return a sign-in token. Please try again.',
-      })
-      return
-    }
+export function loadGoogleModule(): Promise<GoogleProviderModule> {
+  googleModulePromise ??= import('expo-auth-session/providers/google')
+  return googleModulePromise
+}
 
-    let cancelled = false
-    setIsSigningIn(true)
+export function canUseGoogle(): boolean {
+  return Boolean(Platform.OS === 'ios' ? GOOGLE_IOS_CLIENT_ID : GOOGLE_ANDROID_CLIENT_ID)
+}
 
-    supabase.auth
-      .signInWithIdToken({ provider: 'google', token: idToken })
-      .then(({ error }) => {
-        if (cancelled) return
-        if (error) onOutcome({ success: false, error: friendlyError(error.message) })
-        else onOutcome({ success: true })
-      })
-      .catch(err => {
-        if (!cancelled) onOutcome({ success: false, error: friendlyError(err) })
-      })
-      .finally(() => {
-        if (!cancelled) setIsSigningIn(false)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [response, onOutcome])
-
-  const canUseGoogle = Boolean(
-    Platform.OS === 'ios' ? GOOGLE_IOS_CLIENT_ID : GOOGLE_ANDROID_CLIENT_ID
-  )
-
-  return {
-    canUseGoogle,
-    isSigningIn,
-    // `promptAsync` is undefined until the request is built; guard at call sites too
-    signInWithGoogle: () => void promptAsync(),
-    googleRequestReady: Boolean(request),
-  }
+export function isAppleLoginEnabled(): boolean {
+  return APPLE_LOGIN_ENABLED && Platform.OS === 'ios'
 }
 
 // ─── Apple (native Sign in with Apple) ───────────────────────────────────────
 
 /**
- * Native Sign in with Apple (iOS only). Uses a nonce so Supabase can verify
- * the identity token was minted for this sign-in request.
+ * True when native Sign in with Apple can be offered: enabled by env var and
+ * the native module loads on this device. The import is lazy, so a missing
+ * native module only keeps the button hidden — it can never crash boot.
+ */
+export function useAppleAvailability(): boolean {
+  const [available, setAvailable] = useState(false)
+
+  useEffect(() => {
+    if (!isAppleLoginEnabled()) return
+    let cancelled = false
+    loadAppleModule()
+      .then(Apple => Apple.isAvailableAsync())
+      .then(isAvailable => {
+        if (!cancelled) setAvailable(isAvailable)
+      })
+      .catch(() => {
+        // Native module missing or errored — button stays hidden.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  return available
+}
+
+/**
+ * Native Sign in with Apple with a nonce so Supabase can verify the identity
+ * token was minted for this sign-in request.
  */
 export async function signInWithApple(onOutcome: OutcomeHandler): Promise<void> {
+  if (!isAppleLoginEnabled()) {
+    onOutcome({ success: false, error: 'Sign in with Apple is not available.' })
+    return
+  }
+
+  let Apple: AppleAuthModule
+  let Crypto: CryptoModule
   try {
-    const available = await AppleAuthentication.isAvailableAsync()
+    ;[Apple, Crypto] = await Promise.all([loadAppleModule(), loadCryptoModule()])
+  } catch {
+    onOutcome({ success: false, error: friendlyError(new Error('Cannot find native module')) })
+    return
+  }
+
+  try {
+    const available = await Apple.isAvailableAsync()
     if (!available) {
       onOutcome({ success: false, error: 'Sign in with Apple is not available on this device.' })
       return
@@ -124,10 +135,10 @@ export async function signInWithApple(onOutcome: OutcomeHandler): Promise<void> 
       rawNonce
     )
 
-    const credential = await AppleAuthentication.signInAsync({
+    const credential = await Apple.signInAsync({
       requestedScopes: [
-        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-        AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        Apple.AppleAuthenticationScope.FULL_NAME,
+        Apple.AppleAuthenticationScope.EMAIL,
       ],
       nonce: hashedNonce,
     })
@@ -167,21 +178,4 @@ export async function signInWithApple(onOutcome: OutcomeHandler): Promise<void> 
     if (code === 'ERR_REQUEST_CANCELED') return
     onOutcome({ success: false, error: friendlyError(err) })
   }
-}
-
-/** True when native Sign in with Apple can be offered (iOS 13+ only). */
-export function useAppleAvailability(): boolean {
-  const [available, setAvailable] = useState(false)
-  const disabled = process.env.EXPO_PUBLIC_APPLE_LOGIN_ENABLED !== 'true'
-  useEffect(() => {
-    if (Platform.OS !== 'ios' || disabled) return
-    let cancelled = false
-    AppleAuthentication.isAvailableAsync().then(isAvailable => {
-      if (!cancelled) setAvailable(isAvailable)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [disabled])
-  return available
 }
