@@ -23,9 +23,10 @@ import Animated, {
 } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { AppleButton, GoogleButton, OrContinueWithDivider } from '@/components/auth/SocialButtons'
+import LazyGoogleButton from '@/components/auth/LazyGoogleButton'
+import { AppleButton, OrContinueWithDivider } from '@/components/auth/SocialButtons'
 import { isValidEmail, sendOtp, signInWithEmail, signUpWithEmail } from '@/lib/auth'
-import { signInWithApple, useAppleAvailability, useGoogleSignIn } from '@/lib/socialAuth'
+import { canUseGoogle, signInWithApple, useAppleAvailability } from '@/lib/socialAuth'
 
 import AppIcon from '../../assets/app-icon.svg'
 import BlurEllipse from '../../assets/auth/Blur-Ellipse.svg'
@@ -225,23 +226,18 @@ export default function LoginScreen() {
   const [socialError, setSocialError] = useState('')
   const [isAppleBusy, setIsAppleBusy] = useState(false)
 
-  // Email + password mode
-  const [mode, setMode] = useState<'phone' | 'email'>('phone')
+  // Email + password is the primary login (SMS delivery is offline); phone
+  // remains available via the toggle for test numbers / when SMS returns.
+  const [mode, setMode] = useState<'phone' | 'email'>('email')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isSigningUp, setIsSigningUp] = useState(false)
 
   const appleAvailable = useAppleAvailability()
 
-  // useCallback keeps the hook's response effect stable across renders
-  const handleGoogleOutcome = React.useCallback((outcome: { success: boolean; error?: string }) => {
-    if (!outcome.success && outcome.error) setSocialError(outcome.error)
-  }, [])
-  const {
-    canUseGoogle,
-    isSigningIn: isGoogleBusy,
-    signInWithGoogle,
-  } = useGoogleSignIn(handleGoogleOutcome)
+  // Google sign-in button mounts lazily (see LazyGoogleButton) — no native
+  // module import at boot.
+  const googleEnabled = canUseGoogle()
 
   const handleAppleSignIn = async () => {
     setSocialError('')
@@ -484,11 +480,17 @@ export default function LoginScreen() {
           </Text>
         </TouchableOpacity>
 
-        {(canUseGoogle || appleAvailable) && (
+        {(googleEnabled || appleAvailable) && (
           <>
             <OrContinueWithDivider />
             <View style={styles.socialRow}>
-              {canUseGoogle && <GoogleButton onPress={signInWithGoogle} busy={isGoogleBusy} />}
+              {googleEnabled && (
+                <LazyGoogleButton
+                  onOutcome={outcome => {
+                    if (!outcome.success && outcome.error) setSocialError(outcome.error)
+                  }}
+                />
+              )}
               {appleAvailable && <AppleButton onPress={handleAppleSignIn} busy={isAppleBusy} />}
             </View>
             {!!socialError && <Text style={styles.socialErrorText}>{socialError}</Text>}
