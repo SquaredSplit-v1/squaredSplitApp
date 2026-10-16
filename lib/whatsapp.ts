@@ -35,3 +35,24 @@ export function expenseInviteMessage(input: {
 export function appInviteMessage(inviterName: string): string {
   return `${inviterName} is splitting expenses on SquaredSplit — install the app and add them as a friend! 🧾`
 }
+
+/**
+ * A raw phone query (digits, maybe without country code) shaped for wa.me.
+ * Indian local numbers (10 digits) get the 91 prefix; anything else is
+ * assumed to already carry its country code. Null when unusable.
+ */
+export function whatsappDigits(phoneQuery: string): string | null {
+  const digits = phoneQuery.replace(/\D/g, '')
+  if (digits.length < 10) return null
+  return digits.length === 10 ? `91${digits}` : digits
+}
+
+/** True when the search text is better treated as a phone number than a name. */
+export function isPhoneQuery(query: string): boolean {
+  const q = query.trim()
+  if (!q) return false
+  const digits = q.replace(/\D/g, '')
+  if (digits.length < 7) return false
+  // Only phone-ish characters allowed (digits, spaces, +, -, parentheses).
+  return q.replace(/[\d\s+\-()]/g, '').length === 0
+}
