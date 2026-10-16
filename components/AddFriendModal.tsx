@@ -19,7 +19,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Svg, { Path } from 'react-native-svg'
 
 import { labelForMatchedPhone } from '@/lib/contacts'
-import type { MatchedContact } from '@/lib/supabase/contacts'
+import { searchProfileByPhone, type MatchedContact } from '@/lib/supabase/contacts'
+import { appInviteMessage, whatsappDigits, whatsappUrl } from '@/lib/whatsapp'
+import { useAuthStore } from '@/store/authStore'
 import { useContactsStore } from '@/store/contactsStore'
 
 const { height: SCREEN_H } = Dimensions.get('window')
@@ -85,13 +87,61 @@ export default function AddFriendModal({ visible, onClose, onSelect }: Props) {
 
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [phoneResult, setPhoneResult] = useState<MatchedContact | null>(null)
+  const [phoneSearching, setPhoneSearching] = useState(false)
+
+  const userId = useAuthStore(s => s.user?.id)
 
   useEffect(() => {
     if (!visible) {
       setQuery('')
       setSelectedId(null)
+      setPhoneResult(null)
+      setPhoneSearching(false)
     }
   }, [visible])
+
+  // Direct phone-number search (works even when the person is not in the
+  // device address book). Debounced; degrades to an app invite when the
+  // number belongs to no one.
+  const digits = query.replace(/\D/g, '')
+  const phoneMode = digits.length >= 7 && query.replace(/[\d\s+\-()]/g, '').length === 0
+
+  useEffect(() => {
+    if (!visible || !phoneMode) {
+      setPhoneResult(null)
+      setPhoneSearching(false)
+      return
+    }
+    let cancelled = false
+    setPhoneSearching(true)
+    const timer = setTimeout(() => {
+      void searchProfileByPhone(digits).then(({ data }) => {
+        if (cancelled) return
+        setPhoneResult(data)
+        setPhoneSearching(false)
+      })
+    }, 400)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [visible, digits, phoneMode])
+
+  const handleInvite = useCallback(async () => {
+    const waDigits = whatsappDigits(query)
+    if (!waDigits || !userId) return
+    let inviterName = 'A friend'
+    try {
+      const { getProfile } = await import('@/lib/supabase/profile')
+      const profile = await getProfile(userId)
+      if (profile?.full_name) inviterName = profile.full_name
+    } catch {
+      // keep fallback name
+    }
+    const url = whatsappUrl(waDigits, appInviteMessage(inviterName))
+    void Linking.openURL(url)
+  }, [query, userId])
 
   useEffect(() => {
     if (visible) {
@@ -179,6 +229,62 @@ export default function AddFriendModal({ visible, onClose, onSelect }: Props) {
 
   const maxCardH = SCREEN_H - insets.top - insets.bottom - 48
 
+  /** Direct phone-number search result / app-invite fallback (search by number). */
+  const phoneSection = useMemo(() => {
+    if (!phoneMode) return null
+    if (phoneSearching) {
+      return (
+        <View style={styles.phoneRow}>
+          <ActivityIndicator size="small" color="#3273CD" />
+          <Text style={styles.phoneHint}>Searching…</Text>
+        </View>
+      )
+    }
+    if (phoneResult) {
+      const selected = selectedId === phoneResult.id
+      return (
+        <Pressable
+          style={({ pressed }) => [styles.row, styles.phoneRowCard, pressed && styles.rowPressed]}
+          onPress={() => setSelectedId(phoneResult.id)}
+        >
+          <View style={styles.rowLeft}>
+            {phoneResult.avatar_url ? (
+              <Image source={{ uri: phoneResult.avatar_url }} style={styles.avatar} />
+            ) : (
+              <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                <Text style={styles.avatarInitial}>
+                  {(phoneResult.display_name?.[0] || '?').toUpperCase()}
+                </Text>
+              </View>
+            )}
+            <View style={{ flexShrink: 1 }}>
+              <Text style={styles.name} numberOfLines={1}>
+                {phoneResult.display_name}
+              </Text>
+              <Text style={styles.phoneSubtitle}>On SquaredSplit · {phoneResult.phone}</Text>
+            </View>
+          </View>
+          <RadioControl selected={selected} />
+        </Pressable>
+      )
+    }
+    const waDigits = whatsappDigits(query)
+    if (!waDigits) return null
+    return (
+      <View style={styles.phoneRowCard}>
+        <Text style={styles.phoneHint}>Not on SquaredSplit yet</Text>
+        <TouchableOpacity
+          style={styles.inviteBtn}
+          onPress={() => void handleInvite()}
+          accessibilityRole="button"
+          accessibilityLabel="Invite on WhatsApp"
+        >
+          <Text style={styles.inviteBtnText}>Invite on WhatsApp</Text>
+        </TouchableOpacity>
+      </View>
+    )
+  }, [phoneMode, phoneSearching, phoneResult, selectedId, query, handleInvite])
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.modalRoot}>
@@ -220,7 +326,7 @@ export default function AddFriendModal({ visible, onClose, onSelect }: Props) {
                 <SearchIcon />
                 <TextInput
                   style={styles.searchInput}
-                  placeholder="Enter name"
+                  placeholder={phoneMode ? 'Searching by number…' : 'Enter name or phone number'}
                   placeholderTextColor="#9CA3AF"
                   value={query}
                   onChangeText={setQuery}
@@ -231,7 +337,7 @@ export default function AddFriendModal({ visible, onClose, onSelect }: Props) {
               <View style={styles.searchUnderline} />
             </View>
 
-            {isLoading && rows.length === 0 ? (
+            {isLoading && rows.length === 0 && !phoneMode ? (
               <View style={styles.loader}>
                 <ActivityIndicator color="#3273CD" />
               </View>
@@ -244,6 +350,7 @@ export default function AddFriendModal({ visible, onClose, onSelect }: Props) {
                 style={styles.list}
                 contentContainerStyle={styles.listContent}
                 ListEmptyComponent={listEmpty}
+                ListHeaderComponent={phoneSection}
                 showsVerticalScrollIndicator={false}
               />
             )}
@@ -443,5 +550,43 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Nunito_700Bold',
     color: '#3273CD',
+  },
+  phoneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
+  },
+  phoneRowCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F5F9FF',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 8,
+  },
+  phoneSubtitle: {
+    fontSize: 12,
+    fontFamily: 'Nunito_400Regular',
+    color: '#6B6B6B',
+    marginTop: 2,
+  },
+  phoneHint: {
+    fontSize: 13,
+    fontFamily: 'Nunito_400Regular',
+    color: '#6B6B6B',
+  },
+  inviteBtn: {
+    backgroundColor: '#141414',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  inviteBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontFamily: 'Nunito_600SemiBold',
   },
 })

@@ -4,6 +4,7 @@ import { useFocusEffect, useRouter } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
+  Linking,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -26,7 +27,9 @@ import {
   SquaredUpSection,
 } from '@/components/dashboard'
 import { formatAmount, type Currency } from '@/lib/currency'
+import { searchProfileByPhone, type MatchedContact } from '@/lib/supabase/contacts'
 import type { FriendOverview } from '@/lib/supabase/home'
+import { isPhoneQuery, whatsappDigits, whatsappUrl, appInviteMessage } from '@/lib/whatsapp'
 import { useAuthStore } from '@/store/authStore'
 import { useCurrencyStore } from '@/store/currencyStore'
 import { useHomeStore } from '@/store/homeStore'
@@ -255,6 +258,8 @@ export default function HomeScreen() {
   const [selectedFilter, setSelectedFilter] = useState<FilterOption>('none')
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [phoneLookup, setPhoneLookup] = useState<MatchedContact | null>(null)
+  const [phoneLookingUp, setPhoneLookingUp] = useState(false)
   const [squaredUpExpanded, setSquaredUpExpanded] = useState(false)
 
   useEffect(() => {
@@ -314,6 +319,46 @@ export default function HomeScreen() {
     }
     return list
   }, [outstandingFriends, searchQuery, selectedFilter])
+
+  // Direct phone-number search from the dashboard search bar: registered
+  // users are found by number; unknown numbers get a WhatsApp app invite.
+  const searchDigits = searchQuery.replace(/\D/g, '')
+  const searchIsPhone = searchOpen && isPhoneQuery(searchQuery) && searchDigits.length >= 7
+
+  useEffect(() => {
+    if (!searchIsPhone) {
+      setPhoneLookup(null)
+      setPhoneLookingUp(false)
+      return
+    }
+    let cancelled = false
+    setPhoneLookingUp(true)
+    const timer = setTimeout(() => {
+      void searchProfileByPhone(searchDigits).then(({ data }) => {
+        if (cancelled) return
+        setPhoneLookup(data)
+        setPhoneLookingUp(false)
+      })
+    }, 400)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [searchIsPhone, searchDigits])
+
+  const handleInviteFromSearch = useCallback(async () => {
+    const waDigits = whatsappDigits(searchQuery)
+    if (!waDigits || !user) return
+    let inviterName = 'A friend'
+    try {
+      const { getProfile } = await import('@/lib/supabase/profile')
+      const profile = await getProfile(user.id)
+      if (profile?.full_name) inviterName = profile.full_name
+    } catch {
+      // keep fallback name
+    }
+    void Linking.openURL(whatsappUrl(waDigits, appInviteMessage(inviterName)))
+  }, [searchQuery, user])
 
   const isEmpty = !isLoading && friends.length === 0 && balance.netBalance === 0
 
@@ -439,11 +484,53 @@ export default function HomeScreen() {
         ) : (
           <View style={styles.friendsSection}>
             {!isLoading && filteredFriends.length === 0 && outstandingFriends.length > 0 ? (
-              <Text style={styles.noMatches}>
-                {searchQuery.trim()
-                  ? 'No friends match your search'
-                  : 'No friends match this filter'}
-              </Text>
+              <View>
+                <Text style={styles.noMatches}>
+                  {searchQuery.trim()
+                    ? 'No friends match your search'
+                    : 'No friends match this filter'}
+                </Text>
+                {searchIsPhone && (
+                  <View style={styles.phoneSearchCard}>
+                    {phoneLookingUp ? (
+                      <Text style={styles.phoneSearchHint}>Searching by number…</Text>
+                    ) : phoneLookup ? (
+                      <TouchableOpacity
+                        style={styles.phoneSearchRow}
+                        onPress={() => openAddExpense([phoneLookup.id])}
+                        activeOpacity={0.8}
+                      >
+                        <View style={styles.phoneSearchAvatar}>
+                          <Text style={styles.phoneSearchInitial}>
+                            {(phoneLookup.display_name?.[0] || '?').toUpperCase()}
+                          </Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.phoneSearchName} numberOfLines={1}>
+                            {phoneLookup.display_name}
+                          </Text>
+                          <Text style={styles.phoneSearchHint}>
+                            On SquaredSplit · {phoneLookup.phone}
+                          </Text>
+                        </View>
+                        <Text style={styles.phoneSearchCta}>Split</Text>
+                      </TouchableOpacity>
+                    ) : whatsappDigits(searchQuery) ? (
+                      <View>
+                        <Text style={styles.phoneSearchHint}>Not on SquaredSplit yet</Text>
+                        <TouchableOpacity
+                          style={styles.phoneInviteBtn}
+                          onPress={() => void handleInviteFromSearch()}
+                          accessibilityRole="button"
+                          accessibilityLabel="Invite on WhatsApp"
+                        >
+                          <Text style={styles.phoneInviteBtnText}>Invite on WhatsApp</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : null}
+                  </View>
+                )}
+              </View>
             ) : (
               <View style={styles.friendsList}>
                 {filteredFriends.map(f => (
@@ -579,5 +666,35 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     paddingVertical: 16,
   },
+  phoneSearchCard: {
+    backgroundColor: '#F5F9FF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#D4E7FF',
+    padding: 14,
+    marginTop: 8,
+  },
+  phoneSearchRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  phoneSearchAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#D9E897',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  phoneSearchInitial: { fontSize: 17, fontWeight: '600', color: '#141414' },
+  phoneSearchName: { fontSize: 15, fontWeight: '600', color: '#141414' },
+  phoneSearchHint: { fontSize: 12, color: '#6B6B6B', marginTop: 2 },
+  phoneSearchCta: { fontSize: 14, fontWeight: '700', color: '#3273CD' },
+  phoneInviteBtn: {
+    backgroundColor: '#141414',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    alignSelf: 'flex-start',
+    marginTop: 8,
+  },
+  phoneInviteBtnText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
   squaredUpList: { marginBottom: 8 },
 })

@@ -4,7 +4,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: '14.5'
+    PostgrestVersion: '14.1'
   }
   graphql_public: {
     Tables: {
@@ -889,6 +889,7 @@ export type Database = {
         Args: { p_group_id: string; p_user_id: string }
         Returns: undefined
       }
+      search_profile_by_phone: { Args: { p_phone: string }; Returns: Json }
       settle_up_group: { Args: { p_group_id: string }; Returns: Json }
       settle_up_with_friend: { Args: { p_friend_id: string }; Returns: Json }
       update_group_settings: {
