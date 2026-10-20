@@ -19,6 +19,7 @@ import Svg, { Path } from 'react-native-svg'
 
 import AddExpenseModal from '@/components/AddExpenseModal'
 import AddFriendModal from '@/components/AddFriendModal'
+import CreateGroupModal from '@/components/CreateGroupModal'
 import type { FilterOption } from '@/components/dashboard'
 import {
   AddExpenseButton,
@@ -27,6 +28,7 @@ import {
   SquaredUpSection,
 } from '@/components/dashboard'
 import { formatAmount, type Currency } from '@/lib/currency'
+import { supabase } from '@/lib/supabase/client'
 import { searchProfileByPhone, type MatchedContact } from '@/lib/supabase/contacts'
 import type { FriendOverview } from '@/lib/supabase/home'
 import { isPhoneQuery, whatsappDigits, whatsappUrl, appInviteMessage } from '@/lib/whatsapp'
@@ -35,19 +37,37 @@ import { useCurrencyStore } from '@/store/currencyStore'
 import { useHomeStore } from '@/store/homeStore'
 import { usePendingSplitStore } from '@/store/pendingSplitStore'
 
-function BellIcon() {
+function BellIcon({ hasUnseen }: { hasUnseen: boolean }) {
   return (
-    <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M18 8A6 6 0 106 8c0 7-3 9-3 9h18s-3-2-3-9zM13.73 21a2 2 0 01-3.46 0"
-        stroke="#141414"
-        strokeWidth={1.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
+    <View style={bellDotStyles.wrap}>
+      <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
+        <Path
+          d="M18 8A6 6 0 106 8c0 7-3 9-3 9h18s-3-2-3-9zM13.73 21a2 2 0 01-3.46 0"
+          stroke="#141414"
+          strokeWidth={1.8}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </Svg>
+      {hasUnseen && <View style={bellDotStyles.dot} />}
+    </View>
   )
 }
+
+const bellDotStyles = StyleSheet.create({
+  wrap: { position: 'relative' },
+  dot: {
+    position: 'absolute',
+    top: -1,
+    right: -1,
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
+    backgroundColor: '#F04438',
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+  },
+})
 
 function SearchGlyph() {
   return (
@@ -75,14 +95,28 @@ function friendDirection(f: FriendOverview): FriendDirection {
   return f.netBalance >= 0 ? 'owes_you' : 'you_owe'
 }
 
+function formatDueDate(iso: string): string {
+  const d = new Date(iso)
+  const day = new Intl.DateTimeFormat('en-GB', { day: 'numeric' }).format(d)
+  const month = new Intl.DateTimeFormat('en-GB', { month: 'short' }).format(d)
+  const yy = String(d.getFullYear()).slice(-2)
+  return `${day} ${month}'${yy}`
+}
+
 function subtitleFor(f: FriendOverview): { text: string; color: string } {
+  // You owe + overdue → red "⚠️ Alert!"
+  if (f.hasOverdue && friendDirection(f) === 'you_owe') {
+    return { text: '⚠️ Alert!', color: '#F06767' }
+  }
+  // Owes you + overdue with a date → the missed due date, in red
+  if (f.hasOverdue && f.nextDueDate) {
+    return { text: formatDueDate(f.nextDueDate), color: '#F06767' }
+  }
   if (f.hasOverdue) {
-    return friendDirection(f) === 'you_owe'
-      ? { text: 'Alert!', color: '#F06767' }
-      : { text: 'Overdue', color: '#F06767' }
+    return { text: 'Overdue', color: '#F06767' }
   }
   if (f.nextDueDate) {
-    return { text: 'Upcoming due', color: '#F09E42' }
+    return { text: '⚠️ Upcoming due', color: '#F09E42' }
   }
   return {
     text: f.lastActivityAt ? formatShortActivityDate(f.lastActivityAt) : '',
@@ -209,9 +243,9 @@ const friendStyles = StyleSheet.create({
   nameBlock: { flexDirection: 'column', justifyContent: 'center', gap: 4, flex: 1, minWidth: 0 },
   nameText: {
     color: '#141414',
-    fontSize: 18,
+    fontSize: 20,
     fontFamily: 'Nunito_400Regular',
-    lineHeight: 18,
+    lineHeight: 26,
   },
   subtitleText: {
     fontSize: 12,
@@ -261,6 +295,8 @@ export default function HomeScreen() {
   const [phoneLookup, setPhoneLookup] = useState<MatchedContact | null>(null)
   const [phoneLookingUp, setPhoneLookingUp] = useState(false)
   const [squaredUpExpanded, setSquaredUpExpanded] = useState(false)
+  const [hasUnseen, setHasUnseen] = useState(false)
+  const [createGroupVisible, setCreateGroupVisible] = useState(false)
 
   useEffect(() => {
     if (user) fetch(user.id)
@@ -288,6 +324,27 @@ export default function HomeScreen() {
         clearPendingSplit()
       }
     }, [pendingSplitUserId, clearPendingSplit]) // eslint-disable-line react-hooks/exhaustive-deps
+  )
+
+  // Red dot on the bell while there are unseen notifications.
+  useFocusEffect(
+    useCallback(() => {
+      if (!user?.id) return
+      let cancelled = false
+      void (async () => {
+        // activity_feed is not yet in generated Database types.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { count } = await (supabase as any)
+          .from('activity_feed')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .eq('seen', false)
+        if (!cancelled) setHasUnseen((count ?? 0) > 0)
+      })()
+      return () => {
+        cancelled = true
+      }
+    }, [user?.id])
   )
 
   const closeAddExpense = useCallback(() => {
@@ -402,7 +459,7 @@ export default function HomeScreen() {
       >
         <View style={styles.navBar}>
           <TouchableOpacity style={styles.navIcon} onPress={() => router.push('/notifications')}>
-            <BellIcon />
+            <BellIcon hasUnseen={hasUnseen} />
           </TouchableOpacity>
           {!searchOpen ? (
             <View style={styles.navRight}>
@@ -456,11 +513,11 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {isLoading ? (
+        {isLoading && !isEmpty ? (
           <View style={styles.loadingBlock}>
             <ActivityIndicator color="#141414" />
           </View>
-        ) : (
+        ) : isEmpty ? null : (
           <BalanceSummary
             balanceToSquare={Math.abs(balance.netBalance)}
             youAreOwed={balance.youAreOwed}
@@ -471,14 +528,15 @@ export default function HomeScreen() {
         )}
 
         {isEmpty ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyEmoji}>🤝</Text>
-            <Text style={styles.emptyTitle}>No expenses yet</Text>
-            <Text style={styles.emptySubtitle}>
-              Add your first expense to start splitting with friends
-            </Text>
-            <TouchableOpacity style={styles.emptyAction} onPress={() => openAddExpense()}>
-              <Text style={styles.emptyActionText}>Add an expense</Text>
+          // New-user dashboard — the Figma welcome state after onboarding.
+          <View style={styles.welcomeBlock}>
+            <Text style={styles.welcomeTitle}>{'Hi!\nWelcome to your\ndashboard.'}</Text>
+            <TouchableOpacity
+              onPress={() => setCreateGroupVisible(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Create a new group"
+            >
+              <Text style={styles.createGroupLink}>+ Create a new group</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -563,7 +621,7 @@ export default function HomeScreen() {
         )}
       </ScrollView>
 
-      {!isEmpty && <AddExpenseButton onPress={() => openAddExpense()} />}
+      <AddExpenseButton onPress={() => openAddExpense()} />
 
       <FilterModal
         visible={filterVisible}
@@ -577,6 +635,12 @@ export default function HomeScreen() {
         onClose={closeAddExpense}
         onSuccess={handleExpenseCreated}
         presetParticipantIds={presetFriendIds}
+      />
+
+      <CreateGroupModal
+        visible={createGroupVisible}
+        onClose={() => setCreateGroupVisible(false)}
+        onCreated={() => setCreateGroupVisible(false)}
       />
 
       <AddFriendModal
@@ -637,27 +701,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 24,
   },
-  emptyState: { alignItems: 'center', justifyContent: 'center', paddingTop: 48, paddingBottom: 32 },
-  emptyEmoji: { fontSize: 48, marginBottom: 16 },
-  emptyTitle: { fontSize: 20, fontFamily: 'Nunito_700Bold', color: '#141414', marginBottom: 8 },
-  emptySubtitle: {
-    fontSize: 14,
+  welcomeBlock: { paddingTop: 24 },
+  welcomeTitle: {
+    fontSize: 40,
     fontFamily: 'Nunito_400Regular',
-    color: '#6B6B6B',
-    textAlign: 'center',
-    lineHeight: 21,
-    marginBottom: 24,
-    paddingHorizontal: 32,
+    color: '#141414',
+    lineHeight: 48,
+    letterSpacing: -0.5,
   },
-  emptyAction: {
-    height: 48,
-    paddingHorizontal: 32,
-    backgroundColor: '#141414',
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
+  createGroupLink: {
+    marginTop: 16,
+    fontSize: 20,
+    fontFamily: 'Nunito_600SemiBold',
+    color: '#3273CD',
+    textDecorationLine: 'underline',
   },
-  emptyActionText: { fontSize: 14, fontFamily: 'Nunito_600SemiBold', color: '#FFFFFF' },
   friendsSection: { marginTop: 8, gap: 8 },
   friendsList: { gap: 8 },
   noMatches: {
