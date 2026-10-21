@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons'
+import { LinearGradient } from 'expo-linear-gradient'
 import { useRouter } from 'expo-router'
 import React, { useEffect, useMemo, useState } from 'react'
 import {
@@ -29,7 +30,6 @@ import { sendOtp } from '@/lib/auth'
 import { canUseGoogle, signInWithApple, useAppleAvailability } from '@/lib/socialAuth'
 
 import AppIcon from '../../assets/app-icon.svg'
-import BlurEllipse from '../../assets/auth/Blur-Ellipse.svg'
 import Lightning from '../../assets/auth/lightning.svg'
 import Love from '../../assets/auth/love.svg'
 import Man from '../../assets/auth/man.svg'
@@ -38,7 +38,7 @@ import Woman from '../../assets/auth/woman.svg'
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const MARQUEE_ITEM_WIDTH = 88
-const MARQUEE_GAP = 2
+const MARQUEE_GAP = 16
 const MARQUEE_TOTAL_WIDTH = (MARQUEE_ITEM_WIDTH + MARQUEE_GAP) * 4
 
 /** ISO 3166-1 alpha-2 → regional indicator emoji (e.g. IN → 🇮🇳). */
@@ -84,11 +84,14 @@ const COUNTRY_CODES = [
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function LoginGradientBlob() {
+/** Figma: pale-yellow glow at the top → soft blue mid → neutral gray base. */
+function LoginGradientBackground() {
   return (
-    <View style={styles.gradientBlobContainer}>
-      <BlurEllipse width="100%" height="100%" />
-    </View>
+    <LinearGradient
+      colors={['#F4F5D4', '#EEF1E6', '#E2EAF4', '#F3F4F5']}
+      locations={[0, 0.3, 0.52, 0.8]}
+      style={StyleSheet.absoluteFill}
+    />
   )
 }
 
@@ -105,7 +108,7 @@ function Marquee() {
 
   useEffect(() => {
     translateX.value = withRepeat(
-      withTiming(-MARQUEE_TOTAL_WIDTH, { duration: 8000, easing: Easing.linear }),
+      withTiming(-MARQUEE_TOTAL_WIDTH, { duration: 11000, easing: Easing.linear }),
       -1,
       false
     )
@@ -283,7 +286,7 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
     >
-      <LoginGradientBlob />
+      <LoginGradientBackground />
 
       <ScrollView
         style={styles.scrollView}
@@ -305,21 +308,22 @@ export default function LoginScreen() {
         {/* Phone input with country picker */}
         <View style={styles.inputSection}>
           <Text style={styles.inputLabel}>Enter your mobile number to continue</Text>
-          <View style={styles.phoneRow}>
+          <View style={[styles.phoneField, !!errorMessage && styles.phoneFieldError]}>
             <TouchableOpacity
-              style={styles.countryPicker}
+              style={styles.countryPrefix}
               onPress={() => setShowPicker(true)}
               accessibilityRole="button"
-              accessibilityLabel={`Country code ${selectedCountry.code}`}
+              accessibilityLabel={`Country code ${selectedCountry.code}, change`}
+              hitSlop={8}
             >
               <Text style={styles.countryFlag}>{countryCodeToEmoji(selectedCountry.country)}</Text>
               <Text style={styles.countryCodeText}>{selectedCountry.code}</Text>
-              <Ionicons name="chevron-down" size={14} color="#6B6B6B" />
+              <Ionicons name="chevron-down" size={14} color="#9CA3AF" />
             </TouchableOpacity>
 
             <TextInput
-              style={[styles.phoneInput, !!errorMessage && styles.phoneInputError]}
-              placeholder="XXX XXX XXXX"
+              style={styles.phoneInput}
+              placeholder="Mobile number"
               placeholderTextColor="#9CA3AF"
               value={phoneNumber}
               onChangeText={handlePhoneChange}
@@ -397,16 +401,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F3F4F5',
   },
-  gradientBlobContainer: {
-    position: 'absolute',
-    top: -80,
-    left: '50%',
-    marginLeft: -320,
-    width: 680,
-    height: 680,
-    borderRadius: 500,
-    overflow: 'hidden',
-  },
   scrollView: {
     flex: 1,
   },
@@ -418,22 +412,23 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   logoWrapper: {
-    width: 140,
-    height: 100,
+    width: 280,
+    height: 200,
   },
   tagline: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: '300',
+    fontFamily: 'Nunito_300Light',
     color: '#6B6B6B',
-    lineHeight: 32,
-    letterSpacing: -0.48,
-    paddingBottom: 48,
-    marginBottom: 32,
+    lineHeight: 34,
+    letterSpacing: -0.5,
+    marginTop: 8,
+    marginBottom: 56,
   },
   marqueeContainer: {
     height: 100,
     overflow: 'hidden',
-    marginBottom: 56,
+    marginBottom: 48,
     marginHorizontal: -24,
   },
   marqueeContent: {
@@ -453,50 +448,44 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   inputLabel: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '400',
-    color: '#9CA3AF',
-    lineHeight: 21,
-    marginBottom: 8,
-  },
-  phoneRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  countryPicker: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    height: 52,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF',
+    color: '#8E8E93',
+    lineHeight: 22,
+    marginBottom: 10,
   },
   countryFlag: {
     fontSize: 20,
     lineHeight: 24,
   },
   countryCodeText: {
-    fontSize: 15,
-    fontWeight: '500',
+    fontSize: 20,
+    fontWeight: '600',
+    fontFamily: 'Nunito_600SemiBold',
     color: '#141414',
   },
+  phoneField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 56,
+    borderWidth: 1,
+    borderColor: '#D4D6DA',
+    borderRadius: 12,
+    backgroundColor: '#FAFAFA',
+    paddingLeft: 14,
+    paddingRight: 12,
+  },
+  phoneFieldError: { borderColor: '#EF4444' },
+  countryPrefix: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingRight: 8 },
   phoneInput: {
     flex: 1,
     minWidth: 0,
-    height: 52,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    fontSize: 16,
+    height: 56,
+    fontSize: 20,
+    fontWeight: '600',
+    fontFamily: 'Nunito_600SemiBold',
     color: '#141414',
-    backgroundColor: '#FFFFFF',
-  },
-  phoneInputError: {
-    borderColor: '#EF4444',
+    paddingVertical: 0,
   },
   errorText: {
     fontSize: 13,
@@ -504,19 +493,21 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   button: {
-    height: 52,
+    height: 48,
     backgroundColor: '#141414',
-    borderRadius: 8,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
+    marginTop: 8,
     marginBottom: 24,
   },
   buttonDisabled: {
     backgroundColor: '#9CA3AF',
   },
   buttonText: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
+    fontFamily: 'Nunito_600SemiBold',
     color: '#FFFFFF',
   },
   socialRow: {
@@ -533,15 +524,15 @@ const styles = StyleSheet.create({
   footerLinks: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    paddingTop: 24,
+    paddingTop: 40,
   },
   footerLinkMuted: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '400',
-    color: '#9CA3AF',
-    lineHeight: 16.8,
-    letterSpacing: -0.28,
+    fontFamily: 'Nunito_400Regular',
+    color: '#6B6B6B',
+    lineHeight: 20,
+    letterSpacing: -0.2,
   },
   modalContainer: {
     flex: 1,

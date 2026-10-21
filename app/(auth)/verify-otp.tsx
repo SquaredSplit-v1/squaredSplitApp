@@ -162,7 +162,8 @@ export default function VerifyOTPScreen() {
           accessibilityRole="button"
           accessibilityLabel="Go back"
         >
-          <Text style={styles.backButtonText}>← Back</Text>
+          <Ionicons name="chevron-back" size={20} color="#3273CD" />
+          <Text style={styles.backButtonText}>Back</Text>
         </TouchableOpacity>
 
         <Text style={styles.title}>
@@ -240,7 +241,11 @@ export default function VerifyOTPScreen() {
           {isLoading ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
-            <Text style={styles.verifyButtonText}>Verify</Text>
+            <Text
+              style={[styles.verifyButtonText, !isOtpComplete && styles.verifyButtonTextDisabled]}
+            >
+              Verify
+            </Text>
           )}
         </TouchableOpacity>
       </ScrollView>
@@ -249,61 +254,96 @@ export default function VerifyOTPScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F3F4F5' },
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
   content: { flexGrow: 1, paddingHorizontal: 24 },
-  backButton: { marginBottom: 32 },
-  backButtonText: { fontSize: 16, color: '#6B6B6B' },
-  title: { fontSize: 22, fontWeight: '500', color: '#141414', lineHeight: 30, marginBottom: 8 },
-  phoneDisplay: { fontSize: 16, fontWeight: '600', color: '#141414', marginBottom: 24 },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    marginBottom: 36,
+  },
+  backButtonText: {
+    fontSize: 18,
+    fontWeight: '700',
+    fontFamily: 'Nunito_700Bold',
+    color: '#3273CD',
+  },
+  title: {
+    fontSize: 26,
+    fontWeight: '400',
+    fontFamily: 'Nunito_400Regular',
+    color: '#141414',
+    lineHeight: 33,
+    letterSpacing: -0.3,
+    marginBottom: 10,
+  },
+  phoneDisplay: {
+    fontSize: 22,
+    fontWeight: '700',
+    fontFamily: 'Nunito_700Bold',
+    color: '#DE8334',
+    marginBottom: 32,
+  },
   missingPhoneHint: {
     fontSize: 14,
     color: '#EF4444',
     marginBottom: 24,
     lineHeight: 20,
   },
-  otpLabel: { fontSize: 13, color: '#9CA3AF', marginBottom: 10 },
+  otpLabel: { fontSize: 16, color: '#8E8E93', fontFamily: 'Nunito_400Regular', marginBottom: 12 },
   otpContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 24,
-    gap: 6,
+    marginBottom: 22,
+    gap: 10,
   },
   otpInput: {
     flex: 1,
-    minWidth: 40,
-    maxWidth: 56,
-    height: 56,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    minWidth: 38,
+    maxWidth: 52,
+    height: 52,
+    borderWidth: 0,
     borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    fontSize: 24,
-    fontWeight: '600',
+    backgroundColor: '#F1F2F4',
+    fontSize: 22,
+    fontWeight: '500',
+    fontFamily: 'Nunito_500Medium',
     textAlign: 'center',
     color: '#141414',
   },
   otpInputFilled: {
-    borderColor: '#F9F0BF',
-    backgroundColor: '#F9F0BF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 0,
+    backgroundColor: '#F7F0BE',
+    shadowColor: '#8A7B1F',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 1,
   },
   otpInputError: { borderColor: '#EF4444' },
   errorText: { fontSize: 13, color: '#EF4444', textAlign: 'center', marginBottom: 12 },
-  sendAgainButton: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 24 },
-  sendAgainText: { fontSize: 14, fontWeight: '500', color: '#3273CD' },
+  sendAgainButton: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 32 },
+  sendAgainText: {
+    fontSize: 16,
+    fontWeight: '700',
+    fontFamily: 'Nunito_700Bold',
+    color: '#141414',
+  },
   sendAgainTextDisabled: { color: '#9CA3AF' },
   verifyButton: {
-    height: 52,
-    backgroundColor: '#141414',
-    borderRadius: 8,
+    height: 48,
+    backgroundColor: '#3273CD',
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 24,
   },
-  verifyButtonDisabled: { backgroundColor: '#9CA3AF' },
-  verifyButtonText: { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
+  verifyButtonDisabled: { backgroundColor: '#E3E5E8' },
+  verifyButtonText: {
+    fontSize: 17,
+    fontWeight: '600',
+    fontFamily: 'Nunito_600SemiBold',
+    color: '#FFFFFF',
+  },
+  verifyButtonTextDisabled: { color: '#B7BCC3' },
 })

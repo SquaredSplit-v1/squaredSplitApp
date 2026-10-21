@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useRouter } from 'expo-router'
 import React, { useEffect, useState } from 'react'
@@ -97,10 +98,11 @@ interface SlideContentProps {
   isLast: boolean
   insets: { top: number; bottom: number }
   onAction: () => void
+  onBack: () => void
   activeIndex: number
 }
 
-function SlideContent({ slide, isLast, insets, onAction, activeIndex }: SlideContentProps) {
+function SlideContent({ slide, isLast, insets, onAction, onBack, activeIndex }: SlideContentProps) {
   const isPhoto = slide.bg === 'photo'
 
   const inner = (
@@ -108,6 +110,17 @@ function SlideContent({ slide, isLast, insets, onAction, activeIndex }: SlideCon
       {slide.bg === 'gradient-images' && <FloatingImages />}
 
       <View style={[styles.headerContainer, { paddingTop: insets.top + 16 }]}>
+        {activeIndex > 0 && (
+          <TouchableOpacity
+            style={styles.backChevron}
+            onPress={onBack}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Previous slide"
+          >
+            <Ionicons name="chevron-back" size={26} color={isPhoto ? '#FFFFFF' : '#3273CD'} />
+          </TouchableOpacity>
+        )}
         <Text style={[styles.welcomeLight, isPhoto && styles.textWhite]}>Welcome to</Text>
         <Text style={[styles.welcomeBold, isPhoto && styles.textWhite]}>SquaredSplit</Text>
       </View>
@@ -189,9 +202,18 @@ interface FadeSlideProps {
   isLast: boolean
   insets: { top: number; bottom: number }
   onAction: () => void
+  onBack: () => void
 }
 
-function FadeSlide({ slide, index, activeIndex, isLast, insets, onAction }: FadeSlideProps) {
+function FadeSlide({
+  slide,
+  index,
+  activeIndex,
+  isLast,
+  insets,
+  onAction,
+  onBack,
+}: FadeSlideProps) {
   const isActive = index === activeIndex
   const opacity = useSharedValue(isActive ? 1 : 0)
 
@@ -215,6 +237,7 @@ function FadeSlide({ slide, index, activeIndex, isLast, insets, onAction }: Fade
         isLast={isLast}
         insets={insets}
         onAction={onAction}
+        onBack={onBack}
         activeIndex={activeIndex}
       />
     </Animated.View>
@@ -227,6 +250,10 @@ export default function OnboardingScreen() {
   const insets = useSafeAreaInsets()
   const router = useRouter()
   const [activeIndex, setActiveIndex] = useState(0)
+
+  const handleBack = () => {
+    if (activeIndex > 0) setActiveIndex(prev => prev - 1)
+  }
 
   const handleScreenTap = () => {
     if (activeIndex < SLIDE_COUNT - 1) {
@@ -255,6 +282,7 @@ export default function OnboardingScreen() {
             isLast={isLast}
             insets={insets}
             onAction={handleAction}
+            onBack={handleBack}
           />
         ))}
       </View>
@@ -265,6 +293,11 @@ export default function OnboardingScreen() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
+  backChevron: {
+    position: 'absolute',
+    left: 20,
+    top: 8,
+  },
   container: {
     flex: 1,
     overflow: 'hidden',
