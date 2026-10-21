@@ -6,12 +6,22 @@
  * use any SMS gateway instead of Twilio — MSG91 is wired in by default (India-
  * first: cheap, DLT-compliant), and adding another provider is one function.
  *
+ * Routing is per recipient region:
+ *   +91 (India)  → MSG91   (DLT templates)
+ *   +1 and rest  → Vonage  (US-capable SMS)
+ * SMS_PROVIDER overrides the route when set ("msg91" | "vonage" | "log").
+ *
  * Secrets (supabase secrets set …):
- *   SEND_SMS_HOOK_SECRET  shared secret Supabase sends in the Authorization header
- *   SMS_PROVIDER          "msg91" (default) | "log" (dev: print instead of send)
+ *   SEND_SMS_HOOK_SECRET  shared secret Supabase sends with the hook call
+ *   SMS_PROVIDER          optional forced route: "msg91" | "vonage" | "log"
+ *   -- MSG91 (Indian numbers) --
  *   MSG91_AUTH_KEY        MSG91 account auth key
  *   MSG91_TEMPLATE_ID     DLT-approved OTP template id (variable: ##OTP##)
  *   MSG91_SENDER_ID       6-char DLT sender id (optional for v5 flow)
+ *   -- Vonage (US / international) --
+ *   VONAGE_API_KEY        Vonage account API key
+ *   VONAGE_API_SECRET     Vonage account API secret
+ *   VONAGE_FROM_NUMBER    purchased US sender number, digits (e.g. 14155550123)
  */
 
 interface HookPayload {
@@ -111,6 +121,50 @@ async function sendViaMsg91(phone: string, otp: string): Promise<void> {
   }
 }
 
+async function sendViaVonage(phone: string, otp: string): Promise<void> {
+  const apiKey = Deno.env.get('VONAGE_API_KEY')
+  const apiSecret = Deno.env.get('VONAGE_API_SECRET')
+  const from = Deno.env.get('VONAGE_FROM_NUMBER')
+  if (!apiKey || !apiSecret || !from) {
+    throw new Error('Vonage is not configured (VONAGE_API_KEY / VONAGE_API_SECRET / VONAGE_FROM_NUMBER missing)')
+  }
+
+  const body = new URLSearchParams({
+    api_key: apiKey,
+    api_secret: apiSecret,
+    to: phone.replace(/\D/g, ''),
+    from,
+    text: `Your SquaredSplit verification code is ${otp}. It expires in 5 minutes.`,
+  })
+
+  const res = await fetch('https://rest.nexmo.com/sms/json', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  })
+
+  const data = (await res.json()) as {
+    messages?: { status?: string; 'error-text'?: string }[]
+  }
+  if (!res.ok) throw new Error(`Vonage HTTP ${res.status}`)
+  const first = data.messages?.[0]
+  if (!first || first.status !== '0') {
+    throw new Error(`Vonage rejected: ${first?.['error-text'] ?? 'unknown error'}`)
+  }
+}
+
+/** India → MSG91; everything else (US, …) → Vonage. Manual override wins. */
+function routeFor(phone: string): 'msg91' | 'vonage' | 'log' {
+  const override = (Deno.env.get('SMS_PROVIDER') ?? '').toLowerCase()
+  if (override === 'msg91' || override === 'vonage' || override === 'log') {
+    return override as 'msg91' | 'vonage' | 'log'
+  }
+  const digits = phone.replace(/\D/g, '')
+  if (digits.length === 12 && digits.startsWith('91')) return 'msg91'
+  if (digits.length === 10) return 'msg91' // bare local entry — India default
+  return 'vonage'
+}
+
 Deno.serve(async req => {
   if (req.method !== 'POST') return json(405, { error: 'Method not allowed' })
 
@@ -133,11 +187,12 @@ Deno.serve(async req => {
   const otp = payload.sms?.otp ?? payload.otp
   if (!phone || !otp) return json(400, { error: 'phone and otp are required' })
 
-  const provider = (Deno.env.get('SMS_PROVIDER') ?? 'msg91').toLowerCase()
-
   try {
+    const provider = routeFor(phone)
     if (provider === 'log') {
       console.log(`[send-sms] (log provider) OTP for ${phone}: ${otp}`)
+    } else if (provider === 'vonage') {
+      await sendViaVonage(phone, otp)
     } else {
       await sendViaMsg91(phone, otp)
     }
