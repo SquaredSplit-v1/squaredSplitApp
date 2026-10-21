@@ -210,3 +210,12 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/reminders/deno.json"
 entrypoint = "./functions/reminders/index.ts"
+
+# Supabase Auth "Send SMS" hook target. Auth calls this with the OTP for every
+# phone sign-in; it delivers via the configured gateway (MSG91 by default).
+# Authenticated by the shared hook secret, not a user JWT.
+[functions.send-sms]
+enabled = true
+verify_jwt = false
+import_map = "./functions/send-sms/deno.json"
+entrypoint = "./functions/send-sms/index.ts"
