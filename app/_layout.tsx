@@ -1,10 +1,20 @@
+import {
+  useFonts,
+  Nunito_300Light,
+  Nunito_400Regular,
+  Nunito_500Medium,
+  Nunito_600SemiBold,
+  Nunito_700Bold,
+  Nunito_800ExtraBold,
+} from '@expo-google-fonts/nunito'
 import { SplashScreen, Stack, useRouter } from 'expo-router'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { View } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import Toast from 'react-native-toast-message'
 
+import AnimatedSplash from '@/components/AnimatedSplash'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { useAppUpdates } from '@/hooks/useAppUpdates'
 import { useGlobalErrorHandler } from '@/hooks/useGlobalErrorHandler'
@@ -23,6 +33,19 @@ export default function RootLayout() {
   const setPendingInviteToken = usePendingInviteStore(s => s.setToken)
   const router = useRouter()
   const unsubRef = useRef<(() => void) | null>(null)
+  // Brand splash animation plays once per cold start, over the first screen.
+  const [splashDone, setSplashDone] = useState(false)
+
+  // Brand typeface — the app was styled with Nunito families but they were
+  // never actually loaded, so text silently fell back to the system font.
+  const [fontsLoaded] = useFonts({
+    Nunito_300Light,
+    Nunito_400Regular,
+    Nunito_500Medium,
+    Nunito_600SemiBold,
+    Nunito_700Bold,
+    Nunito_800ExtraBold,
+  })
   usePushNotifications(session && hasOnboarded ? user?.id : undefined)
 
   useEffect(() => {
@@ -50,12 +73,13 @@ export default function RootLayout() {
 
   // Hold render until auth state is resolved — prevents
   // Stack.Protected from flashing the wrong screen on boot
-  if (isLoading) return <View style={{ flex: 1, backgroundColor: '#F3F4F5' }} />
+  if (isLoading || !fontsLoaded) return <View style={{ flex: 1, backgroundColor: '#F3F4F5' }} />
 
   return (
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider>
+          {!splashDone && <AnimatedSplash onFinish={() => setSplashDone(true)} />}
           <Stack screenOptions={{ headerShown: false }}>
             {/* Authenticated + onboarded → home */}
             <Stack.Protected guard={!!session && hasOnboarded}>
