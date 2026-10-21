@@ -15,12 +15,18 @@ Status per project (dev / staging / main): hook **enabled**, function
 `918001234567=111111`, `919876543210=123456`) bypass delivery and keep working
 regardless of the gateway.
 
-## Why MSG91
-India-first app → Indian gateway: ~₹0.15–0.20 per OTP, DLT-compliant
-(mandatory in India for transactional SMS — the usual reason Twilio deliveries
-to Indian numbers fail), simple HTTP API, pay-as-you-go.
+## Why MSG91 (India) + Vonage (US & rest)
+The hook routes by recipient region:
+- **+91 India → MSG91**: ~₹0.15–0.20 per OTP, DLT-compliant (mandatory in
+  India for transactional SMS — the usual reason Twilio deliveries to Indian
+  numbers fail).
+- **US & other international → Vonage**: simple HTTP API, US number support.
 
-## One-time setup (you — ~20 min + DLT approval wait)
+Both gateways are configured per environment; a number missing either
+gateway's credentials gets a clear delivery error only when that region is
+used.
+
+## MSG91 setup — Indian numbers (~20 min + DLT approval wait)
 1. **Account**: <https://msg91.com> → sign up with the SquaredSplit business
    details → verify.
 2. **DLT registration** (Indian regulation, done once):
@@ -35,11 +41,21 @@ to Indian numbers fail), simple HTTP API, pay-as-you-go.
    name to `OTP`. Copy the MSG91 **Template/Flow ID**.
 4. **MSG91 → Authkey**: copy the account auth key.
 5. Send me: `MSG91_AUTH_KEY`, `MSG91_TEMPLATE_ID`, and the sender ID.
-   I will run on all three projects:
-   ```
-   supabase secrets set MSG91_AUTH_KEY=… MSG91_TEMPLATE_ID=… MSG91_SENDER_ID=SQSPLT --project-ref <ref>
-   ```
-   Real phone numbers start receiving OTPs immediately — no app release needed.
+   I will set them as secrets on all three projects — Indian numbers then
+   receive OTPs immediately, no app release needed.
+
+## Vonage setup — US & international numbers (~15 min)
+1. <https://dashboard.vonage.com> → sign up with the SquaredSplit business
+   details → buy **credit** (~$20 is plenty for testing).
+2. **Numbers → Buy number**: pick a US number with SMS capability
+   (~$1/mo) — this becomes the sender.
+3. **US A2P 10DLC**: OTP traffic to US numbers requires brand + campaign
+   registration (Vonage dashboard walks through it; ~$4 brand + monthly
+   campaign fee, 1–3 days approval). Until approved, US carriers may filter
+   the OTPs.
+4. Send me: `VONAGE_API_KEY`, `VONAGE_API_SECRET`, `VONAGE_FROM_NUMBER`
+   (the purchased number). I set them as secrets on all three projects —
+   US numbers receive OTPs immediately.
 
 ## Interim
 Until the keys are set, a real-number OTP request returns the friendly
@@ -47,10 +63,11 @@ Until the keys are set, a real-number OTP request returns the friendly
 working for QA/TestFlight testers.
 
 ## Swapping providers later
-`send-sms/index.ts` isolates delivery in `sendViaMsg91`. To add another
-gateway (Fast2SMS, Kaleyra, AWS SNS…), add a `sendViaX` function and switch
-with `SMS_PROVIDER=x`. `SMS_PROVIDER=log` prints OTPs to the function logs for
-local debugging.
+`send-sms/index.ts` isolates delivery in `sendViaMsg91` (India) and
+`sendViaVonage` (international); `routeFor` picks by number. To add another
+gateway, add a `sendViaX` function and a branch in `routeFor`.
+`SMS_PROVIDER=msg91|vonage|log` forces a route; `log` prints OTPs to the
+function logs for local debugging.
 
 ## Security
 Supabase signs every hook call (Standard Webhooks: `webhook-signature` HMAC
