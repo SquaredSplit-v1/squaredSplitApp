@@ -30,7 +30,12 @@ import {
 import { formatAmount, type Currency } from '@/lib/currency'
 import { supabase } from '@/lib/supabase/client'
 import { searchProfileByPhone, type MatchedContact } from '@/lib/supabase/contacts'
-import type { FriendOverview } from '@/lib/supabase/home'
+import {
+  searchFriendExpenses,
+  type FriendExpenseSearchRow,
+  FriendOverview,
+} from '@/lib/supabase/home'
+import { formatTimeAgo } from '@/lib/utils/formatTimeAgo'
 import { isPhoneQuery, whatsappDigits, whatsappUrl, appInviteMessage } from '@/lib/whatsapp'
 import { useAuthStore } from '@/store/authStore'
 import { useCurrencyStore } from '@/store/currencyStore'
@@ -294,6 +299,8 @@ export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState('')
   const [phoneLookup, setPhoneLookup] = useState<MatchedContact | null>(null)
   const [phoneLookingUp, setPhoneLookingUp] = useState(false)
+  const [nameResults, setNameResults] = useState<FriendExpenseSearchRow[]>([])
+  const [nameSearching, setNameSearching] = useState(false)
   const [squaredUpExpanded, setSquaredUpExpanded] = useState(false)
   const [hasUnseen, setHasUnseen] = useState(false)
   const [createGroupVisible, setCreateGroupVisible] = useState(false)
@@ -402,6 +409,31 @@ export default function HomeScreen() {
       clearTimeout(timer)
     }
   }, [searchIsPhone, searchDigits])
+
+  // Name search → expense-level results (every shared expense with a friend
+  // whose name matches), per the search-results design.
+  const searchName = searchOpen && !searchIsPhone ? searchQuery.trim() : ''
+
+  useEffect(() => {
+    if (searchName.length < 2) {
+      setNameResults([])
+      setNameSearching(false)
+      return
+    }
+    let cancelled = false
+    setNameSearching(true)
+    const timer = setTimeout(() => {
+      void searchFriendExpenses(searchName).then(rows => {
+        if (cancelled) return
+        setNameResults(rows)
+        setNameSearching(false)
+      })
+    }, 350)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [searchName])
 
   const handleInviteFromSearch = useCallback(async () => {
     const waDigits = whatsappDigits(searchQuery)
@@ -541,7 +573,71 @@ export default function HomeScreen() {
           </View>
         ) : (
           <View style={styles.friendsSection}>
-            {!isLoading && filteredFriends.length === 0 && outstandingFriends.length > 0 ? (
+            {!isLoading && searchOpen && !searchIsPhone && searchQuery.trim().length >= 2 ? (
+              // Search results: each shared expense with a matching friend.
+              nameSearching ? (
+                <View style={styles.loadingBlock}>
+                  <ActivityIndicator color="#141414" />
+                </View>
+              ) : nameResults.length > 0 ? (
+                <View style={styles.friendsList}>
+                  {nameResults.map(r => {
+                    const owesYou = r.netForMe >= 0
+                    return (
+                      <Pressable
+                        key={r.expenseId}
+                        style={({ pressed }) => [
+                          friendStyles.row,
+                          pressed && friendStyles.rowPressed,
+                        ]}
+                        onPress={() => router.push(`/dashboard/expense/${r.expenseId}`)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${r.friendName}, ${owesYou ? 'owes you' : 'you owe'} ${formatAmount(Math.abs(r.netForMe), currency)}`}
+                      >
+                        <View style={friendStyles.rowLeft}>
+                          {r.friendAvatar ? (
+                            <Image
+                              source={{ uri: r.friendAvatar }}
+                              style={friendStyles.avatar}
+                              contentFit="cover"
+                            />
+                          ) : (
+                            <View style={[friendStyles.avatar, friendStyles.avatarPlaceholder]}>
+                              <Text style={friendStyles.avatarInitial}>
+                                {(r.friendName.trim().slice(0, 1) || '?').toUpperCase()}
+                              </Text>
+                            </View>
+                          )}
+                          <View style={friendStyles.nameBlock}>
+                            <Text style={friendStyles.nameText} numberOfLines={2}>
+                              {r.friendName}
+                            </Text>
+                            <Text style={friendStyles.subtitleText}>
+                              {r.expenseTitle} · {formatTimeAgo(r.createdAt)}
+                            </Text>
+                          </View>
+                        </View>
+                        <View style={friendStyles.rowRight}>
+                          <Text style={friendStyles.statusLabel}>
+                            {owesYou ? 'owes you' : 'you owe'}
+                          </Text>
+                          <Text
+                            style={[
+                              friendStyles.amountText,
+                              { color: owesYou ? '#44BB73' : '#DE8334' },
+                            ]}
+                          >
+                            {formatAmount(Math.abs(r.netForMe), currency)}
+                          </Text>
+                        </View>
+                      </Pressable>
+                    )
+                  })}
+                </View>
+              ) : (
+                <Text style={styles.noMatches}>No expenses match your search</Text>
+              )
+            ) : !isLoading && filteredFriends.length === 0 && outstandingFriends.length > 0 ? (
               <View>
                 <Text style={styles.noMatches}>
                   {searchQuery.trim()

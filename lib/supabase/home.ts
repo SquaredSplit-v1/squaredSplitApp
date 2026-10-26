@@ -457,3 +457,43 @@ export async function settleUpWithFriend(
     }
   }
 }
+
+// ── Dashboard search: expense-level results (Figma 246-61195) ────────────────
+
+export interface FriendExpenseSearchRow {
+  expenseId: string
+  friendId: string
+  friendName: string
+  friendAvatar: string | null
+  expenseTitle: string
+  category: string
+  createdAt: string
+  paidByMe: boolean
+  netForMe: number
+  isSettled: boolean
+}
+
+/** Every shared expense with friends whose name matches the query. */
+export async function searchFriendExpenses(query: string): Promise<FriendExpenseSearchRow[]> {
+  const q = query.trim()
+  if (q.length < 2) return []
+
+  const { data, error } = await supabase.rpc('search_friend_expenses', { p_query: q })
+  if (error) {
+    console.warn('[searchFriendExpenses]', error.message)
+    return []
+  }
+
+  return ((data ?? []) as Record<string, unknown>[]).map(r => ({
+    expenseId: String(r.expense_id),
+    friendId: String(r.friend_id),
+    friendName: String(r.friend_name ?? 'Friend'),
+    friendAvatar: (r.friend_avatar as string | null) ?? null,
+    expenseTitle: String(r.expense_title ?? 'Expense'),
+    category: String(r.category ?? 'general'),
+    createdAt: String(r.expense_created_at ?? ''),
+    paidByMe: Boolean(r.paid_by_me),
+    netForMe: Number(r.net_for_me ?? 0),
+    isSettled: Boolean(r.is_settled),
+  }))
+}
