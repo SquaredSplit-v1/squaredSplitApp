@@ -889,6 +889,21 @@ export type Database = {
         Args: { p_group_id: string; p_user_id: string }
         Returns: undefined
       }
+      search_friend_expenses: {
+        Args: { p_query: string }
+        Returns: {
+          category: string
+          expense_created_at: string
+          expense_id: string
+          expense_title: string
+          friend_avatar: string
+          friend_id: string
+          friend_name: string
+          is_settled: boolean
+          net_for_me: number
+          paid_by_me: boolean
+        }[]
+      }
       search_profile_by_phone: { Args: { p_phone: string }; Returns: Json }
       settle_up_group: { Args: { p_group_id: string }; Returns: Json }
       settle_up_with_friend: { Args: { p_friend_id: string }; Returns: Json }
