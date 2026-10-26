@@ -219,3 +219,11 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/send-sms/deno.json"
 entrypoint = "./functions/send-sms/index.ts"
+
+# Push dispatch — called by the activity_feed insert trigger (pg_net) to send
+# Expo push notifications to the recipient's registered devices.
+[functions.push-dispatch]
+enabled = true
+verify_jwt = false
+import_map = "./functions/push-dispatch/deno.json"
+entrypoint = "./functions/push-dispatch/index.ts"
