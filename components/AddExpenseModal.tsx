@@ -1,13 +1,19 @@
-// components/AddExpenseModal.tsx
-import * as Haptics from 'expo-haptics'
-import { Image } from 'expo-image'
+/**
+ * Add an expense — full-screen flow (Figma 443-19198…21053).
+ *
+ * Header (Back / title / Save) → "You and:" participant type-ahead chips →
+ * category tile + name → $ tile + amount → "Paid by (x) split (equally)"
+ * chips → date pill / camera / note. Receipts attach with a thumbnail +
+ * delete-confirm; notes open the Write-note card. Unequal splits expose
+ * per-person amounts. Everything funnels into the existing createExpense /
+ * createExpenseWithInvites + receipt upload pipeline.
+ */
+import { Ionicons } from '@expo/vector-icons'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
-  Keyboard,
+  Image,
   KeyboardAvoidingView,
-  Linking,
-  Alert,
   Modal,
   Platform,
   Pressable,
@@ -16,39 +22,21 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   View,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import CameraCaptureModal from '@/components/CameraCaptureModal'
-import SignaturePad from '@/components/SignaturePad'
 import { createExpense } from '@/lib/api/createExpense'
 import { labelForMatchedPhone } from '@/lib/contacts'
 import { formatAmount } from '@/lib/currency'
+import { searchProfileByPhone } from '@/lib/supabase/contacts'
 import type { MatchedContact } from '@/lib/supabase/contacts'
-import { createExpenseWithInvites, type CreatedExpenseWithInvites } from '@/lib/supabase/invites'
-import { pickReceiptImage, uploadReceipt, uploadSignature } from '@/lib/supabase/receipts'
-import { expenseInviteMessage, inviteLink, whatsappUrl } from '@/lib/whatsapp'
-import {
-  dueDatePresetToIsoDate,
-  useAddExpenseStore,
-  type DueDatePreset,
-} from '@/store/addExpenseStore'
+import { createExpenseWithInvites } from '@/lib/supabase/invites'
+import { uploadReceipt } from '@/lib/supabase/receipts'
 import { useAuthStore } from '@/store/authStore'
 import { useContactsStore } from '@/store/contactsStore'
 import { useCurrencyStore } from '@/store/currencyStore'
-
-interface Props {
-  visible: boolean
-  onClose: () => void
-  onSuccess: () => void
-  /** When set, the expense is created inside this group. */
-  groupId?: string
-  groupName?: string
-  /** Participant ids to preselect (group members or a single friend). */
-  presetParticipantIds?: string[]
-}
 
 const CATEGORIES = [
   { id: 'general', label: 'General', emoji: '🧾' },
@@ -59,49 +47,44 @@ const CATEGORIES = [
   { id: 'entertainment', label: 'Fun', emoji: '🎬' },
 ]
 
-const DUE_PRESETS: { id: DueDatePreset; label: string }[] = [
-  { id: 'none', label: 'None' },
-  { id: '1w', label: '1 week' },
-  { id: '2w', label: '2 weeks' },
-  { id: '1m', label: '1 month' },
+const MONTHS = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
 ]
 
-// Equal split helper (integer cents)
-function calcEqualSplits(amount: number, ids: string[]): Record<string, number> {
-  const n = ids.length
-  if (!n) return {}
-  const cents = Math.round(amount * 100)
-  const base = Math.floor(cents / n)
-  const rem = cents - base * n
-  const result: Record<string, number> = {}
-  ids.forEach((id, i) => {
-    result[id] = i === 0 ? (base + rem) / 100 : base / 100
-  })
-  return result
+interface SelectedFriend {
+  id?: string
+  phone: string
+  name: string
+  avatarUrl?: string | null
+  invite?: boolean
 }
 
-/**
- * After creating an expense with invites, walk the user through opening
- * WhatsApp for each invitee (one at a time — the OS allows one external app
- * open at a time). Each step can be skipped.
- */
-async function openWhatsAppInvitesChain(
-  items: { name: string | null; phone: string; url: string }[]
-): Promise<void> {
-  for (const item of items) {
-    await new Promise<void>(resolve => {
-      Alert.alert('Send WhatsApp invite', `Invite ${item.name || item.phone} on WhatsApp?`, [
-        { text: 'Skip', style: 'cancel', onPress: () => resolve() },
-        {
-          text: 'Send',
-          onPress: () => {
-            void Linking.openURL(item.url).catch(() => {})
-            resolve()
-          },
-        },
-      ])
-    })
-  }
+interface Props {
+  visible: boolean
+  onClose: () => void
+  onSuccess: (expenseId?: string) => void
+  groupId?: string
+  groupName?: string
+  presetParticipantIds?: string[]
+}
+
+function fmtDate(d: Date): string {
+  return `${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)}`
+}
+
+function fmtIso(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 export default function AddExpenseModal({
@@ -109,1029 +92,1152 @@ export default function AddExpenseModal({
   onClose,
   onSuccess,
   groupId,
-  groupName,
   presetParticipantIds,
 }: Props) {
   const insets = useSafeAreaInsets()
   const user = useAuthStore(s => s.user)
+  const myAvatar = (user?.user_metadata?.avatar_url as string) ?? null
   const { current: currency } = useCurrencyStore()
-
-  const loadContacts = useContactsStore(s => s.loadContacts)
   const matchedContacts = useContactsStore(s => s.matched)
-  const unmatchedContacts = useContactsStore(s => s.unmatched)
   const rawWithPhones = useContactsStore(s => s.rawWithPhones)
-  const contactsLoading = useContactsStore(s => s.isLoading)
-  const permissionStatus = useContactsStore(s => s.permissionStatus)
+  const loadContacts = useContactsStore(s => s.loadContacts)
+
+  const [friends, setFriends] = useState<SelectedFriend[]>([])
+  const [andQuery, setAndQuery] = useState('')
+  const [phoneLookup, setPhoneLookup] = useState<SelectedFriend | null>(null)
+  const [title, setTitle] = useState('')
+  const [amount, setAmount] = useState('')
+  const [category, setCategory] = useState(CATEGORIES[0])
+  const [categoryOpen, setCategoryOpen] = useState(false)
+  const [payer, setPayer] = useState<'me' | string>('me')
+  const [payerOpen, setPayerOpen] = useState(false)
+  const [splitMode, setSplitMode] = useState<'equally' | 'unequally'>('equally')
+  const [unequal, setUnequal] = useState<Record<string, string>>({})
+  const [date, setDate] = useState(new Date())
+  const [dateOpen, setDateOpen] = useState(false)
+  const [wheelOpen, setWheelOpen] = useState(false)
+  const [wheelMonth, setWheelMonth] = useState(new Date())
+  const [noteOpen, setNoteOpen] = useState(false)
+  const [noteDraft, setNoteDraft] = useState('')
+  const [note, setNote] = useState('')
+  const [noteDeleteAsk, setNoteDeleteAsk] = useState(false)
+  const [noteDeletedToast, setNoteDeletedToast] = useState(false)
+  const [receipts, setReceipts] = useState<string[]>([])
+  const [cameraOpen, setCameraOpen] = useState(false)
+  const [receiptDeleteIdx, setReceiptDeleteIdx] = useState<number | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     if (visible) {
+      setFriends([])
+      setAndQuery('')
+      setTitle('')
+      setAmount('')
+      setCategory(CATEGORIES[0])
+      setCategoryOpen(false)
+      setPayer('me')
+      setPayerOpen(false)
+      setSplitMode('equally')
+      setUnequal({})
+      setDate(new Date())
+      setDateOpen(false)
+      setWheelOpen(false)
+      setNoteOpen(false)
+      setNote('')
+      setNoteDraft('')
+      setReceipts([])
+      setError('')
       void loadContacts()
     }
-  }, [visible, loadContacts])
+  }, [visible]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const {
-    amount,
-    title,
-    note,
-    category,
-    dueDatePreset,
-    paidBy,
-    participants,
-    invites,
-    splitType,
-    exactAmounts,
-    percentages,
-    isSubmitting,
-    setAmount,
-    setTitle,
-    setNote,
-    setCategory,
-    setDueDatePreset,
-    setPaidBy,
-    toggleParticipant,
-    setParticipants,
-    toggleInvite,
-    setSplitType,
-    setExactAmount,
-    setPercentage,
-    setSubmitting,
-    reset,
-  } = useAddExpenseStore()
-
-  // Receipt + agreement state (local — not part of the persisted form store).
-  const [receiptUri, setReceiptUri] = useState<string | null>(null)
-  const [cameraVisible, setCameraVisible] = useState(false)
-  const [wantsAgreement, setWantsAgreement] = useState(false)
-  const [showSignature, setShowSignature] = useState(false)
-  const [signatureBase64, setSignatureBase64] = useState<string | null>(null)
-
+  // preset participants (group flow) land as chips
   useEffect(() => {
-    if (!visible) {
-      setReceiptUri(null)
-      setWantsAgreement(false)
-      setShowSignature(false)
-      setSignatureBase64(null)
-    }
-  }, [visible])
+    if (!visible || !presetParticipantIds?.length) return
+    const chips: SelectedFriend[] = presetParticipantIds.map(id => {
+      const mc = matchedContacts.find(m => m.id === id)
+      return {
+        id,
+        phone: mc?.phone ?? '',
+        name: mc?.display_name ?? 'Member',
+        avatarUrl: mc?.avatar_url ?? null,
+      }
+    })
+    setFriends(chips)
+  }, [visible, presetParticipantIds]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const digits = andQuery.replace(/\D/g, '')
+  const isPhoneQuery = digits.length >= 7 && andQuery.replace(/[\d\s+()-]/g, '').length === 0
+
+  // phone lookup → registered user or invite
   useEffect(() => {
-    if (visible && presetParticipantIds && presetParticipantIds.length > 0) {
-      setParticipants(presetParticipantIds)
+    if (!isPhoneQuery) {
+      setPhoneLookup(null)
+      return
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible])
+    let cancelled = false
+    const t = setTimeout(() => {
+      void searchProfileByPhone(andQuery).then(({ data }) => {
+        if (cancelled) return
+        setPhoneLookup(
+          data
+            ? {
+                id: data.id,
+                phone: data.phone,
+                name: data.display_name,
+                avatarUrl: data.avatar_url,
+              }
+            : { phone: digits, name: andQuery, invite: true }
+        )
+      })
+    }, 350)
+    return () => {
+      cancelled = true
+      clearTimeout(t)
+    }
+  }, [andQuery, isPhoneQuery]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const myId = user?.id ?? ''
-
-  const friendRows = useMemo(() => {
-    const others = matchedContacts.filter(mc => mc.id !== myId)
-    return [...others].sort((a, b) =>
-      labelForMatchedPhone(a.phone, a.display_name, rawWithPhones).localeCompare(
-        labelForMatchedPhone(b.phone, b.display_name, rawWithPhones),
-        undefined,
-        { sensitivity: 'base' }
-      )
-    )
-  }, [matchedContacts, myId, rawWithPhones])
-
-  const allParticipants = useMemo(
-    () => (participants.includes(myId) ? participants : [myId, ...participants]),
-    [participants, myId]
+  const friendOptions: (MatchedContact & { label: string })[] = useMemo(
+    () =>
+      matchedContacts
+        .filter(mc => mc.id !== user?.id)
+        .map(mc => ({
+          ...mc,
+          label: labelForMatchedPhone(mc.phone, mc.display_name, rawWithPhones),
+        }))
+        .filter(mc => !friends.some(f => f.id === mc.id))
+        .filter(mc =>
+          andQuery.trim() && !isPhoneQuery
+            ? mc.label.toLowerCase().includes(andQuery.trim().toLowerCase())
+            : true
+        )
+        .sort((a, b) => a.label.localeCompare(b.label))
+        .slice(0, 6),
+    [matchedContacts, rawWithPhones, andQuery, friends, isPhoneQuery, user?.id]
   )
 
-  /** Device contacts NOT on SquaredSplit — invite candidates. */
-  const unmatchedRows = useMemo(() => {
-    return [...unmatchedContacts]
-      .map(c => ({ id: c.id, name: c.name, phone: c.phones[0] }))
-      .filter(c => Boolean(c.phone))
-      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
-  }, [unmatchedContacts])
+  const addFriend = (f: SelectedFriend) => {
+    setFriends(prev => [...prev, f])
+    setAndQuery('')
+    setPhoneLookup(null)
+  }
 
-  const invitedPhones = useMemo(() => new Set(invites.map(i => i.phone)), [invites])
+  const amountNum = Number(amount) || 0
+  const allPeople = useMemo(() => {
+    const me: SelectedFriend = { id: user?.id, phone: user?.phone ?? '', name: 'You' }
+    return [me, ...friends]
+  }, [friends, user?.id, user?.phone])
 
-  /** Everyone in the split: app users + WhatsApp invitees. */
-  const peopleCount = allParticipants.length + invites.length
-
-  const effectivePaidBy = paidBy ?? myId
-  const amountFloat = parseFloat(amount) || 0
-
-  const inviteSharePreview = useMemo(() => {
-    if (!peopleCount || amountFloat <= 0) return 0
-    return Math.floor(Math.round(amountFloat * 100) / peopleCount) / 100
-  }, [peopleCount, amountFloat])
-
-  const splitPreview = useMemo<Record<string, number>>(() => {
-    if (!allParticipants.length || amountFloat <= 0) return {}
-
-    if (splitType === 'equally') {
-      return calcEqualSplits(amountFloat, allParticipants)
-    }
-
-    if (splitType === 'exact') {
-      const r: Record<string, number> = {}
-      allParticipants.forEach(id => {
-        r[id] = parseFloat(exactAmounts[id] ?? '0') || 0
-      })
-      return r
-    }
-
-    if (splitType === 'percentage') {
-      const r: Record<string, number> = {}
-      allParticipants.forEach(id => {
-        const pct = parseFloat(percentages[id] ?? '0') || 0
-        r[id] = Math.round(((amountFloat * pct) / 100) * 100) / 100
-      })
-      return r
-    }
-
-    return {}
-  }, [splitType, allParticipants, amountFloat, exactAmounts, percentages])
-
-  const exactSumOk =
-    splitType !== 'exact' ||
-    Math.abs(Object.values(splitPreview).reduce((a, b) => a + b, 0) - amountFloat) < 0.02
-
-  const pctSumOk =
-    splitType !== 'percentage' ||
-    Math.abs(
-      allParticipants.reduce((a, id) => a + (parseFloat(percentages[id] ?? '0') || 0), 0) - 100
-    ) < 0.5
-
-  /** Invited people join with an equal share, so invites require equal split. */
-  const invitesNeedEqual = invites.length > 0 && splitType !== 'equally'
-
-  const canSubmit =
-    amountFloat > 0 &&
-    title.trim().length > 0 &&
-    peopleCount >= 2 &&
-    !isSubmitting &&
-    !invitesNeedEqual &&
-    exactSumOk &&
-    pctSumOk
-
-  const nameFor = useCallback(
-    (id: string): string => {
-      if (id === myId) return 'You'
-      const m = matchedContacts.find(mc => mc.id === id)
-      return m ? labelForMatchedPhone(m.phone, m.display_name, rawWithPhones) : id.slice(0, 8)
-    },
-    [myId, matchedContacts, rawWithPhones]
+  const unequalSum = useMemo(
+    () => Object.values(unequal).reduce((sum, v) => sum + (Number(v) || 0), 0),
+    [unequal]
   )
 
-  const handleSubmit = useCallback(async () => {
-    if (!canSubmit || !user) return
-    Keyboard.dismiss()
-    setSubmitting(true)
+  const canSave =
+    !!title.trim() &&
+    amountNum > 0 &&
+    (groupId ? true : friends.length > 0) &&
+    (splitMode === 'equally' || Math.abs(unequalSum - amountNum) < 0.005) &&
+    !isSaving
+
+  const handleSave = useCallback(async () => {
+    if (!canSave || !user) return
+    setIsSaving(true)
+    setError('')
     try {
-      let createdWithInvites: CreatedExpenseWithInvites | null = null
+      const participantIds = allPeople.map(p => p.id).filter((id): id is string => !!id)
+      const inviteEntries = friends
+        .filter(f => f.invite)
+        .map(f => ({ phone: f.phone, name: f.name }))
+      let expenseId: string | undefined
 
-      let createdExpenseId: string | null = null
-
-      if (invites.length > 0) {
-        // Invite flow — equal split across app users + invitees, then send
-        // WhatsApp links for each invite.
-        createdWithInvites = await createExpenseWithInvites({
+      if (inviteEntries.length > 0) {
+        const res = await createExpenseWithInvites({
           title: title.trim(),
-          amount: amountFloat,
-          paidBy: effectivePaidBy,
-          participants: allParticipants,
-          invites,
-          groupId: groupId ?? null,
-          category,
-          note: note.trim() ? note.trim() : null,
-          dueDate: dueDatePresetToIsoDate(dueDatePreset),
+          amount: amountNum,
+          paidBy: user.id,
+          participants: participantIds,
+          invites: inviteEntries,
+          groupId: groupId ?? undefined,
+          note: note.trim() || undefined,
         })
-        createdExpenseId = createdWithInvites.id
+        expenseId = res.id
       } else {
+        const exact =
+          splitMode === 'unequally'
+            ? Object.fromEntries(Object.entries(unequal).map(([k, v]) => [k, Number(v) || 0]))
+            : undefined
         const created = await createExpense({
           title: title.trim(),
-          amount: amountFloat,
-          paid_by: effectivePaidBy,
-          participants: allParticipants,
-          split_type: splitType,
-          category,
-          note: note.trim() ? note.trim() : null,
-          due_date: dueDatePresetToIsoDate(dueDatePreset),
+          amount: amountNum,
+          paid_by: payer === 'me' ? user.id : payer,
+          participants: participantIds,
+          category: category.id,
+          split_type: splitMode === 'unequally' ? 'exact' : 'equally',
+          note: note.trim() || null,
+          date: fmtIso(date),
           group_id: groupId ?? null,
-          exact_amounts: splitType === 'exact' ? { ...splitPreview } : undefined,
-          percentages:
-            splitType === 'percentage'
-              ? Object.fromEntries(
-                  allParticipants.map(id => [id, parseFloat(percentages[id] ?? '0') || 0])
-                )
-              : undefined,
+          exact_amounts: exact,
         })
-        createdExpenseId = created.id
+        expenseId = created.id
       }
 
-      // Attach receipt / agreement to the created expense (best-effort —
-      // a failed upload must never lose the expense).
-      if (createdExpenseId && receiptUri) {
-        const r = await uploadReceipt(user.id, createdExpenseId, receiptUri)
+      for (const uri of receipts) {
+        const r = await uploadReceipt(user.id, expenseId, uri)
         if (!r.success) console.warn('[AddExpense] receipt upload failed:', r.error)
       }
-      if (createdExpenseId && signatureBase64) {
-        const signerName = user.user_metadata?.full_name?.trim() || 'You'
-        const a = await uploadSignature(user.id, signerName, createdExpenseId, signatureBase64)
-        if (!a.success) console.warn('[AddExpense] signature upload failed:', a.error)
-      }
 
-      reset()
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
-      onSuccess()
+      onSuccess(expenseId)
       onClose()
-
-      if (createdWithInvites && createdWithInvites.invites.length > 0) {
-        const inviterName = user.user_metadata?.full_name?.trim() || 'A friend'
-        await openWhatsAppInvitesChain(
-          createdWithInvites.invites.map(i => ({
-            name: i.name,
-            phone: i.phone,
-            url: whatsappUrl(
-              i.phone,
-              expenseInviteMessage({
-                inviterName,
-                expenseTitle: createdWithInvites.title,
-                amountLabel: formatAmount(createdWithInvites.amount, currency),
-                shareLabel: formatAmount(i.share_amount, currency),
-                link: inviteLink(i.invite_id),
-              })
-            ),
-          }))
-        )
-      }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Could not create expense'
-      console.error('[SS-021] createExpense', message)
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {})
-      Alert.alert('Could not create expense', message)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not save the expense.')
     } finally {
-      setSubmitting(false)
+      setIsSaving(false)
     }
   }, [
-    canSubmit,
+    canSave,
     user,
-    invites,
+    allPeople,
+    friends,
     title,
-    note,
-    category,
-    dueDatePreset,
+    amountNum,
     groupId,
-    amountFloat,
-    effectivePaidBy,
-    allParticipants,
-    splitType,
-    splitPreview,
-    percentages,
-    currency,
-    receiptUri,
-    signatureBase64,
-    reset,
-    onSuccess,
+    note,
+    date,
+    splitMode,
+    unequal,
+    payer,
+    category.id,
+    receipts,
     onClose,
-    setSubmitting,
+    onSuccess,
   ])
 
-  const handleClose = useCallback(() => {
-    reset()
-    onClose()
-  }, [reset, onClose])
+  // ── calendar model ──────────────────────────────────────────────────────────
+
+  const calendarCells = useMemo(() => {
+    const y = wheelMonth.getFullYear()
+    const m = wheelMonth.getMonth()
+    const startPad = (new Date(y, m, 1).getDay() + 6) % 7 // Monday-first
+    const days = new Date(y, m + 1, 0).getDate()
+    return [
+      ...Array.from({ length: startPad }, () => null as number | null),
+      ...Array.from({ length: days }, (_, i) => (i + 1) as number | null),
+    ]
+  }, [wheelMonth])
+
+  const wheelMonths = useMemo(() => {
+    const now = new Date()
+    return Array.from(
+      { length: 13 },
+      (_, i) => new Date(now.getFullYear(), now.getMonth() - 6 + i, 1)
+    )
+  }, [])
+
+  const renderTypeahead = () => (
+    <View style={st.typeaheadCard}>
+      {isPhoneQuery && phoneLookup ? (
+        <TouchableOpacity
+          style={st.optionRow}
+          onPress={() => addFriend(phoneLookup)}
+          activeOpacity={0.7}
+        >
+          <View style={st.optionAvatar}>
+            <Text style={st.optionAvatarText}>{phoneLookup.name.charAt(0).toUpperCase()}</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={st.optionName}>
+              {phoneLookup.invite ? 'Not on SquaredSplit — invite' : phoneLookup.name}
+            </Text>
+            <Text style={st.optionPhone}>{phoneLookup.phone}</Text>
+          </View>
+          <Ionicons name="add" size={20} color="#3273CD" />
+        </TouchableOpacity>
+      ) : null}
+      {friendOptions.map(mc => (
+        <TouchableOpacity
+          key={mc.id}
+          style={st.optionRow}
+          onPress={() =>
+            addFriend({
+              id: mc.id,
+              phone: mc.phone,
+              name: mc.display_name,
+              avatarUrl: mc.avatar_url,
+            })
+          }
+          activeOpacity={0.7}
+        >
+          {mc.avatar_url ? (
+            <Image source={{ uri: mc.avatar_url }} style={st.optionAvatar} />
+          ) : (
+            <View style={st.optionAvatar}>
+              <Text style={st.optionAvatarText}>{mc.label.charAt(0).toUpperCase()}</Text>
+            </View>
+          )}
+          <Text style={st.optionName}>{mc.label}</Text>
+        </TouchableOpacity>
+      ))}
+      {friendOptions.length === 0 && !(isPhoneQuery && phoneLookup) ? (
+        <Text style={st.typeaheadEmpty}>No matches — enter a number to invite anyone</Text>
+      ) : null}
+    </View>
+  )
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={handleClose}
-    >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        style={st.screen}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        {/* Header */}
+        <View style={[st.header, { paddingTop: insets.top + 8 }]}>
+          <TouchableOpacity style={st.headerSide} onPress={onClose} hitSlop={12}>
+            <Ionicons name="chevron-back" size={22} color="#3273CD" />
+            <Text style={st.headerBlue}>Back</Text>
+          </TouchableOpacity>
+          <Text style={st.headerTitle}>Add an expense</Text>
+          <TouchableOpacity
+            style={[st.headerSide, { justifyContent: 'flex-end' }]}
+            onPress={() => void handleSave()}
+            disabled={!canSave}
+            hitSlop={12}
+          >
+            {isSaving ? (
+              <ActivityIndicator color="#3273CD" size="small" />
+            ) : (
+              <Text style={[st.headerBlue, !canSave && st.headerSaveDisabled]}>Save</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView
+          contentContainerStyle={[st.scroll, { paddingBottom: insets.bottom + 40 }]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <View style={[s.root, { paddingTop: insets.top + 16 }]}>
-            {/* Header */}
-            <View style={s.header}>
-              <View style={s.headerTitleWrap}>
-                <Text style={s.headerTitle}>Add Expense</Text>
-                {groupName ? (
-                  <View style={s.groupChip}>
-                    <Text style={s.groupChipText} numberOfLines={1}>
-                      👥 {groupName}
+          {/* You and: */}
+          <View style={st.andRow}>
+            <Text style={st.andLabel}>
+              <Text style={st.andBold}>You</Text> and:
+            </Text>
+            <View style={st.andChipsWrap}>
+              {friends.slice(0, 3).map((f, i) => (
+                <Pressable
+                  key={f.id ?? f.phone}
+                  style={st.friendChip}
+                  onPress={() => setFriends(prev => prev.filter((_, idx) => idx !== i))}
+                >
+                  {f.avatarUrl ? (
+                    <Image source={{ uri: f.avatarUrl }} style={st.chipAvatar} />
+                  ) : (
+                    <View style={[st.chipAvatar, st.chipAvatarFallback]}>
+                      <Text style={st.chipAvatarText}>{f.name.charAt(0).toUpperCase()}</Text>
+                    </View>
+                  )}
+                  <Text style={st.chipName} numberOfLines={1}>
+                    {f.name}
+                  </Text>
+                </Pressable>
+              ))}
+              {friends.length > 3 ? (
+                <View style={st.friendChip}>
+                  <Text style={st.chipName}>+{friends.length - 3}</Text>
+                </View>
+              ) : null}
+              <TextInput
+                style={st.andInput}
+                placeholder="Name or number"
+                placeholderTextColor="#B7BCC3"
+                value={andQuery}
+                onChangeText={setAndQuery}
+                autoCapitalize="words"
+                returnKeyType="done"
+              />
+            </View>
+          </View>
+          <View style={st.underline} />
+
+          {andQuery.trim() ? renderTypeahead() : null}
+
+          {/* Category + name */}
+          <View style={st.fieldRow}>
+            <TouchableOpacity
+              style={[st.catTile, { backgroundColor: '#F7F0BE' }]}
+              onPress={() => setCategoryOpen(o => !o)}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={`Category ${category.label}, change`}
+            >
+              <Text style={st.catEmoji}>{category.emoji}</Text>
+            </TouchableOpacity>
+            <View style={st.fieldInputWrap}>
+              <TextInput
+                style={st.fieldInput}
+                placeholder="Expense name"
+                placeholderTextColor="#B7BCC3"
+                value={title}
+                onChangeText={setTitle}
+                maxLength={60}
+                returnKeyType="next"
+              />
+              <View style={st.underline} />
+            </View>
+          </View>
+          {categoryOpen ? (
+            <View style={st.catRow}>
+              {CATEGORIES.map(c => (
+                <TouchableOpacity
+                  key={c.id}
+                  style={[st.catOption, category.id === c.id && st.catOptionActive]}
+                  onPress={() => {
+                    setCategory(c)
+                    setCategoryOpen(false)
+                  }}
+                >
+                  <Text style={st.catEmojiSm}>{c.emoji}</Text>
+                  <Text style={st.catOptionLabel}>{c.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : null}
+
+          {/* Amount */}
+          <View style={st.fieldRow}>
+            <View style={[st.catTile, { backgroundColor: '#D6E7FB' }]}>
+              <Text style={st.dollarGlyph}>$</Text>
+            </View>
+            <View style={st.fieldInputWrap}>
+              <TextInput
+                style={st.fieldInput}
+                placeholder="Expense value"
+                placeholderTextColor="#B7BCC3"
+                value={amount}
+                onChangeText={t => setAmount(t.replace(/[^0-9.]/g, ''))}
+                keyboardType="decimal-pad"
+                returnKeyType="done"
+              />
+              <View style={st.underline} />
+            </View>
+          </View>
+
+          {/* Paid by / split */}
+          <View style={st.paidRow}>
+            <Text style={st.paidLabel}>Paid by</Text>
+            <TouchableOpacity style={st.pill} onPress={() => setPayerOpen(true)}>
+              {myAvatar ? <Image source={{ uri: myAvatar }} style={st.chipAvatar} /> : null}
+              <Text style={st.pillText}>
+                {payer === 'me' ? 'You' : (friends.find(f => f.id === payer)?.name ?? 'Someone')}
+              </Text>
+            </TouchableOpacity>
+            <Text style={st.paidLabel}>split</Text>
+            <TouchableOpacity
+              style={st.pill}
+              onPress={() => setSplitMode(m => (m === 'equally' ? 'unequally' : 'equally'))}
+            >
+              <Text style={st.pillText}>{splitMode}</Text>
+            </TouchableOpacity>
+          </View>
+
+          {splitMode === 'unequally' ? (
+            <View style={st.unequalWrap}>
+              {allPeople.map(p => {
+                const key = p.id ?? p.phone
+                return (
+                  <View key={key} style={st.unequalRow}>
+                    <Text style={st.unequalName} numberOfLines={1}>
+                      {p.name}
                     </Text>
+                    <TextInput
+                      style={st.unequalInput}
+                      value={unequal[key] ?? ''}
+                      onChangeText={v =>
+                        setUnequal(prev => ({ ...prev, [key]: v.replace(/[^0-9.]/g, '') }))
+                      }
+                      keyboardType="decimal-pad"
+                      placeholder="0.00"
+                      placeholderTextColor="#B7BCC3"
+                    />
                   </View>
-                ) : null}
-              </View>
-              <TouchableOpacity onPress={handleClose} hitSlop={12}>
-                <Text style={s.closeBtn}>✕</Text>
+                )
+              })}
+              <Text
+                style={[
+                  st.unequalSum,
+                  Math.abs(unequalSum - amountNum) > 0.005 && st.unequalSumBad,
+                ]}
+              >
+                {formatAmount(unequalSum, currency)} of {formatAmount(amountNum, currency)}
+              </Text>
+            </View>
+          ) : null}
+
+          {/* date / camera / note */}
+          <View style={st.utilRow}>
+            <TouchableOpacity style={st.datePill} onPress={() => setDateOpen(true)}>
+              <Ionicons name="calendar" size={18} color="#141414" />
+              <Text style={st.datePillText}>
+                {new Date().toDateString() === date.toDateString() ? 'Today' : fmtDate(date)}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={st.roundBtn}
+              onPress={() => setCameraOpen(true)}
+              accessibilityLabel="Add receipt"
+            >
+              <Ionicons name="camera-outline" size={20} color="#141414" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={st.roundBtn}
+              onPress={() => {
+                setNoteDraft(note)
+                setNoteOpen(true)
+              }}
+              accessibilityLabel="Write note"
+            >
+              <Ionicons name="pencil" size={20} color="#141414" />
+            </TouchableOpacity>
+          </View>
+
+          {note.trim() ? (
+            <View style={st.noteChip}>
+              <Text style={st.noteChipText}>
+                <Text style={st.noteChipBold}>Note: </Text>
+                {'\u201C'}
+                {note}
+                {'\u201D'}
+              </Text>
+              <TouchableOpacity
+                style={st.minusBtn}
+                onPress={() => setNoteDeleteAsk(true)}
+                accessibilityLabel="Delete note"
+              >
+                <Ionicons name="close" size={14} color="#3273CD" />
               </TouchableOpacity>
             </View>
+          ) : null}
 
-            <ScrollView
-              style={s.scroll}
-              contentContainerStyle={[s.scrollContent, { paddingBottom: insets.bottom + 100 }]}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
-              {/* Amount */}
-              <View style={s.amountRow}>
-                <Text style={s.currencySymbol}>{currency.symbol}</Text>
-                <TextInput
-                  style={s.amountInput}
-                  value={amount}
-                  onChangeText={v => {
-                    if (/^\d*\.?\d{0,2}$/.test(v)) setAmount(v)
-                  }}
-                  placeholder="0.00"
-                  placeholderTextColor="#C7C7C7"
-                  keyboardType="decimal-pad"
-                  returnKeyType="done"
-                  accessibilityLabel="Expense amount"
-                />
-              </View>
-
-              {/* Description */}
-              <View style={s.section}>
-                <Text style={s.label}>Description</Text>
-                <TextInput
-                  style={s.textInput}
-                  value={title}
-                  onChangeText={setTitle}
-                  placeholder="e.g. Dinner at Nobu"
-                  placeholderTextColor="#C7C7C7"
-                  maxLength={100}
-                  returnKeyType="done"
-                  accessibilityLabel="Expense description"
-                />
-              </View>
-
-              {/* Category */}
-              <View style={s.section}>
-                <Text style={s.label}>Category</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View style={s.pillRow}>
-                    {CATEGORIES.map(c => (
-                      <Pressable
-                        key={c.id}
-                        style={[s.pill, category === c.id && s.pillActive]}
-                        onPress={() => setCategory(c.id)}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: category === c.id }}
-                      >
-                        <Text style={[s.pillText, category === c.id && s.pillTextActive]}>
-                          {c.emoji} {c.label}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                </ScrollView>
-              </View>
-
-              {/* Due date */}
-              <View style={s.section}>
-                <Text style={s.label}>Pay back by</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View style={s.pillRow}>
-                    {DUE_PRESETS.map(d => (
-                      <Pressable
-                        key={d.id}
-                        style={[s.pill, dueDatePreset === d.id && s.pillActive]}
-                        onPress={() => setDueDatePreset(d.id)}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: dueDatePreset === d.id }}
-                      >
-                        <Text style={[s.pillText, dueDatePreset === d.id && s.pillTextActive]}>
-                          {d.label}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                </ScrollView>
-              </View>
-
-              {/* Paid by */}
-              <View style={s.section}>
-                <Text style={s.label}>Paid by</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View style={s.pillRow}>
-                    {[myId, ...allParticipants.filter(id => id !== myId)].map(id => (
-                      <Pressable
-                        key={id}
-                        style={[s.pill, effectivePaidBy === id && s.pillActive]}
-                        onPress={() => setPaidBy(id)}
-                      >
-                        <Text style={[s.pillText, effectivePaidBy === id && s.pillTextActive]}>
-                          {nameFor(id)}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                </ScrollView>
-              </View>
-
-              {/* Participants */}
-              <View style={s.section}>
-                <Text style={s.label}>
-                  Participants
-                  <Text style={s.labelSub}> · {allParticipants.length} selected</Text>
-                </Text>
-
-                {/* You */}
-                <View style={[s.contactRow, { opacity: 0.5 }]}>
-                  <View style={s.avatar}>
-                    <Text style={s.avatarText}>
-                      {(user?.user_metadata?.full_name ?? 'Y')[0].toUpperCase()}
-                    </Text>
-                  </View>
-                  <Text style={s.contactName}>You (always included)</Text>
-                  <View style={[s.checkbox, s.checkboxChecked]}>
-                    <Text style={s.checkmark}>✓</Text>
-                  </View>
+          {receipts.length > 0 ? (
+            <View style={st.receiptRow}>
+              {receipts.map((uri, i) => (
+                <View key={i} style={st.receiptWrap}>
+                  <Image source={{ uri }} style={st.receiptThumb} />
+                  <TouchableOpacity
+                    style={st.minusBtn}
+                    onPress={() => setReceiptDeleteIdx(i)}
+                    accessibilityLabel="Remove receipt"
+                  >
+                    <Ionicons name="close" size={14} color="#3273CD" />
+                  </TouchableOpacity>
                 </View>
+              ))}
+            </View>
+          ) : null}
 
-                {contactsLoading && friendRows.length === 0 ? (
-                  <View style={s.contactsLoading}>
-                    <ActivityIndicator color="#3273CD" />
-                    <Text style={s.contactsLoadingText}>Loading people from your contacts…</Text>
-                  </View>
-                ) : permissionStatus === 'denied' ? (
-                  <View style={s.contactsEmptyBlock}>
-                    <Text style={s.noContacts}>
-                      Contacts are off. Allow access to pick friends who use SquaredSplit.
-                    </Text>
-                    <TouchableOpacity
-                      onPress={() => void Linking.openSettings()}
-                      style={s.openSettingsBtn}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={s.openSettingsText}>Open Settings</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => void loadContacts()} activeOpacity={0.85}>
-                      <Text style={s.retryContacts}>Try again</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : permissionStatus === 'unavailable' ? (
-                  <Text style={s.noContacts}>
-                    Contacts are not available in this build. Use a dev build with expo-contacts
-                    enabled.
-                  </Text>
-                ) : friendRows.length === 0 ? (
-                  <View style={s.contactsEmptyBlock}>
-                    <Text style={s.noContacts}>
-                      No one from your contacts is on SquaredSplit yet. Add friends from the Home
-                      screen when they join.
-                    </Text>
-                    <TouchableOpacity onPress={() => void loadContacts()} activeOpacity={0.85}>
-                      <Text style={s.retryContacts}>Refresh contacts</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  friendRows.map((mc: MatchedContact) => {
-                    const contactId = mc.id
-                    const contactName = labelForMatchedPhone(
-                      mc.phone,
-                      mc.display_name,
-                      rawWithPhones
-                    )
-                    const selected = allParticipants.includes(contactId)
+          {!!error ? <Text style={st.errorText}>{error}</Text> : null}
+        </ScrollView>
 
-                    return (
-                      <Pressable
-                        key={contactId}
-                        style={s.contactRow}
-                        onPress={() => toggleParticipant(contactId)}
-                        accessibilityRole="checkbox"
-                        accessibilityState={{ checked: selected }}
-                      >
-                        {mc.avatar_url ? (
-                          <Image
-                            source={{ uri: mc.avatar_url }}
-                            style={s.avatarImg}
-                            contentFit="cover"
-                          />
-                        ) : (
-                          <View style={s.avatar}>
-                            <Text style={s.avatarText}>{contactName[0].toUpperCase()}</Text>
-                          </View>
-                        )}
-                        <Text style={s.contactName}>{contactName}</Text>
-                        <View style={[s.checkbox, selected && s.checkboxChecked]}>
-                          {selected && <Text style={s.checkmark}>✓</Text>}
-                        </View>
-                      </Pressable>
-                    )
-                  })
-                )}
+        {/* ── date overlay ── */}
+        <Modal
+          visible={dateOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setDateOpen(false)}
+        >
+          <Pressable style={st.overlayBackdrop} onPress={() => setDateOpen(false)}>
+            <Pressable style={st.card} onPress={() => undefined}>
+              <View style={st.cardHeader}>
+                <TouchableOpacity onPress={() => setDateOpen(false)}>
+                  <Ionicons name="chevron-back" size={22} color="#3273CD" />
+                </TouchableOpacity>
+                <Text style={st.cardTitle}>Select date</Text>
+                <TouchableOpacity onPress={() => setDateOpen(false)}>
+                  <Text style={st.cardSave}>Save</Text>
+                </TouchableOpacity>
               </View>
-
-              {/* Invite via WhatsApp — contacts not on SquaredSplit */}
-              {unmatchedRows.length > 0 && (
-                <View style={s.section}>
-                  <Text style={s.label}>
-                    Not on SquaredSplit
-                    <Text style={s.labelSub}> · invite via WhatsApp</Text>
+              <View style={st.wheelHeader}>
+                <TouchableOpacity
+                  onPress={() =>
+                    setWheelMonth(new Date(wheelMonth.getFullYear(), wheelMonth.getMonth() - 1, 1))
+                  }
+                >
+                  <Ionicons name="chevron-back" size={18} color="#3273CD" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setWheelOpen(w => !w)}>
+                  <Text style={st.monthLabel}>
+                    {MONTHS[wheelMonth.getMonth()]} {wheelMonth.getFullYear()}
                   </Text>
-                  {unmatchedRows.map(c => {
-                    const selected = invitedPhones.has(c.phone)
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() =>
+                    setWheelMonth(new Date(wheelMonth.getFullYear(), wheelMonth.getMonth() + 1, 1))
+                  }
+                >
+                  <Ionicons name="chevron-forward" size={18} color="#3273CD" />
+                </TouchableOpacity>
+              </View>
+              {wheelOpen ? (
+                <View style={st.wheelWrap}>
+                  {wheelMonths.map(d => {
+                    const active =
+                      d.getMonth() === wheelMonth.getMonth() &&
+                      d.getFullYear() === wheelMonth.getFullYear()
                     return (
-                      <Pressable
-                        key={c.id}
-                        style={s.contactRow}
-                        onPress={() => toggleInvite({ phone: c.phone, name: c.name })}
-                        accessibilityRole="checkbox"
-                        accessibilityState={{ checked: selected }}
+                      <TouchableOpacity
+                        key={d.toISOString()}
+                        onPress={() => {
+                          setWheelMonth(d)
+                          setWheelOpen(false)
+                        }}
                       >
-                        <View style={[s.avatar, { backgroundColor: '#FEF3E8' }]}>
-                          <Text style={s.avatarText}>{c.name[0]?.toUpperCase() ?? '?'}</Text>
-                        </View>
-                        <View style={s.inviteNameBlock}>
-                          <Text style={s.contactName} numberOfLines={1}>
-                            {c.name}
-                          </Text>
-                          <Text style={s.invitePhoneHint}>Invite on WhatsApp</Text>
-                        </View>
-                        <View style={[s.checkbox, selected && s.checkboxChecked]}>
-                          {selected && <Text style={s.checkmark}>✓</Text>}
-                        </View>
-                      </Pressable>
+                        <Text style={[st.wheelMonth, active && st.wheelMonthActive]}>
+                          {MONTHS[d.getMonth()]} {d.getFullYear()}
+                        </Text>
+                      </TouchableOpacity>
                     )
                   })}
                 </View>
-              )}
-
-              {/* Split toggle */}
-              <View style={s.section}>
-                <Text style={s.label}>Split</Text>
-                <View style={s.splitToggle}>
-                  {(['equally', 'exact', 'percentage'] as const).map(t => (
-                    <Pressable
-                      key={t}
-                      style={[s.splitOption, splitType === t && s.splitOptionActive]}
-                      onPress={() => setSplitType(t)}
-                    >
-                      <Text style={[s.splitOptionText, splitType === t && s.splitOptionTextActive]}>
-                        {
-                          {
-                            equally: 'Equally',
-                            exact: `Exact ${currency.symbol}`,
-                            percentage: 'By %',
-                          }[t]
-                        }
+              ) : (
+                <>
+                  <View style={st.weekRow}>
+                    {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
+                      <Text key={i} style={st.weekDay}>
+                        {d}
                       </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-
-              {/* Preview */}
-              {peopleCount >= 2 && amountFloat > 0 && (
-                <View style={s.section}>
-                  <Text style={s.label}>Preview</Text>
-                  {allParticipants.map(id => (
-                    <View key={id} style={s.previewRow}>
-                      <View style={s.previewAvatar}>
-                        <Text style={s.previewAvatarText}>{nameFor(id)[0].toUpperCase()}</Text>
-                      </View>
-                      <Text style={s.previewName}>{nameFor(id)}</Text>
-
-                      {splitType === 'equally' && (
-                        <Text style={s.previewAmount}>
-                          {formatAmount(splitPreview[id] ?? 0, currency)}
-                        </Text>
-                      )}
-
-                      {splitType === 'exact' && (
-                        <TextInput
-                          style={s.splitInput}
-                          value={exactAmounts[id] ?? ''}
-                          onChangeText={v => {
-                            if (/^\d*\.?\d{0,2}$/.test(v)) setExactAmount(id, v)
-                          }}
-                          placeholder="0.00"
-                          placeholderTextColor="#C7C7C7"
-                          keyboardType="decimal-pad"
-                          accessibilityLabel={`Amount for ${nameFor(id)}`}
-                        />
-                      )}
-
-                      {splitType === 'percentage' && (
-                        <View style={s.pctRow}>
-                          <TextInput
-                            style={[s.splitInput, { width: 64 }]}
-                            value={percentages[id] ?? ''}
-                            onChangeText={v => {
-                              if (/^\d{0,3}(\.\d{0,1})?$/.test(v)) setPercentage(id, v)
-                            }}
-                            placeholder="0"
-                            placeholderTextColor="#C7C7C7"
-                            keyboardType="decimal-pad"
-                            accessibilityLabel={`Percentage for ${nameFor(id)}`}
-                          />
-                          <Text style={s.pctSymbol}>%</Text>
-                          <Text style={s.previewAmount}>
-                            ≈ {formatAmount(splitPreview[id] ?? 0, currency)}
+                    ))}
+                  </View>
+                  <View style={st.grid}>
+                    {calendarCells.map((day, i) =>
+                      day === null ? (
+                        <View key={`p${i}`} style={st.dayCell} />
+                      ) : (
+                        <TouchableOpacity
+                          key={i}
+                          style={[
+                            st.dayCell,
+                            date.getDate() === day &&
+                              date.getMonth() === wheelMonth.getMonth() &&
+                              date.getFullYear() === wheelMonth.getFullYear() &&
+                              st.daySelected,
+                          ]}
+                          onPress={() =>
+                            setDate(new Date(wheelMonth.getFullYear(), wheelMonth.getMonth(), day))
+                          }
+                        >
+                          <Text
+                            style={[
+                              st.dayText,
+                              date.getDate() === day &&
+                                date.getMonth() === wheelMonth.getMonth() &&
+                                date.getFullYear() === wheelMonth.getFullYear() &&
+                                st.dayTextSelected,
+                            ]}
+                          >
+                            {day}
                           </Text>
-                        </View>
-                      )}
-                    </View>
-                  ))}
-
-                  {invites.map(i => (
-                    <View key={i.phone} style={s.previewRow}>
-                      <View style={[s.previewAvatar, { backgroundColor: '#FEF3E8' }]}>
-                        <Text style={s.previewAvatarText}>
-                          {(i.name?.[0] ?? '?').toUpperCase()}
-                        </Text>
-                      </View>
-                      <View style={s.inviteNameBlock}>
-                        <Text style={s.previewName} numberOfLines={1}>
-                          {i.name || i.phone}
-                        </Text>
-                        <Text style={s.invitePhoneHint}>will be invited</Text>
-                      </View>
-                      {splitType === 'equally' && (
-                        <Text style={s.previewAmount}>
-                          {formatAmount(inviteSharePreview, currency)}
-                        </Text>
-                      )}
-                    </View>
-                  ))}
-
-                  {splitType === 'exact' && !exactSumOk && (
-                    <Text style={s.validationError}>
-                      Total must equal {formatAmount(amountFloat, currency)}
-                    </Text>
-                  )}
-                  {splitType === 'percentage' && !pctSumOk && (
-                    <Text style={s.validationError}>Percentages must sum to 100%</Text>
-                  )}
-                  {invitesNeedEqual && (
-                    <Text style={s.validationError}>
-                      Invited friends split equally — switch to “Equally”
-                    </Text>
-                  )}
-                </View>
-              )}
-
-              {peopleCount < 2 && (
-                <Text style={s.hint}>Select a friend or invite a contact to split with</Text>
-              )}
-
-              {/* Receipt + agreement */}
-              <View style={s.section}>
-                <Text style={s.label}>Receipt & agreement</Text>
-                <Pressable
-                  style={s.attachRow}
-                  onPress={() =>
-                    Alert.alert(
-                      'Add receipt',
-                      'Capture with the camera or pick from your library',
-                      [
-                        { text: 'Cancel', style: 'cancel' },
-                        {
-                          text: 'Take photo',
-                          onPress: () => setCameraVisible(true),
-                        },
-                        {
-                          text: 'Choose from library',
-                          onPress: async () => {
-                            const uri = await pickReceiptImage()
-                            if (uri) setReceiptUri(uri)
-                          },
-                        },
-                      ]
-                    )
-                  }
-                  accessibilityRole="button"
-                  accessibilityLabel="Attach receipt photo"
-                >
-                  <Text style={s.attachEmoji}>🧾</Text>
-                  <View style={s.attachTextWrap}>
-                    <Text style={s.attachTitle}>
-                      {receiptUri ? 'Receipt attached ✓' : 'Attach receipt photo'}
-                    </Text>
-                    <Text style={s.attachHint}>Optional — visible to everyone in the split</Text>
+                        </TouchableOpacity>
+                      )
+                    )}
                   </View>
-                  {receiptUri ? (
-                    <TouchableOpacity
-                      onPress={() => setReceiptUri(null)}
-                      hitSlop={8}
-                      accessibilityLabel="Remove receipt"
-                    >
-                      <Text style={s.removeBtnText}>✕</Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <Text style={s.attachChevron}>＋</Text>
-                  )}
-                </Pressable>
+                </>
+              )}
+            </Pressable>
+          </Pressable>
+        </Modal>
 
-                <Pressable
-                  style={s.attachRow}
+        {/* ── write note overlay ── */}
+        <Modal
+          visible={noteOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setNoteOpen(false)}
+        >
+          <Pressable style={st.overlayBackdrop} onPress={() => setNoteOpen(false)}>
+            <Pressable style={st.card} onPress={() => undefined}>
+              <View style={st.cardHeader}>
+                <TouchableOpacity onPress={() => setNoteOpen(false)}>
+                  <Ionicons name="chevron-back" size={22} color="#3273CD" />
+                </TouchableOpacity>
+                <Text style={st.cardTitle}>Write note</Text>
+                <TouchableOpacity
                   onPress={() => {
-                    if (wantsAgreement && signatureBase64) {
-                      setWantsAgreement(false)
-                      setSignatureBase64(null)
-                    } else {
-                      setShowSignature(true)
-                    }
+                    setNote(noteDraft)
+                    setNoteOpen(false)
                   }}
-                  accessibilityRole="button"
-                  accessibilityLabel="Add agreement signature"
                 >
-                  <Text style={s.attachEmoji}>✍️</Text>
-                  <View style={s.attachTextWrap}>
-                    <Text style={s.attachTitle}>
-                      {signatureBase64
-                        ? 'Agreement signed ✓'
-                        : wantsAgreement
-                          ? 'Agreement (no signature)'
-                          : 'Agreement with signature'}
-                    </Text>
-                    <Text style={s.attachHint}>Optional — everyone signs to confirm the split</Text>
-                  </View>
-                  {signatureBase64 ? (
-                    <TouchableOpacity
-                      onPress={() => {
-                        setWantsAgreement(false)
-                        setSignatureBase64(null)
-                      }}
-                      hitSlop={8}
-                      accessibilityLabel="Remove signature"
-                    >
-                      <Text style={s.removeBtnText}>✕</Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <Text style={s.attachChevron}>＋</Text>
-                  )}
-                </Pressable>
+                  <Text style={st.cardSave}>Save</Text>
+                </TouchableOpacity>
               </View>
+              <TextInput
+                style={st.noteArea}
+                value={noteDraft}
+                onChangeText={setNoteDraft}
+                placeholder="Write a note here"
+                placeholderTextColor="#6B6B6B"
+                multiline
+                autoFocus
+                maxLength={200}
+              />
+            </Pressable>
+          </Pressable>
+        </Modal>
 
-              {/* Note */}
-              <View style={s.section}>
-                <Text style={s.label}>Note (optional)</Text>
-                <TextInput
-                  style={[s.textInput, s.noteInput]}
-                  value={note}
-                  onChangeText={setNote}
-                  placeholder="Add a note for the group…"
-                  placeholderTextColor="#C7C7C7"
-                  maxLength={500}
-                  multiline
-                  accessibilityLabel="Expense note"
-                />
+        {/* ── payer picker ── */}
+        <Modal
+          visible={payerOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setPayerOpen(false)}
+        >
+          <Pressable style={st.overlayBackdrop} onPress={() => setPayerOpen(false)}>
+            <Pressable style={st.payerCard} onPress={() => undefined}>
+              {allPeople.map(p => (
+                <TouchableOpacity
+                  key={p.id ?? p.phone}
+                  style={st.optionRow}
+                  onPress={() => {
+                    setPayer(p.id ?? 'me')
+                    setPayerOpen(false)
+                  }}
+                >
+                  <Text style={st.optionName}>{p.name}</Text>
+                  {payer === (p.id ?? 'me') ? (
+                    <Ionicons name="checkmark" size={20} color="#3273CD" />
+                  ) : null}
+                </TouchableOpacity>
+              ))}
+            </Pressable>
+          </Pressable>
+        </Modal>
+
+        {/* ── camera ── */}
+        <CameraCaptureModal
+          visible={cameraOpen}
+          onClose={() => setCameraOpen(false)}
+          onCapture={uri => {
+            setCameraOpen(false)
+            setReceipts(prev => [...prev, uri])
+          }}
+          hint="Position the receipt in the frame"
+        />
+
+        {/* ── receipt delete confirm ── */}
+        <Modal
+          visible={receiptDeleteIdx !== null}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setReceiptDeleteIdx(null)}
+        >
+          <View style={st.confirmBackdrop}>
+            <View style={st.confirmCard}>
+              {receiptDeleteIdx !== null && receipts[receiptDeleteIdx] ? (
+                <Image source={{ uri: receipts[receiptDeleteIdx] }} style={st.confirmImage} />
+              ) : null}
+              <Text style={st.confirmTitle}>Sure want to delete this image?</Text>
+              <View style={st.confirmBtnRow}>
+                <TouchableOpacity
+                  style={[st.confirmBtn, st.confirmBtnYes]}
+                  onPress={() => {
+                    setReceipts(prev => prev.filter((_, i) => i !== receiptDeleteIdx))
+                    setReceiptDeleteIdx(null)
+                  }}
+                >
+                  <Text style={st.confirmBtnTextDark}>Yes</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[st.confirmBtn, st.confirmBtnCancel]}
+                  onPress={() => setReceiptDeleteIdx(null)}
+                >
+                  <Text style={st.confirmBtnTextWhite}>Cancel</Text>
+                </TouchableOpacity>
               </View>
-            </ScrollView>
+            </View>
+          </View>
+        </Modal>
 
-            {/* Submit */}
-            <View style={[s.footer, { paddingBottom: insets.bottom + 16 }]}>
-              <TouchableOpacity
-                style={[s.submitBtn, !canSubmit && s.submitBtnDisabled]}
-                onPress={handleSubmit}
-                disabled={!canSubmit}
-              >
-                {isSubmitting ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <Text style={s.submitBtnText}>
-                    {amountFloat > 0
-                      ? `Add ${formatAmount(amountFloat, currency)} expense`
-                      : 'Add Expense'}
-                  </Text>
-                )}
+        {/* ── note delete confirm ── */}
+        <Modal
+          visible={noteDeleteAsk}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setNoteDeleteAsk(false)}
+        >
+          <View style={st.confirmBackdrop}>
+            <View style={st.confirmCard}>
+              <Text style={st.confirmTitle}>Sure want to delete this note?</Text>
+              {note.trim() ? (
+                <View style={st.confirmNote}>
+                  <Text style={st.confirmNoteText}>{note}</Text>
+                </View>
+              ) : null}
+              <View style={st.confirmBtnRow}>
+                <TouchableOpacity
+                  style={[st.confirmBtn, st.confirmBtnYes]}
+                  onPress={() => {
+                    setNote('')
+                    setNoteDraft('')
+                    setNoteDeleteAsk(false)
+                    setNoteDeletedToast(true)
+                  }}
+                >
+                  <Text style={st.confirmBtnTextDark}>Yes</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[st.confirmBtn, st.confirmBtnCancel]}
+                  onPress={() => setNoteDeleteAsk(false)}
+                >
+                  <Text style={st.confirmBtnTextWhite}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* ── note deleted toast ── */}
+        <Modal
+          visible={noteDeletedToast}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setNoteDeletedToast(false)}
+        >
+          <View style={st.confirmBackdrop}>
+            <View style={st.confirmCard}>
+              <Text style={st.deletedEmoji}>✅</Text>
+              <Text style={st.confirmTitle}>Your note is deleted</Text>
+              <TouchableOpacity style={st.okayBtn} onPress={() => setNoteDeletedToast(false)}>
+                <Text style={st.confirmBtnTextWhite}>Okay</Text>
               </TouchableOpacity>
             </View>
           </View>
-        </KeyboardAvoidingView>
-      </TouchableWithoutFeedback>
-
-      {/* Signature capture */}
-      <Modal
-        visible={showSignature}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowSignature(false)}
-      >
-        <View style={[s.root, { paddingTop: insets.top + 16 }]}>
-          <View style={s.header}>
-            <Text style={s.headerTitle}>Agreement signature</Text>
-            <TouchableOpacity onPress={() => setShowSignature(false)} hitSlop={12}>
-              <Text style={s.closeBtn}>✕</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={{ paddingHorizontal: 24, paddingTop: 8 }}>
-            <Text style={s.sigIntro}>
-              Signing confirms you agree to this split. It’s stored with the expense and visible to
-              its participants.
-            </Text>
-            <SignaturePad
-              width={320}
-              height={200}
-              onComplete={base64 => {
-                setSignatureBase64(base64)
-                setWantsAgreement(true)
-                setShowSignature(false)
-              }}
-              onCancel={() => setShowSignature(false)}
-            />
-          </View>
-        </View>
-      </Modal>
-
-      <CameraCaptureModal
-        visible={cameraVisible}
-        onClose={() => setCameraVisible(false)}
-        onCapture={uri => {
-          setCameraVisible(false)
-          setReceiptUri(uri)
-        }}
-        hint="Position the receipt in the frame"
-      />
+        </Modal>
+      </KeyboardAvoidingView>
     </Modal>
   )
 }
 
-const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#FFFFFF' },
+const st = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: '#FFFFFF' },
   header: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    marginBottom: 8,
+    paddingHorizontal: 20,
+    paddingBottom: 10,
   },
-  headerTitleWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: '#141414' },
-  groupChip: {
-    backgroundColor: '#F3F4F5',
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  groupChipText: { fontSize: 12, fontWeight: '600', color: '#6B6B6B' },
-  closeBtn: { fontSize: 18, color: '#6B6B6B', padding: 4 },
-  scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: 24, paddingTop: 16 },
-  amountRow: {
+  headerSide: { flexDirection: 'row', alignItems: 'center', gap: 2, minWidth: 64 },
+  headerBlue: { color: '#3273CD', fontSize: 18, fontWeight: '700', fontFamily: 'Nunito_700Bold' },
+  headerSaveDisabled: { color: '#B7BCC3' },
+  headerTitle: { fontSize: 18, fontFamily: 'Nunito_500Medium', color: '#141414' },
+  scroll: { paddingHorizontal: 20 },
+  andRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10, marginTop: 8 },
+  andLabel: { fontSize: 20, color: '#141414', fontFamily: 'Nunito_400Regular', lineHeight: 30 },
+  andBold: { fontFamily: 'Nunito_700Bold', fontWeight: '700' },
+  andChipsWrap: {
+    flex: 1,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
-    borderBottomWidth: 2,
-    borderBottomColor: '#141414',
-    marginBottom: 28,
+    gap: 8,
     paddingBottom: 8,
   },
-  currencySymbol: { fontSize: 32, fontWeight: '300', color: '#141414', marginRight: 4 },
-  amountInput: {
-    flex: 1,
-    fontSize: 48,
-    fontWeight: '700',
-    color: '#141414',
-    padding: 0,
-    includeFontPadding: false,
-  },
-  section: { marginBottom: 24 },
-  label: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#6B6B6B',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 10,
-  },
-  labelSub: {
-    fontSize: 11,
-    fontWeight: '400',
-    color: '#9CA3AF',
-    textTransform: 'none',
-    letterSpacing: 0,
-  },
-  textInput: {
-    height: 48,
+  friendChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    fontSize: 15,
-    color: '#141414',
-  },
-  pillRow: { flexDirection: 'row', gap: 8 },
-  pill: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    borderColor: '#D4D6DA',
     borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: '#E5E7EB',
+    paddingLeft: 4,
+    paddingRight: 10,
+    paddingVertical: 4,
     backgroundColor: '#FFFFFF',
   },
-  pillActive: { borderColor: '#141414', backgroundColor: '#141414' },
-  pillText: { fontSize: 13, fontWeight: '500', color: '#6B6B6B' },
-  pillTextActive: { color: '#FFFFFF' },
-  contactRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, gap: 12 },
-  avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#F3F4F5',
+  chipAvatar: { width: 26, height: 26, borderRadius: 13 },
+  chipAvatarFallback: {
+    backgroundColor: '#D9E897',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  avatarText: { fontSize: 14, fontWeight: '600', color: '#141414' },
-  contactName: { flex: 1, fontSize: 15, color: '#141414' },
-  inviteNameBlock: { flex: 1, minWidth: 0, gap: 2 },
-  invitePhoneHint: { fontSize: 12, color: '#9CA3AF' },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 1.5,
-    borderColor: '#D1D5DB',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  checkboxChecked: { backgroundColor: '#141414', borderColor: '#141414' },
-  checkmark: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
-  avatarImg: { width: 36, height: 36, borderRadius: 18 },
-  contactsLoading: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 16,
-  },
-  contactsLoadingText: { fontSize: 14, color: '#6B6B6B', flex: 1 },
-  contactsEmptyBlock: { gap: 10, paddingVertical: 8 },
-  noContacts: { fontSize: 14, color: '#9CA3AF', lineHeight: 20 },
-  openSettingsBtn: { alignSelf: 'flex-start', paddingVertical: 4 },
-  openSettingsText: { fontSize: 16, fontWeight: '700', color: '#3273CD' },
-  retryContacts: { fontSize: 14, fontWeight: '600', color: '#141414', paddingVertical: 4 },
-  splitToggle: { flexDirection: 'row', backgroundColor: '#F3F4F5', borderRadius: 10, padding: 3 },
-  splitOption: { flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: 'center' },
-  splitOptionActive: { backgroundColor: '#141414' },
-  splitOptionText: { fontSize: 13, fontWeight: '500', color: '#6B6B6B' },
-  splitOptionTextActive: { color: '#FFFFFF' },
-  previewRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, gap: 10 },
-  previewAvatar: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#F3F4F5',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  previewAvatarText: { fontSize: 12, fontWeight: '600', color: '#141414' },
-  previewName: { flex: 1, fontSize: 14, color: '#141414' },
-  previewAmount: { fontSize: 14, fontWeight: '600', color: '#141414' },
-  splitInput: {
-    width: 80,
-    height: 36,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    fontSize: 14,
+  chipAvatarText: { fontSize: 12, fontWeight: '700', color: '#141414' },
+  chipName: { fontSize: 15, fontFamily: 'Nunito_500Medium', color: '#141414', maxWidth: 120 },
+  andInput: {
+    flex: 1,
+    minWidth: 90,
+    fontSize: 20,
+    fontFamily: 'Nunito_500Medium',
     color: '#141414',
-    textAlign: 'right',
+    paddingVertical: 0,
   },
-  pctRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  pctSymbol: { fontSize: 14, color: '#6B6B6B' },
-  validationError: { fontSize: 12, color: '#EF4444', marginTop: 6 },
-  hint: { fontSize: 13, color: '#9CA3AF', textAlign: 'center', marginTop: 8 },
-  noteInput: { height: 84, textAlignVertical: 'top', paddingTop: 12 },
-  attachRow: {
+  underline: { height: 1, backgroundColor: '#141414', opacity: 0.7 },
+  typeaheadCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 12,
+    gap: 4,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
+    elevation: 8,
+  },
+  optionRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
+  optionAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#D9E897',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  optionAvatarText: { fontSize: 15, fontWeight: '700', color: '#141414' },
+  optionName: { fontSize: 17, fontFamily: 'Nunito_400Regular', color: '#141414', flex: 1 },
+  optionPhone: { fontSize: 12, color: '#6B6B6B' },
+  typeaheadEmpty: { fontSize: 13, color: '#9CA3AF', paddingVertical: 8 },
+  fieldRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 14, marginTop: 28 },
+  catTile: {
+    width: 58,
+    height: 58,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  catEmoji: { fontSize: 30 },
+  catEmojiSm: { fontSize: 18 },
+  dollarGlyph: { fontSize: 32, fontWeight: '700', color: '#141414' },
+  fieldInputWrap: { flex: 1 },
+  fieldInput: {
+    fontSize: 24,
+    fontFamily: 'Nunito_500Medium',
+    color: '#141414',
+    paddingVertical: 6,
+    paddingHorizontal: 2,
+  },
+  catRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
+  catOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 6,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
+    borderColor: '#D4D6DA',
+    borderRadius: 18,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  catOptionActive: { backgroundColor: '#F7F0BE', borderColor: '#F7F0BE' },
+  catOptionLabel: { fontSize: 13, fontFamily: 'Nunito_600SemiBold', color: '#141414' },
+  paidRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 28 },
+  paidLabel: { fontSize: 19, fontFamily: 'Nunito_400Regular', color: '#141414' },
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#D6E7FB',
+    borderRadius: 18,
+    paddingLeft: 4,
+    paddingRight: 12,
+    paddingVertical: 4,
+  },
+  pillText: { fontSize: 15, fontFamily: 'Nunito_600SemiBold', color: '#141414' },
+  unequalWrap: { marginTop: 16, gap: 8 },
+  unequalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  unequalName: { flex: 1, fontSize: 15, fontFamily: 'Nunito_400Regular', color: '#141414' },
+  unequalInput: {
+    width: 110,
+    height: 44,
+    borderWidth: 1,
+    borderColor: '#D4D6DA',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    fontSize: 16,
+    color: '#141414',
+    backgroundColor: '#FAFAFA',
+  },
+  unequalSum: {
+    fontSize: 12,
+    fontFamily: 'Nunito_600SemiBold',
+    color: '#6B6B6B',
+    alignSelf: 'flex-end',
+  },
+  unequalSumBad: { color: '#EF4444' },
+  utilRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 28 },
+  datePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#D4D6DA',
+    borderRadius: 22,
     paddingHorizontal: 14,
-    height: 60,
+    paddingVertical: 9,
+    backgroundColor: '#FFFFFF',
+  },
+  datePillText: { fontSize: 16, fontFamily: 'Nunito_600SemiBold', color: '#141414' },
+  roundBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#D4D6DA',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  noteChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F7F0BE',
+    borderRadius: 14,
+    padding: 14,
+    marginTop: 24,
+    gap: 8,
+  },
+  noteChipText: {
+    flex: 1,
+    fontSize: 15,
+    fontFamily: 'Nunito_400Regular',
+    color: '#141414',
+    lineHeight: 21,
+  },
+  noteChipBold: { fontFamily: 'Nunito_700Bold', fontWeight: '700' },
+  minusBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#D6E7FB',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  receiptRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, marginTop: 24 },
+  receiptWrap: { alignItems: 'flex-end' },
+  receiptThumb: { width: 110, height: 140, borderRadius: 6, backgroundColor: '#F3F4F5' },
+  errorText: { color: '#EF4444', fontSize: 14, marginTop: 16, fontFamily: 'Nunito_400Regular' },
+  overlayBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(250,250,250,0.82)',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 24 },
+    shadowOpacity: 0.14,
+    shadowRadius: 48,
+    elevation: 16,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 8,
   },
-  attachEmoji: { fontSize: 20 },
-  attachTextWrap: { flex: 1, minWidth: 0, gap: 2 },
-  attachTitle: { fontSize: 15, fontFamily: 'Nunito_600SemiBold', color: '#141414' },
-  attachHint: { fontSize: 12, color: '#9CA3AF' },
-  attachChevron: { fontSize: 22, color: '#9CA3AF', fontWeight: '600' },
-  removeBtnText: { fontSize: 18, color: '#6B6B6B', padding: 4 },
-  sigIntro: {
-    fontSize: 13,
+  cardTitle: { fontSize: 19, fontFamily: 'Nunito_600SemiBold', color: '#141414' },
+  cardSave: { fontSize: 18, fontWeight: '700', fontFamily: 'Nunito_700Bold', color: '#3273CD' },
+  wheelHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+  },
+  monthLabel: {
+    fontSize: 19,
+    fontWeight: '700',
+    fontFamily: 'Nunito_700Bold',
+    color: '#3273CD',
+    textDecorationLine: 'underline',
+  },
+  wheelWrap: { alignItems: 'center', paddingVertical: 8, gap: 10 },
+  wheelMonth: { fontSize: 18, fontFamily: 'Nunito_400Regular', color: '#9CA3AF' },
+  wheelMonthActive: { color: '#3273CD', fontFamily: 'Nunito_700Bold', fontSize: 21 },
+  weekRow: { flexDirection: 'row', marginTop: 6 },
+  weekDay: {
+    flex: 1,
+    textAlign: 'center',
+    color: '#3273CD',
+    fontSize: 15,
+    fontFamily: 'Nunito_600SemiBold',
+  },
+  grid: { flexDirection: 'row', flexWrap: 'wrap' },
+  dayCell: { width: `${100 / 7}%`, height: 44, justifyContent: 'center', alignItems: 'center' },
+  dayText: { fontSize: 17, fontFamily: 'Nunito_400Regular', color: '#141414' },
+  daySelected: { backgroundColor: '#3273CD', borderRadius: 17, width: 34, height: 34 },
+  dayTextSelected: { color: '#FFFFFF', fontWeight: '700' },
+  noteArea: {
+    backgroundColor: '#F7F0BE',
+    borderRadius: 12,
+    padding: 14,
+    minHeight: 110,
+    fontSize: 19,
     fontFamily: 'Nunito_400Regular',
-    color: '#6B6B6B',
-    lineHeight: 18,
-    marginBottom: 16,
+    color: '#141414',
+    textAlignVertical: 'top',
   },
-  footer: {
-    paddingHorizontal: 24,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F5',
+  payerCard: { backgroundColor: '#FFFFFF', borderRadius: 24, padding: 16, gap: 4 },
+  confirmBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(250,250,250,0.88)',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+  },
+  confirmCard: {
     backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 24 },
+    shadowOpacity: 0.14,
+    shadowRadius: 48,
+    elevation: 16,
   },
-  submitBtn: {
-    height: 52,
-    backgroundColor: '#141414',
-    borderRadius: 14,
+  confirmImage: {
+    width: 180,
+    height: 220,
+    borderRadius: 8,
+    marginBottom: 18,
+    backgroundColor: '#F3F4F5',
+  },
+  confirmTitle: {
+    fontSize: 21,
+    fontFamily: 'Nunito_600SemiBold',
+    color: '#141414',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  confirmNote: { backgroundColor: '#F7F0BE', borderRadius: 12, padding: 14, marginBottom: 20 },
+  confirmNoteText: {
+    fontSize: 16,
+    fontFamily: 'Nunito_400Regular',
+    color: '#141414',
+    lineHeight: 22,
+  },
+  confirmBtnRow: { flexDirection: 'row', gap: 16 },
+  confirmBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
+    minWidth: 120,
   },
-  submitBtnDisabled: { backgroundColor: '#D1D5DB' },
-  submitBtnText: { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
+  confirmBtnYes: { backgroundColor: '#D6E7FB' },
+  confirmBtnCancel: { backgroundColor: '#3273CD' },
+  confirmBtnTextDark: { fontSize: 16, fontFamily: 'Nunito_600SemiBold', color: '#141414' },
+  confirmBtnTextWhite: { fontSize: 16, fontFamily: 'Nunito_600SemiBold', color: '#FFFFFF' },
+  deletedEmoji: { fontSize: 44, marginBottom: 10 },
+  okayBtn: {
+    backgroundColor: '#3273CD',
+    borderRadius: 22,
+    paddingHorizontal: 28,
+    paddingVertical: 10,
+  },
 })
