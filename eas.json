@@ -56,15 +56,6 @@
     }
   },
   "submit": {
-    // Dev-environment APK for phone testing (installs alongside production)
-    "preview": {
-      "distribution": "internal",
-      "channel": "preview",
-      "environment": "development",
-      "env": { "APP_ENV": "development" },
-      "android": { "buildType": "apk" },
-      "autoIncrement": true
-    },
     "production": {
       "ios": {
         // Apple ID used by EAS Submit for App Store Connect access.
