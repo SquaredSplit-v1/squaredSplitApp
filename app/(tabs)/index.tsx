@@ -14,6 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native'
+import Animated, { Easing, FadeInDown, FadeInUp } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Svg, { Path } from 'react-native-svg'
 
@@ -111,11 +112,11 @@ function formatDueDate(iso: string): string {
 function subtitleFor(f: FriendOverview): { text: string; color: string } {
   // You owe + overdue → red "⚠️ Alert!"
   if (f.hasOverdue && friendDirection(f) === 'you_owe') {
-    return { text: '⚠️ Alert!', color: '#F06767' }
+    return { text: '⚠️ Alert!', color: '#F06666' }
   }
   // Owes you + overdue with a date → the missed due date, in red
   if (f.hasOverdue && f.nextDueDate) {
-    return { text: formatDueDate(f.nextDueDate), color: '#F06767' }
+    return { text: formatDueDate(f.nextDueDate), color: '#F06666' }
   }
   if (f.hasOverdue) {
     return { text: 'Overdue', color: '#F06767' }
@@ -236,7 +237,7 @@ const friendStyles = StyleSheet.create({
   rowLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 },
   avatar: { width: 40, height: 40, borderRadius: 20 },
   avatarPlaceholder: {
-    backgroundColor: '#E8F5E9',
+    backgroundColor: '#D9E897',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -248,9 +249,10 @@ const friendStyles = StyleSheet.create({
   nameBlock: { flexDirection: 'column', justifyContent: 'center', gap: 4, flex: 1, minWidth: 0 },
   nameText: {
     color: '#141414',
-    fontSize: 20,
+    fontSize: 18,
     fontFamily: 'Nunito_400Regular',
-    lineHeight: 26,
+    lineHeight: 18,
+    letterSpacing: -0.36,
   },
   subtitleText: {
     fontSize: 12,
@@ -550,18 +552,23 @@ export default function HomeScreen() {
             <ActivityIndicator color="#141414" />
           </View>
         ) : isEmpty ? null : (
-          <BalanceSummary
-            balanceToSquare={Math.abs(balance.netBalance)}
-            youAreOwed={balance.youAreOwed}
-            youOwe={balance.youOwe}
-            onFilterPress={() => setFilterVisible(true)}
-            currency={currency}
-          />
+          <Animated.View entering={FadeInUp.duration(360).easing(Easing.out(Easing.quad))}>
+            <BalanceSummary
+              balanceToSquare={Math.abs(balance.netBalance)}
+              youAreOwed={balance.youAreOwed}
+              youOwe={balance.youOwe}
+              onFilterPress={() => setFilterVisible(true)}
+              currency={currency}
+            />
+          </Animated.View>
         )}
 
         {isEmpty ? (
           // New-user dashboard — the Figma welcome state after onboarding.
-          <View style={styles.welcomeBlock}>
+          <Animated.View
+            style={styles.welcomeBlock}
+            entering={FadeInUp.duration(420).easing(Easing.out(Easing.quad))}
+          >
             <Text style={styles.welcomeTitle}>{'Hi!\nWelcome to your\ndashboard.'}</Text>
             <TouchableOpacity
               onPress={() => setCreateGroupVisible(true)}
@@ -570,7 +577,7 @@ export default function HomeScreen() {
             >
               <Text style={styles.createGroupLink}>+ Create a new group</Text>
             </TouchableOpacity>
-          </View>
+          </Animated.View>
         ) : (
           <View style={styles.friendsSection}>
             {!isLoading && searchOpen && !searchIsPhone && searchQuery.trim().length >= 2 ? (
@@ -687,13 +694,15 @@ export default function HomeScreen() {
               </View>
             ) : (
               <View style={styles.friendsList}>
-                {filteredFriends.map(f => (
-                  <FriendBalanceRow
+                {filteredFriends.map((f, i) => (
+                  <Animated.View
                     key={f.friendId}
-                    friend={f}
-                    currency={currency}
-                    onPress={goToFriend}
-                  />
+                    entering={FadeInDown.delay(i * 50)
+                      .duration(320)
+                      .easing(Easing.out(Easing.quad))}
+                  >
+                    <FriendBalanceRow friend={f} currency={currency} onPress={goToFriend} />
+                  </Animated.View>
                 ))}
               </View>
             )}
