@@ -46,6 +46,7 @@
     "expo-asset": "^12.0.12",
     "expo-auth-session": "~7.0.11",
     "expo-blur": "~15.0.8",
+    "expo-build-properties": "~1.0.10",
     "expo-camera": "~17.0.10",
     "expo-constants": "~18.0.12",
     "expo-contacts": "~15.0.11",

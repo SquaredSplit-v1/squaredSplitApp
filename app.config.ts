@@ -90,6 +90,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       NSContactsUsageDescription:
         'SquaredSplit needs access to your contacts so you can find friends who already use the app.',
       ITSAppUsesNonExemptEncryption: false,
+      UIApplicationSceneManifest: {
+        UIApplicationSupportsMultipleScenes: false,
+        UISceneDelegateClassName: '$(PRODUCT_MODULE_NAME).ExpoAppSceneDelegate',
+      },
       ...(googleIosScheme
         ? {
             CFBundleURLTypes: [
@@ -167,6 +171,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       },
     ],
     './plugins/withAndroidReadContacts.js',
+    ['expo-build-properties', { ios: { deploymentTarget: '15.1' } }],
+    './plugins/withSceneLifecycle.js',
     './plugins/withAppleSignInGate.js',
   ],
   experiments: {
