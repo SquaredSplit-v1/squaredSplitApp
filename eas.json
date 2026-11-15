@@ -37,6 +37,15 @@
     // app.config.ts derives the bundle identifier from it during config
     // resolution — a production build that evaluated as "development" shipped
     // with the .dev bundle id once already.
+    // Dev-environment APK for phone testing (installs alongside production)
+    "preview": {
+      "distribution": "internal",
+      "channel": "preview",
+      "environment": "development",
+      "env": { "APP_ENV": "development" },
+      "android": { "buildType": "apk" },
+      "autoIncrement": true
+    },
     "production": {
       "autoIncrement": true,
       "channel": "production",
@@ -47,6 +56,15 @@
     }
   },
   "submit": {
+    // Dev-environment APK for phone testing (installs alongside production)
+    "preview": {
+      "distribution": "internal",
+      "channel": "preview",
+      "environment": "development",
+      "env": { "APP_ENV": "development" },
+      "android": { "buildType": "apk" },
+      "autoIncrement": true
+    },
     "production": {
       "ios": {
         // Apple ID used by EAS Submit for App Store Connect access.
