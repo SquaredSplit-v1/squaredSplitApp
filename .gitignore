@@ -50,4 +50,3 @@ SquaredSplitDev.app/
 *.app/
 
 # Play Store service account key (EAS Submit credentials)
-google-services.json
