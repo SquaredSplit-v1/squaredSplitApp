@@ -78,6 +78,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     bundleIdentifier: env.bundleIdentifier,
     supportsTablet: false,
+    googleServicesFile: './GoogleService-Info.plist',
     // Sign in with Apple is gated by plugins/withAppleSignInGate.js (the
     // expo-apple-authentication plugin adds the entitlement unconditionally;
     // it needs the App ID capability enabled in the Apple Developer portal
@@ -109,6 +110,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     package: env.androidPackage,
+    googleServicesFile: './google-services.json',
     permissions: ['android.permission.READ_CONTACTS', 'android.permission.POST_NOTIFICATIONS'],
     ...(googleAndroidScheme
       ? {
@@ -172,7 +174,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     ],
     './plugins/withAndroidReadContacts.js',
     ['expo-build-properties', { ios: { deploymentTarget: '15.1' } }],
-    '@react-native-firebase/app',
+    ['@react-native-firebase/app', { googleServicesFile: './google-services.json' }],
     './plugins/withSceneLifecycle.js',
     './plugins/withAppleSignInGate.js',
   ],
