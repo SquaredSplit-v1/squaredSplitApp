@@ -27,6 +27,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import LazyGoogleButton from '@/components/auth/LazyGoogleButton'
 import { AppleButton, OrContinueWithDivider } from '@/components/auth/SocialButtons'
 import { sendOtp } from '@/lib/auth'
+import { firebaseAuthEnabled, startPhoneVerification } from '@/lib/firebasePhoneAuth'
 import { canUseGoogle, signInWithApple, useAppleAvailability } from '@/lib/socialAuth'
 
 import AppIcon from '../../assets/app-icon.svg'
@@ -260,7 +261,11 @@ export default function LoginScreen() {
     setErrorMessage('')
 
     try {
-      const result = await sendOtp(fullPhone)
+      // Firebase Phone Auth sends the SMS and verifies the code; Supabase
+      // exchanges the token afterwards. Legacy OTP stays behind the flag.
+      const result = firebaseAuthEnabled
+        ? await startPhoneVerification(fullPhone)
+        : await sendOtp(fullPhone)
 
       if (!result.success) {
         setErrorMessage(result.error ?? 'Failed to send code.')

@@ -17,6 +17,11 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { resendOtp as resendOtpApi, verifyOtp as verifyOtpApi } from '@/lib/auth'
+import {
+  confirmPhoneCode,
+  firebaseAuthEnabled,
+  startPhoneVerification,
+} from '@/lib/firebasePhoneAuth'
 
 const OTP_LENGTH = 6
 
@@ -66,7 +71,9 @@ export default function VerifyOTPScreen() {
     setOtpError(null)
 
     try {
-      const result = await verifyOtpApi(phone, otpCode)
+      const result = firebaseAuthEnabled
+        ? await confirmPhoneCode(otpCode)
+        : await verifyOtpApi(phone, otpCode)
 
       if (!result.success) {
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
@@ -125,7 +132,9 @@ export default function VerifyOTPScreen() {
     setOtpError(null)
     setOtp(new Array(OTP_LENGTH).fill(''))
     try {
-      const result = await resendOtpApi(phone)
+      const result = firebaseAuthEnabled
+        ? await startPhoneVerification(phone)
+        : await resendOtpApi(phone)
       if (!result.success) {
         Alert.alert('Error', result.error ?? 'Failed to resend code.')
         return
