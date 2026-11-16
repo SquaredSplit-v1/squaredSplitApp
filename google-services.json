@@ -1,40 +1,21 @@
 {
   "project_info": {
-    "project_number": "123456789012",
-    "project_id": "squaredsplit-placeholder",
-    "storage_bucket": "squaredsplit-placeholder.firebasestorage.app"
+    "project_number": "69185953965",
+    "project_id": "squaredsplit",
+    "storage_bucket": "squaredsplit.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:123456789012:android:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "mobilesdk_app_id": "1:69185953965:android:73aa14ba3505648f96e624",
         "android_client_info": {
-          "package_name": "com.squaredsplit.app.dev"
+          "package_name": "com.sqauredsplit.app"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyPlaceholderKey00000000000000000000000"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:123456789012:android:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "android_client_info": {
-          "package_name": "com.squaredsplit.app"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyPlaceholderKey00000000000000000000000"
+          "current_key": "AIzaSyDdPBJovZXZryjNNlFDFHWzCdlTKKJmJow"
         }
       ],
       "services": {
