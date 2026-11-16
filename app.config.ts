@@ -173,7 +173,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       },
     ],
     './plugins/withAndroidReadContacts.js',
-    ['expo-build-properties', { ios: { deploymentTarget: '15.1' } }],
+    ['expo-build-properties', { ios: { deploymentTarget: '15.1', useFrameworks: 'dynamic' } }],
     ['@react-native-firebase/app', { googleServicesFile: './google-services.json' }],
     './plugins/withSceneLifecycle.js',
     './plugins/withAppleSignInGate.js',
